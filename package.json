@@ -9,10 +9,10 @@
   },
   "dependencies": {
     "google-auth-library": "^9.14.1",
-    "googleapis": "^144.0.0",
-    "next": "14.2.15",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "qrcode": "^1.5.4"
+    "googleapis": "^173.0.0",
+    "next": "^16.2.12",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }
