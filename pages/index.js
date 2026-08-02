@@ -1,0 +1,796 @@
+import { useState, useEffect, useCallback } from 'react';
+import Head from 'next/head';
+
+const api = async (url, opts = {}) => {
+  const res = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  if (res.status === 401) throw new Error('UNAUTHED');
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Помилка');
+  return data;
+};
+
+function statusColor(s) {
+  const v = (s || '').toLowerCase();
+  if (v.includes('видан') || v.includes('выдан')) return 'var(--green)';
+  if (v.includes('втрач') || v.includes('утер')) return 'var(--red)';
+  if (v.includes('ксп') || v.includes('склад')) return 'var(--blue)';
+  if (v.includes('спис')) return 'var(--gray)';
+  return 'var(--amber)';
+}
+
+/* ---------- Логін ---------- */
+function Login({ onOk }) {
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setBusy(true);
+    setErr('');
+    try {
+      await api('/api/login', { method: 'POST', body: { password: pw } });
+      onOk();
+    } catch (e) {
+      setErr('Невірний пароль');
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="login-wrap">
+      <div className="login-box">
+        <h1 style={{ fontSize: '1.1rem', marginBottom: 18 }}>Облік майна</h1>
+        <label>Пароль</label>
+        <input
+          type="password"
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          style={{ width: '100%' }}
+          autoFocus
+        />
+        <button className="btn" style={{ width: '100%', marginTop: 16 }} onClick={submit} disabled={busy}>
+          {busy ? '...' : 'Увійти'}
+        </button>
+        {err && <div className="err">{err}</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Модальні вікна ---------- */
+function Modal({ title, children, onCancel, onSave, saveLabel = 'Зберегти', busy }) {
+  return (
+    <div className="overlay" onClick={(e) => e.target.className === 'overlay' && onCancel()}>
+      <div className="modal">
+        <h2>{title}</h2>
+        {children}
+        <div className="modal-actions">
+          <button className="btn-cancel" onClick={onCancel}>Скасувати</button>
+          <button className="btn-save" onClick={onSave} disabled={busy}>
+            {busy ? '...' : saveLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Головна ---------- */
+export default function Home() {
+  const [authed, setAuthed] = useState(null);
+  const [sheets, setSheets] = useState([]);
+  const [view, setView] = useState({ kind: 'search', name: null });
+  const [state, setState] = useState('');
+
+  useEffect(() => {
+    api('/api/login')
+      .then((d) => setAuthed(d.authed || !d.required))
+      .catch(() => setAuthed(false));
+  }, []);
+
+  useEffect(() => {
+    if (!authed) return;
+    api('/api/sheet')
+      .then((d) => setSheets(d.sheets))
+      .catch((e) => setState('помилка: ' + e.message));
+  }, [authed]);
+
+  if (authed === null) return <div className="loading">Завантаження…</div>;
+  if (!authed) return <Login onOk={() => setAuthed(true)} />;
+
+  return (
+    <>
+      <Head><title>Облік майна</title></Head>
+      <div className="wrap">
+        <header>
+          <h1>Облік майна</h1>
+          <div className="state">{state}</div>
+        </header>
+
+        <div className="tabs">
+          <div
+            className={'tab' + (view.kind === 'search' ? ' active' : '')}
+            onClick={() => setView({ kind: 'search', name: null })}
+          >
+            🔍 Пошук
+          </div>
+          {sheets.map((s) => (
+            <div
+              key={s.name}
+              className={'tab' + (view.name === s.name ? ' active' : '')}
+              onClick={() => setView({ kind: s.kind, name: s.name })}
+            >
+              {s.name}
+            </div>
+          ))}
+        </div>
+
+        {view.kind === 'search' && <SearchView sheets={sheets} setState={setState} onOpen={setView} />}
+        {view.kind === 'items' && <ItemsView key={view.name} name={view.name} setState={setState} />}
+        {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
+        {view.kind === 'warehouse' && <WarehouseView setState={setState} />}
+      </div>
+    </>
+  );
+}
+
+/* ---------- Пошук ---------- */
+function SearchView({ setState, onOpen }) {
+  const [q, setQ] = useState('');
+  const [res, setRes] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = async () => {
+    if (q.trim().length < 2) return;
+    setBusy(true);
+    setState('пошук…');
+    try {
+      const d = await api('/api/search?q=' + encodeURIComponent(q.trim()));
+      setRes(d);
+      setState('готово');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+    setBusy(false);
+  };
+
+  const groups = res
+    ? [
+        { title: 'Знайдено за номером', cls: 'primary', data: res.serial },
+        { title: 'Рахується за', cls: 'primary', data: res.assigned },
+        { title: 'Інші згадки', cls: 'sec', data: res.other },
+      ].filter((g) => g.data.length)
+    : [];
+
+  return (
+    <>
+      <div className="toolbar">
+        <input
+          type="text"
+          className="search-input"
+          placeholder="S/N, позивний, модель, місце, примітка..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && run()}
+        />
+        <button className="btn" onClick={run} disabled={busy}>Знайти</button>
+      </div>
+
+      {res && groups.length === 0 && <div className="empty">Нічого не знайдено</div>}
+
+      {groups.map((g) => (
+        <div className="section" key={g.title}>
+          <h3 className={g.cls}>{g.title}<span className="count">{g.data.length}</span></h3>
+          {g.data.map((r, i) => (
+            <div className="result" key={r.sheet + r.row + i}>
+              <div className="result-head">
+                <span className="badge">{r.sheet}</span>
+                {r.matchedValue && (
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--amber)' }}>
+                    {r.matchedValue}
+                  </span>
+                )}
+                {r.status && (
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: '.8rem', fontWeight: 700, color: statusColor(r.status) }}>
+                    {r.status}
+                  </span>
+                )}
+                {r.who && <span style={{ fontFamily: 'var(--mono)', fontSize: '.8rem' }}>→ {r.who}</span>}
+                <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: '.7rem', color: 'var(--muted)' }}>
+                  ряд. {r.row}
+                </span>
+              </div>
+              <div className="fields">
+                {r.headers.map((h, ci) =>
+                  r.values[ci] ? (
+                    <span key={ci}>
+                      <span className="k">{h || 'Поле ' + (ci + 1)}:</span> {r.values[ci]}
+                      {'  ·  '}
+                    </span>
+                  ) : null
+                )}
+              </div>
+              <div className="actions">
+                <button className="act-btn act-qr" onClick={() => onOpen({ kind: 'items', name: r.sheet })}>
+                  Відкрити лист
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/* ---------- Звичайні листи ---------- */
+function ItemsView({ name, setState }) {
+  const [data, setData] = useState(null);
+  const [chip, setChip] = useState(null);
+  const [q, setQ] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [issuing, setIssuing] = useState(null);
+
+  const load = useCallback(async () => {
+    setState('завантаження…');
+    try {
+      const d = await api('/api/sheet?name=' + encodeURIComponent(name));
+      setData(d);
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  }, [name, setState]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (!data) return <div className="loading">Завантаження…</div>;
+
+  const { headers, items, cols, statusOptions, typeOptions, maskCols, noIssue } = data;
+
+  const save = async (row, colIdx, value) => {
+    setState('збереження…');
+    try {
+      await api('/api/item', { method: 'PATCH', body: { sheet: name, row, col: colIdx, value } });
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка збереження');
+    }
+  };
+
+  let list = items;
+  if (chip !== null && cols.status >= 0) list = list.filter((it) => it.values[cols.status] === chip);
+  if (q.trim()) {
+    const s = q.trim().toLowerCase();
+    list = list.filter((it) => it.values.join(' ').toLowerCase().includes(s));
+  }
+
+  return (
+    <>
+      <div className="toolbar">
+        <input className="search-input" placeholder="Пошук..." value={q} onChange={(e) => setQ(e.target.value)} />
+        {statusOptions.map((s) => (
+          <div key={s} className={'chip' + (chip === s ? ' on' : '')} onClick={() => setChip(chip === s ? null : s)}>
+            {s}
+          </div>
+        ))}
+        <div className="spacer" />
+        <button className="btn" onClick={() => setAdding(true)}>+ Додати запис</button>
+      </div>
+
+      {list.length === 0 ? (
+        <div className="empty">Немає записів</div>
+      ) : (
+        <div className="grid">
+          {list.map((it) => (
+            <div className="card" key={it.row}>
+              <div className="rownum">ряд. {it.row}</div>
+              {headers.map((h, ci) => (
+                <div className="field" key={ci}>
+                  <label>{h || 'Поле ' + (ci + 1)}</label>
+                  {ci === cols.status || ci === cols.type ? (
+                    <select
+                      defaultValue={it.values[ci]}
+                      onChange={(e) => save(it.row, ci, e.target.value)}
+                    >
+                      {!(ci === cols.status ? statusOptions : typeOptions).includes(it.values[ci]) &&
+                        it.values[ci] && <option value={it.values[ci]}>{it.values[ci]}</option>}
+                      {(ci === cols.status ? statusOptions : typeOptions).map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={maskCols?.includes(ci) ? 'password' : 'text'}
+                      defaultValue={it.values[ci]}
+                      onBlur={(e) => e.target.value !== it.values[ci] && save(it.row, ci, e.target.value)}
+                    />
+                  )}
+                </div>
+              ))}
+              <div className="actions">
+                {!noIssue && (
+                  <>
+                    <button className="act-btn act-issue" onClick={() => setIssuing(it)}>Видати</button>
+                    <button
+                      className="act-btn act-return"
+                      onClick={async () => {
+                        if (!confirm('Прийняти на КСП? Отримувача буде очищено.')) return;
+                        setState('збереження…');
+                        await api('/api/item', { method: 'POST', body: { sheet: name, action: 'return', row: it.row } });
+                        load();
+                      }}
+                    >
+                      Прийняти
+                    </button>
+                  </>
+                )}
+                <button
+                  className="act-btn act-del"
+                  onClick={async () => {
+                    if (!confirm(`Видалити запис (рядок ${it.row})?`)) return;
+                    await api('/api/item', { method: 'DELETE', body: { sheet: name, row: it.row } });
+                    load();
+                  }}
+                >
+                  Видалити
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {adding && (
+        <AddItemModal
+          headers={headers}
+          cols={cols}
+          statusOptions={statusOptions}
+          typeOptions={typeOptions}
+          onCancel={() => setAdding(false)}
+          onSave={async (values) => {
+            await api('/api/item', { method: 'POST', body: { sheet: name, values } });
+            setAdding(false);
+            load();
+          }}
+        />
+      )}
+
+      {issuing && (
+        <IssueModal
+          whoOptions={data.whoOptions}
+          whereOptions={data.whereOptions}
+          onCancel={() => setIssuing(null)}
+          onSave={async ({ who, where, date }) => {
+            await api('/api/item', {
+              method: 'POST',
+              body: { sheet: name, action: 'issue', row: issuing.row, who, where, date },
+            });
+            setIssuing(null);
+            load();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function AddItemModal({ headers, cols, statusOptions, typeOptions, onCancel, onSave }) {
+  const [vals, setVals] = useState(() => headers.map(() => ''));
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <Modal
+      title="Новий запис"
+      onCancel={onCancel}
+      busy={busy}
+      onSave={async () => { setBusy(true); await onSave(vals); setBusy(false); }}
+    >
+      {headers.map((h, i) => (
+        <div key={i} style={{ marginTop: 10 }}>
+          <label>{h || 'Поле ' + (i + 1)}</label>
+          {i === cols.status || i === cols.type ? (
+            <select value={vals[i]} onChange={(e) => setVals((v) => v.map((x, j) => (j === i ? e.target.value : x)))}>
+              <option value=""></option>
+              {(i === cols.status ? statusOptions : typeOptions).map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="text"
+              value={vals[i]}
+              onChange={(e) => setVals((v) => v.map((x, j) => (j === i ? e.target.value : x)))}
+            />
+          )}
+        </div>
+      ))}
+    </Modal>
+  );
+}
+
+function IssueModal({ whoOptions = [], whereOptions = [], onCancel, onSave }) {
+  const [who, setWho] = useState('');
+  const [where, setWhere] = useState('');
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <Modal
+      title="Видати"
+      saveLabel="Видати"
+      onCancel={onCancel}
+      busy={busy}
+      onSave={async () => {
+        if (!who && !where) return alert('Вкажіть хоча б позивний або місце');
+        setBusy(true);
+        await onSave({ who, where, date: date.split('-').reverse().join('.') });
+        setBusy(false);
+      }}
+    >
+      <div style={{ marginTop: 10 }}>
+        <label>Кому (позивний)</label>
+        <input type="text" list="whoList" value={who} onChange={(e) => setWho(e.target.value)} />
+        <datalist id="whoList">{whoOptions.map((w) => <option key={w} value={w} />)}</datalist>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Куди (місце)</label>
+        <input type="text" list="whereList" value={where} onChange={(e) => setWhere(e.target.value)} />
+        <datalist id="whereList">{whereOptions.map((w) => <option key={w} value={w} />)}</datalist>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Дата видачі</label>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------- Відомість ---------- */
+function LedgerView({ name, setState }) {
+  const [items, setItems] = useState(null);
+  const [q, setQ] = useState('');
+  const [wo, setWo] = useState(null);
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(async () => {
+    setState('завантаження…');
+    try {
+      const d = await api('/api/ledger?sheet=' + encodeURIComponent(name));
+      setItems(d.items);
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  }, [name, setState]);
+
+  useEffect(() => { load(); }, [load]);
+  if (!items) return <div className="loading">Завантаження…</div>;
+
+  const list = q.trim()
+    ? items.filter((it) => it.name.toLowerCase().includes(q.trim().toLowerCase()))
+    : items;
+
+  return (
+    <>
+      <div className="toolbar">
+        <input className="search-input" placeholder="Пошук за назвою..." value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="spacer" />
+        <button className="btn" onClick={() => setAdding(true)}>+ Додати позицію</button>
+      </div>
+
+      <div className="grid">
+        {list.map((it) => (
+          <div className="card ledger-card" key={it.row}>
+            <div className="name">{it.name} {it.unit && <span style={{ color: 'var(--muted)', fontWeight: 400 }}>({it.unit})</span>}</div>
+            <div className="ledger-stats">
+              <span>Отримано: {it.received}</span>
+              <span>Списано: {it.writtenOff}</span>
+            </div>
+            <div className={'remainder ' + (it.remainder <= 0 ? 'low' : 'ok')}>Залишок: {it.remainder}</div>
+            <div className="actions">
+              <button className="act-btn act-qr" onClick={() => setWo(it)}>Списати</button>
+            </div>
+            {it.writeOffs.length > 0 && (
+              <div className="history">
+                {it.writeOffs.slice(-5).reverse().map((w, i) => (
+                  <div key={i}>{w.qty} шт — {w.date || 'без дати'}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {wo && (
+        <WriteoffModal
+          item={wo}
+          onCancel={() => setWo(null)}
+          onSave={async ({ qty, date }) => {
+            await api('/api/ledger', { method: 'POST', body: { sheet: name, action: 'writeoff', row: wo.row, qty, date } });
+            setWo(null);
+            load();
+          }}
+        />
+      )}
+
+      {adding && (
+        <AddLedgerModal
+          onCancel={() => setAdding(false)}
+          onSave={async (body) => {
+            await api('/api/ledger', { method: 'POST', body: { sheet: name, ...body } });
+            setAdding(false);
+            load();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function WriteoffModal({ item, onCancel, onSave }) {
+  const [qty, setQty] = useState(1);
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modal
+      title={'Списати: ' + item.name}
+      saveLabel="Списати"
+      onCancel={onCancel}
+      busy={busy}
+      onSave={async () => {
+        if (qty <= 0) return alert('Вкажіть кількість більше 0');
+        setBusy(true);
+        await onSave({ qty: Number(qty), date: date.split('-').reverse().join('.') });
+        setBusy(false);
+      }}
+    >
+      <div style={{ marginTop: 10 }}>
+        <label>Кількість</label>
+        <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Дата</label>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      </div>
+    </Modal>
+  );
+}
+
+function AddLedgerModal({ onCancel, onSave }) {
+  const [name, setName] = useState('');
+  const [unit, setUnit] = useState('');
+  const [received, setReceived] = useState(0);
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modal
+      title="Нова позиція"
+      onCancel={onCancel}
+      busy={busy}
+      onSave={async () => {
+        if (!name.trim()) return alert('Вкажіть назву');
+        setBusy(true);
+        await onSave({ name: name.trim(), unit, received: Number(received) });
+        setBusy(false);
+      }}
+    >
+      <div style={{ marginTop: 10 }}><label>Найменування</label>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} /></div>
+      <div style={{ marginTop: 10 }}><label>Од. виміру</label>
+        <input type="text" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="шт., к-т" /></div>
+      <div style={{ marginTop: 10 }}><label>Кількість отриманого</label>
+        <input type="number" min="0" value={received} onChange={(e) => setReceived(e.target.value)} /></div>
+    </Modal>
+  );
+}
+
+/* ---------- Склад ---------- */
+function WarehouseView({ setState }) {
+  const [data, setData] = useState(null);
+  const [q, setQ] = useState('');
+  const [chip, setChip] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [photo, setPhoto] = useState(null);
+  const [qr, setQr] = useState(null);
+
+  const load = useCallback(async () => {
+    setState('завантаження…');
+    try {
+      const d = await api('/api/warehouse');
+      setData(d);
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  }, [setState]);
+
+  useEffect(() => { load(); }, [load]);
+  if (!data) return <div className="loading">Завантаження…</div>;
+
+  const save = async (row, field, value) => {
+    setState('збереження…');
+    try {
+      await api('/api/warehouse', { method: 'PATCH', body: { row, field, value } });
+      setState('синхронізовано');
+    } catch { setState('помилка збереження'); }
+  };
+
+  let list = [...data.items].sort((a, b) => {
+    const na = parseInt(String(a.code).replace(/\D/g, ''), 10);
+    const nb = parseInt(String(b.code).replace(/\D/g, ''), 10);
+    return (isNaN(na) ? 0 : na) - (isNaN(nb) ? 0 : nb);
+  });
+  if (chip) list = list.filter((it) => it.priority === chip);
+  if (q.trim()) {
+    const s = q.trim().toLowerCase();
+    list = list.filter((it) =>
+      [it.code, it.name, it.contents, it.location].join(' ').toLowerCase().includes(s)
+    );
+  }
+
+  return (
+    <>
+      <div className="toolbar">
+        <input className="search-input" placeholder="Пошук: код, назва, вміст..." value={q} onChange={(e) => setQ(e.target.value)} />
+        {data.priorities.map((p) => (
+          <div key={p.value} className={'chip' + (chip === p.value ? ' on' : '')}
+            title={p.label} onClick={() => setChip(chip === p.value ? null : p.value)}>
+            Пріоритет {p.value}
+          </div>
+        ))}
+        <div className="spacer" />
+        <button className="btn" onClick={() => setAdding(true)}>+ Додати ящик</button>
+      </div>
+
+      {list.length === 0 ? (
+        <div className="empty">Немає ящиків</div>
+      ) : (
+        <div className="grid">
+          {list.map((it) => (
+            <div className="card" key={it.row}>
+              <div className="wh-top">
+                <span className="wh-code">{it.code}</span>
+                <select
+                  defaultValue={it.priority}
+                  style={{ width: 'auto', fontSize: '.7rem', padding: '3px 6px' }}
+                  onChange={(e) => save(it.row, 'priority', e.target.value)}
+                >
+                  {data.priorities.map((p) => <option key={p.value} value={p.value}>Пріоритет {p.value}</option>)}
+                </select>
+              </div>
+
+              {it.photoUrl ? (
+                <img className="wh-photo" src={it.photoUrl} alt="" onClick={() => setPhoto(it)}
+                  title="Натисніть, щоб відкрити в повному розмірі" />
+              ) : (
+                <div className="wh-photo-ph">немає фото</div>
+              )}
+
+              {[
+                ['Назва', 'name'], ['Вміст', 'contents'], ['Розташування', 'location'],
+              ].map(([label, field]) => (
+                <div className="field" key={field}>
+                  <label>{label}</label>
+                  <input type="text" defaultValue={it[field]}
+                    onBlur={(e) => e.target.value !== it[field] && save(it.row, field, e.target.value)} />
+                </div>
+              ))}
+
+              <div className="field">
+                <label>Статус</label>
+                <select defaultValue={it.status} onChange={(e) => save(it.row, 'status', e.target.value)}>
+                  {data.statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Примітки</label>
+                <input type="text" defaultValue={it.notes}
+                  onBlur={(e) => e.target.value !== it.notes && save(it.row, 'notes', e.target.value)} />
+              </div>
+
+              <div className="actions">
+                <button className="act-btn act-qr" onClick={() => setQr(it)}>QR</button>
+                <button className="act-btn act-del" onClick={async () => {
+                  if (!confirm('Видалити ящик ' + it.code + '?')) return;
+                  const d = await api('/api/warehouse', { method: 'DELETE', body: { row: it.row } });
+                  setData({ ...data, items: d.items });
+                }}>Видалити</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {photo && (
+        <div className="overlay" style={{ background: 'rgba(0,0,0,.92)' }} onClick={() => setPhoto(null)}>
+          <div style={{ textAlign: 'center' }}>
+            <img src={photo.photoUrl} alt="" style={{ maxWidth: '96vw', maxHeight: '80vh', objectFit: 'contain' }} />
+            <div style={{ fontFamily: 'var(--mono)', marginTop: 12 }}>{photo.code} — {photo.name}</div>
+            <button className="btn" style={{ marginTop: 12 }} onClick={() => setPhoto(null)}>Закрити</button>
+          </div>
+        </div>
+      )}
+
+      {qr && <QrModal item={qr} onClose={() => setQr(null)} />}
+
+      {adding && (
+        <AddWarehouseModal
+          priorities={data.priorities}
+          onCancel={() => setAdding(false)}
+          onSave={async (body) => {
+            const d = await api('/api/warehouse', { method: 'POST', body });
+            setData({ ...data, items: d.items });
+            setAdding(false);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function QrModal({ item, onClose }) {
+  const [src, setSrc] = useState('');
+  const url = typeof window !== 'undefined' ? `${window.location.origin}/?box=${encodeURIComponent(item.code)}` : '';
+
+  useEffect(() => {
+    import('qrcode').then((QR) => {
+      QR.toDataURL(url, { width: 260, margin: 1, color: { dark: '#12140f', light: '#ffffff' } })
+        .then(setSrc).catch(() => {});
+    });
+  }, [url]);
+
+  return (
+    <div className="overlay" onClick={(e) => e.target.className === 'overlay' && onClose()}>
+      <div className="modal" style={{ textAlign: 'center' }}>
+        <h2>QR: {item.code}</h2>
+        {src ? <img src={src} alt="QR" style={{ background: '#fff', padding: 12, borderRadius: 4 }} />
+             : <div className="loading">Генерація…</div>}
+        <div style={{ fontFamily: 'var(--mono)', fontSize: '.7rem', color: 'var(--muted)', marginTop: 10, wordBreak: 'break-all' }}>
+          {url}
+        </div>
+        <div className="modal-actions">
+          <button className="btn-cancel" onClick={onClose}>Закрити</button>
+          <button className="btn-save" onClick={() => window.print()}>Друк</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddWarehouseModal({ priorities, onCancel, onSave }) {
+  const [f, setF] = useState({ priority: '3', name: '', contents: '', location: '', notes: '', photoUrl: '' });
+  const [busy, setBusy] = useState(false);
+  const up = (k, v) => setF((p) => ({ ...p, [k]: v }));
+
+  return (
+    <Modal
+      title="Новий ящик"
+      onCancel={onCancel}
+      busy={busy}
+      onSave={async () => {
+        if (!f.name.trim()) return alert('Вкажіть назву');
+        setBusy(true);
+        await onSave(f);
+        setBusy(false);
+      }}
+    >
+      <div style={{ marginTop: 10 }}><label>Пріоритет</label>
+        <select value={f.priority} onChange={(e) => up('priority', e.target.value)}>
+          {priorities.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+        </select></div>
+      {[['Назва', 'name'], ['Вміст', 'contents'], ['Розташування', 'location'],
+        ['Примітки', 'notes'], ['Посилання на фото', 'photoUrl']].map(([label, key]) => (
+        <div style={{ marginTop: 10 }} key={key}>
+          <label>{label}</label>
+          <input type="text" value={f[key]} onChange={(e) => up(key, e.target.value)} />
+        </div>
+      ))}
+    </Modal>
+  );
+}
