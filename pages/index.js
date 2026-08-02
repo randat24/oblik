@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
-import Head from 'next/head';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 const api = async (url, opts = {}) => {
   const res = await fetch(url, {
@@ -63,12 +62,13 @@ function Login({ onOk }) {
 }
 
 /* ---------- Модальні вікна ---------- */
-function Modal({ title, children, onCancel, onSave, saveLabel = 'Зберегти', busy }) {
+function Modal({ title, children, onCancel, onSave, saveLabel = 'Зберегти', busy, error }) {
   return (
     <div className="overlay" onClick={(e) => e.target.className === 'overlay' && onCancel()}>
       <div className="modal">
         <h2>{title}</h2>
         {children}
+        {error && <div className="err">{error}</div>}
         <div className="modal-actions">
           <button className="btn-cancel" onClick={onCancel}>Скасувати</button>
           <button className="btn-save" onClick={onSave} disabled={busy}>
@@ -76,6 +76,120 @@ function Modal({ title, children, onCancel, onSave, saveLabel = 'Зберегт�
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ---------- Завантаження фото ---------- */
+
+/** Стискає фото у браузері, щоб не вантажити 8 МБ з телефона */
+function shrinkImage(file, maxSide = 1600, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      if (scale === 1 && file.size < 700 * 1024) return resolve(file);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => (blob ? resolve(new File([blob], 'photo.jpg', { type: 'image/jpeg' })) : reject(new Error('Не вдалося обробити фото'))),
+        'image/jpeg',
+        quality
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Не вдалося прочитати фото'));
+    };
+    img.src = url;
+  });
+}
+
+function PhotoField({ value, onChange, showPreview = true }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const inputRef = useRef(null);
+
+  const pick = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    setErr('');
+    try {
+      const small = await shrinkImage(file);
+      const { upload } = await import('@vercel/blob/client');
+      const name = `box-${Date.now()}.jpg`;
+      const blob = await upload(name, small, { access: 'public', handleUploadUrl: '/api/upload' });
+      onChange(blob.url);
+    } catch (e) {
+      setErr(e.message || 'Помилка завантаження');
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="photo-field">
+      <label>Фото</label>
+      {showPreview && value && <img className="photo-preview" src={value} alt="" />}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: 'none' }}
+        onChange={(e) => pick(e.target.files?.[0])}
+      />
+      <div className="photo-actions">
+        <button type="button" className="act-btn act-qr" disabled={busy} onClick={() => inputRef.current?.click()}>
+          {busy ? 'Завантаження…' : value ? 'Замінити фото' : 'Завантажити фото'}
+        </button>
+        {value && (
+          <button type="button" className="act-btn act-del" disabled={busy} onClick={() => onChange('')}>
+            Прибрати
+          </button>
+        )}
+      </div>
+      <input
+        type="text"
+        placeholder="або вставте посилання"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ marginTop: 6 }}
+      />
+      {err && <div className="err">{err}</div>}
+    </div>
+  );
+}
+
+/* ---------- Поле пошуку: живий пошук + кнопка очищення ---------- */
+function SearchBox({ value, onChange, placeholder, autoFocus }) {
+  return (
+    <div className="search-wrap">
+      <span className="search-icon">🔍</span>
+      <input
+        type="text"
+        className="search-input"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoFocus={autoFocus}
+      />
+      {value && (
+        <button
+          type="button"
+          className="search-clear"
+          onClick={() => onChange('')}
+          aria-label="Очистити пошук"
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 }
@@ -100,12 +214,21 @@ export default function Home() {
       .catch((e) => setState('помилка: ' + e.message));
   }, [authed]);
 
+  // QR-код веде на /?box=КОД — одразу відкриваємо склад і фільтруємо на потрібний ящик
+  useEffect(() => {
+    if (typeof window === 'undefined' || !sheets.length) return;
+    const box = new URLSearchParams(window.location.search).get('box');
+    if (!box) return;
+    const wh = sheets.find((s) => s.kind === 'warehouse');
+    if (wh) setView({ kind: 'warehouse', name: wh.name, box });
+    window.history.replaceState({}, '', window.location.pathname);
+  }, [sheets]);
+
   if (authed === null) return <div className="loading">Завантаження…</div>;
   if (!authed) return <Login onOk={() => setAuthed(true)} />;
 
   return (
     <>
-      <Head><title>Облік майна</title></Head>
       <div className="wrap">
         <header>
           <h1>Облік майна</h1>
@@ -131,9 +254,11 @@ export default function Home() {
         </div>
 
         {view.kind === 'search' && <SearchView sheets={sheets} setState={setState} onOpen={setView} />}
-        {view.kind === 'items' && <ItemsView key={view.name} name={view.name} setState={setState} />}
+        {view.kind === 'items' && (
+          <ItemsView key={view.name + ':' + (view.row || '')} name={view.name} setState={setState} focusRow={view.row} />
+        )}
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
-        {view.kind === 'warehouse' && <WarehouseView setState={setState} />}
+        {view.kind === 'warehouse' && <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} />}
       </div>
     </>
   );
@@ -144,20 +269,35 @@ function SearchView({ setState, onOpen }) {
   const [q, setQ] = useState('');
   const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
+  const reqId = useRef(0);
 
-  const run = async () => {
-    if (q.trim().length < 2) return;
+  useEffect(() => {
+    const query = q.trim();
+    if (query.length < 2) {
+      reqId.current++;
+      setRes(null);
+      setBusy(false);
+      setState('');
+      return;
+    }
+    const id = ++reqId.current;
     setBusy(true);
     setState('пошук…');
-    try {
-      const d = await api('/api/search?q=' + encodeURIComponent(q.trim()));
-      setRes(d);
-      setState('готово');
-    } catch (e) {
-      setState('помилка: ' + e.message);
-    }
-    setBusy(false);
-  };
+    const t = setTimeout(async () => {
+      try {
+        const d = await api('/api/search?q=' + encodeURIComponent(query));
+        if (reqId.current !== id) return;
+        setRes(d);
+        setState('готово');
+      } catch (e) {
+        if (reqId.current !== id) return;
+        setState('помилка: ' + e.message);
+      } finally {
+        if (reqId.current === id) setBusy(false);
+      }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [q, setState]);
 
   const groups = res
     ? [
@@ -170,18 +310,13 @@ function SearchView({ setState, onOpen }) {
   return (
     <>
       <div className="toolbar">
-        <input
-          type="text"
-          className="search-input"
-          placeholder="S/N, позивний, модель, місце, примітка..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && run()}
-        />
-        <button className="btn" onClick={run} disabled={busy}>Знайти</button>
+        <SearchBox value={q} onChange={setQ} placeholder="S/N, позивний, модель, місце, примітка..." autoFocus />
       </div>
 
-      {res && groups.length === 0 && <div className="empty">Нічого не знайдено</div>}
+      {q.trim().length > 0 && q.trim().length < 2 && (
+        <div className="empty">Введіть щонайменше 2 символи</div>
+      )}
+      {!busy && res && groups.length === 0 && <div className="empty">Нічого не знайдено</div>}
 
       {groups.map((g) => (
         <div className="section" key={g.title}>
@@ -216,7 +351,7 @@ function SearchView({ setState, onOpen }) {
                 )}
               </div>
               <div className="actions">
-                <button className="act-btn act-qr" onClick={() => onOpen({ kind: 'items', name: r.sheet })}>
+                <button className="act-btn act-qr" onClick={() => onOpen({ kind: 'items', name: r.sheet, row: r.row })}>
                   Відкрити лист
                 </button>
               </div>
@@ -229,12 +364,13 @@ function SearchView({ setState, onOpen }) {
 }
 
 /* ---------- Звичайні листи ---------- */
-function ItemsView({ name, setState }) {
+function ItemsView({ name, setState, focusRow }) {
   const [data, setData] = useState(null);
   const [chip, setChip] = useState(null);
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
   const [issuing, setIssuing] = useState(null);
+  const [highlightRow, setHighlightRow] = useState(focusRow || null);
 
   const load = useCallback(async () => {
     setState('завантаження…');
@@ -249,9 +385,19 @@ function ItemsView({ name, setState }) {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (!data || !focusRow) return;
+    setHighlightRow(focusRow);
+    const t = setTimeout(() => {
+      document.getElementById('item-row-' + focusRow)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+    const clear = setTimeout(() => setHighlightRow(null), 2500);
+    return () => { clearTimeout(t); clearTimeout(clear); };
+  }, [data, focusRow]);
+
   if (!data) return <div className="loading">Завантаження…</div>;
 
-  const { headers, items, cols, statusOptions, typeOptions, maskCols, noIssue } = data;
+  const { headers, items, cols, statusOptions, typeOptions, maskCols, noIssue, hideStatus } = data;
 
   const save = async (row, colIdx, value) => {
     setState('збереження…');
@@ -273,8 +419,8 @@ function ItemsView({ name, setState }) {
   return (
     <>
       <div className="toolbar">
-        <input className="search-input" placeholder="Пошук..." value={q} onChange={(e) => setQ(e.target.value)} />
-        {statusOptions.map((s) => (
+        <SearchBox value={q} onChange={setQ} placeholder="Пошук..." />
+        {!hideStatus && statusOptions.map((s) => (
           <div key={s} className={'chip' + (chip === s ? ' on' : '')} onClick={() => setChip(chip === s ? null : s)}>
             {s}
           </div>
@@ -288,9 +434,11 @@ function ItemsView({ name, setState }) {
       ) : (
         <div className="grid">
           {list.map((it) => (
-            <div className="card" key={it.row}>
+            <div className={'card' + (it.row === highlightRow ? ' highlight' : '')} key={it.row} id={'item-row-' + it.row}>
               <div className="rownum">ряд. {it.row}</div>
-              {headers.map((h, ci) => (
+              {headers.map((h, ci) => {
+                if (hideStatus && ci === cols.status) return null;
+                return (
                 <div className="field" key={ci}>
                   <label>{h || 'Поле ' + (ci + 1)}</label>
                   {ci === cols.status || ci === cols.type ? (
@@ -312,7 +460,8 @@ function ItemsView({ name, setState }) {
                     />
                   )}
                 </div>
-              ))}
+                );
+              })}
               <div className="actions">
                 {!noIssue && (
                   <>
@@ -322,8 +471,12 @@ function ItemsView({ name, setState }) {
                       onClick={async () => {
                         if (!confirm('Прийняти на КСП? Отримувача буде очищено.')) return;
                         setState('збереження…');
-                        await api('/api/item', { method: 'POST', body: { sheet: name, action: 'return', row: it.row } });
-                        load();
+                        try {
+                          await api('/api/item', { method: 'POST', body: { sheet: name, action: 'return', row: it.row } });
+                          load();
+                        } catch (e) {
+                          setState('помилка: ' + e.message);
+                        }
                       }}
                     >
                       Прийняти
@@ -334,8 +487,13 @@ function ItemsView({ name, setState }) {
                   className="act-btn act-del"
                   onClick={async () => {
                     if (!confirm(`Видалити запис (рядок ${it.row})?`)) return;
-                    await api('/api/item', { method: 'DELETE', body: { sheet: name, row: it.row } });
-                    load();
+                    setState('видалення…');
+                    try {
+                      await api('/api/item', { method: 'DELETE', body: { sheet: name, row: it.row } });
+                      load();
+                    } catch (e) {
+                      setState('помилка: ' + e.message);
+                    }
                   }}
                 >
                   Видалити
@@ -352,6 +510,7 @@ function ItemsView({ name, setState }) {
           cols={cols}
           statusOptions={statusOptions}
           typeOptions={typeOptions}
+          hideStatus={hideStatus}
           onCancel={() => setAdding(false)}
           onSave={async (values) => {
             await api('/api/item', { method: 'POST', body: { sheet: name, values } });
@@ -380,18 +539,32 @@ function ItemsView({ name, setState }) {
   );
 }
 
-function AddItemModal({ headers, cols, statusOptions, typeOptions, onCancel, onSave }) {
+function AddItemModal({ headers, cols, statusOptions, typeOptions, hideStatus, onCancel, onSave }) {
   const [vals, setVals] = useState(() => headers.map(() => ''));
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
 
   return (
     <Modal
       title="Новий запис"
       onCancel={onCancel}
       busy={busy}
-      onSave={async () => { setBusy(true); await onSave(vals); setBusy(false); }}
+      error={err}
+      onSave={async () => {
+        setBusy(true);
+        setErr('');
+        try {
+          await onSave(vals);
+        } catch (e) {
+          setErr(e.message || 'Помилка збереження');
+        } finally {
+          setBusy(false);
+        }
+      }}
     >
-      {headers.map((h, i) => (
+      {headers.map((h, i) => {
+        if (hideStatus && i === cols.status) return null;
+        return (
         <div key={i} style={{ marginTop: 10 }}>
           <label>{h || 'Поле ' + (i + 1)}</label>
           {i === cols.status || i === cols.type ? (
@@ -409,7 +582,8 @@ function AddItemModal({ headers, cols, statusOptions, typeOptions, onCancel, onS
             />
           )}
         </div>
-      ))}
+        );
+      })}
     </Modal>
   );
 }
@@ -419,6 +593,7 @@ function IssueModal({ whoOptions = [], whereOptions = [], onCancel, onSave }) {
   const [where, setWhere] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
 
   return (
     <Modal
@@ -426,11 +601,18 @@ function IssueModal({ whoOptions = [], whereOptions = [], onCancel, onSave }) {
       saveLabel="Видати"
       onCancel={onCancel}
       busy={busy}
+      error={err}
       onSave={async () => {
         if (!who && !where) return alert('Вкажіть хоча б позивний або місце');
         setBusy(true);
-        await onSave({ who, where, date: date.split('-').reverse().join('.') });
-        setBusy(false);
+        setErr('');
+        try {
+          await onSave({ who, where, date: date.split('-').reverse().join('.') });
+        } catch (e) {
+          setErr(e.message || 'Помилка збереження');
+        } finally {
+          setBusy(false);
+        }
       }}
     >
       <div style={{ marginTop: 10 }}>
@@ -476,45 +658,87 @@ function LedgerView({ name, setState }) {
     ? items.filter((it) => it.name.toLowerCase().includes(q.trim().toLowerCase()))
     : items;
 
+  const save = async (row, field, value) => {
+    setState('збереження…');
+    try {
+      const d = await api('/api/ledger', { method: 'POST', body: { sheet: name, action: 'update', row, field, value } });
+      setItems(d.items);
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  };
+
   return (
     <>
       <div className="toolbar">
-        <input className="search-input" placeholder="Пошук за назвою..." value={q} onChange={(e) => setQ(e.target.value)} />
+        <SearchBox value={q} onChange={setQ} placeholder="Пошук за назвою..." />
         <div className="spacer" />
         <button className="btn" onClick={() => setAdding(true)}>+ Додати позицію</button>
       </div>
 
+      {list.length === 0 ? (
+        <div className="empty">Немає позицій</div>
+      ) : (
       <div className="grid">
         {list.map((it) => (
           <div className="card ledger-card" key={it.row}>
-            <div className="name">{it.name} {it.unit && <span style={{ color: 'var(--muted)', fontWeight: 400 }}>({it.unit})</span>}</div>
+            <div className="rownum">ряд. {it.row}</div>
+            <div className="field">
+              <label>Найменування</label>
+              <input type="text" defaultValue={it.name}
+                onBlur={(e) => e.target.value.trim() && e.target.value !== it.name && save(it.row, 'name', e.target.value.trim())} />
+            </div>
+            <div className="ledger-edit">
+              <div className="field">
+                <label>Од. виміру</label>
+                <input type="text" defaultValue={it.unit}
+                  onBlur={(e) => e.target.value !== it.unit && save(it.row, 'unit', e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Отримано</label>
+                <input type="number" min="0" defaultValue={it.received}
+                  onBlur={(e) => Number(e.target.value) !== it.received && save(it.row, 'received', Number(e.target.value) || 0)} />
+              </div>
+            </div>
             <div className="ledger-stats">
-              <span>Отримано: {it.received}</span>
               <span>Списано: {it.writtenOff}</span>
             </div>
             <div className={'remainder ' + (it.remainder <= 0 ? 'low' : 'ok')}>Залишок: {it.remainder}</div>
             <div className="actions">
-              <button className="act-btn act-qr" onClick={() => setWo(it)}>Списати</button>
+              <button className="act-btn act-issue" disabled={it.remainder <= 0} onClick={() => setWo(it)}>Списати</button>
+              <button className="act-btn act-del" onClick={async () => {
+                if (!confirm(`Видалити позицію «${it.name}»?`)) return;
+                setState('видалення…');
+                try {
+                  const d = await api('/api/ledger', { method: 'DELETE', body: { sheet: name, row: it.row } });
+                  setItems(d.items);
+                  setState('синхронізовано');
+                } catch (e) {
+                  setState('помилка: ' + e.message);
+                }
+              }}>Видалити</button>
             </div>
             {it.writeOffs.length > 0 && (
               <div className="history">
                 {it.writeOffs.slice(-5).reverse().map((w, i) => (
-                  <div key={i}>{w.qty} шт — {w.date || 'без дати'}</div>
+                  <div key={i}>{w.qty} {it.unit || 'шт'} — {w.date || 'без дати'}</div>
                 ))}
               </div>
             )}
           </div>
         ))}
       </div>
+      )}
 
       {wo && (
         <WriteoffModal
           item={wo}
           onCancel={() => setWo(null)}
           onSave={async ({ qty, date }) => {
-            await api('/api/ledger', { method: 'POST', body: { sheet: name, action: 'writeoff', row: wo.row, qty, date } });
+            const d = await api('/api/ledger', { method: 'POST', body: { sheet: name, action: 'writeoff', row: wo.row, qty, date } });
+            setItems(d.items);
             setWo(null);
-            load();
           }}
         />
       )}
@@ -537,22 +761,38 @@ function WriteoffModal({ item, onCancel, onSave }) {
   const [qty, setQty] = useState(1);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
   return (
     <Modal
       title={'Списати: ' + item.name}
       saveLabel="Списати"
       onCancel={onCancel}
       busy={busy}
+      error={err}
       onSave={async () => {
-        if (qty <= 0) return alert('Вкажіть кількість більше 0');
+        const n = Number(qty);
+        if (!Number.isFinite(n) || n <= 0) return setErr('Вкажіть кількість більше 0');
+        if (n > item.remainder) return setErr(`Залишок лише ${item.remainder} ${item.unit || 'шт'}`);
         setBusy(true);
-        await onSave({ qty: Number(qty), date: date.split('-').reverse().join('.') });
-        setBusy(false);
+        setErr('');
+        try {
+          await onSave({ qty: n, date: date.split('-').reverse().join('.') });
+        } catch (e) {
+          setErr(e.message || 'Помилка списання');
+        } finally {
+          setBusy(false);
+        }
       }}
     >
+      <div className="ledger-stats" style={{ marginBottom: 4 }}>
+        <span>Отримано: {item.received}</span>
+        <span>Списано: {item.writtenOff}</span>
+        <span>Залишок: {item.remainder}</span>
+      </div>
       <div style={{ marginTop: 10 }}>
-        <label>Кількість</label>
-        <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} />
+        <label>Кількість {item.unit && `(${item.unit})`}</label>
+        <input type="number" min="1" max={item.remainder} value={qty} onChange={(e) => setQty(e.target.value)} autoFocus />
       </div>
       <div style={{ marginTop: 10 }}>
         <label>Дата</label>
@@ -567,16 +807,25 @@ function AddLedgerModal({ onCancel, onSave }) {
   const [unit, setUnit] = useState('');
   const [received, setReceived] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
   return (
     <Modal
       title="Нова позиція"
       onCancel={onCancel}
       busy={busy}
+      error={err}
       onSave={async () => {
-        if (!name.trim()) return alert('Вкажіть назву');
+        if (!name.trim()) return setErr('Вкажіть назву');
         setBusy(true);
-        await onSave({ name: name.trim(), unit, received: Number(received) });
-        setBusy(false);
+        setErr('');
+        try {
+          await onSave({ name: name.trim(), unit, received: Number(received) || 0 });
+        } catch (e) {
+          setErr(e.message || 'Помилка збереження');
+        } finally {
+          setBusy(false);
+        }
       }}
     >
       <div style={{ marginTop: 10 }}><label>Найменування</label>
@@ -590,13 +839,14 @@ function AddLedgerModal({ onCancel, onSave }) {
 }
 
 /* ---------- Склад ---------- */
-function WarehouseView({ setState }) {
+function WarehouseView({ setState, focusCode }) {
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
   const [chip, setChip] = useState(null);
   const [adding, setAdding] = useState(false);
   const [photo, setPhoto] = useState(null);
   const [qr, setQr] = useState(null);
+  const [highlight, setHighlight] = useState(focusCode || null);
 
   const load = useCallback(async () => {
     setState('завантаження…');
@@ -610,6 +860,16 @@ function WarehouseView({ setState }) {
   }, [setState]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!data || !focusCode) return;
+    setHighlight(focusCode);
+    const t = setTimeout(() => {
+      document.getElementById('box-' + focusCode)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [data, focusCode]);
+
   if (!data) return <div className="loading">Завантаження…</div>;
 
   const save = async (row, field, value) => {
@@ -625,6 +885,7 @@ function WarehouseView({ setState }) {
     const nb = parseInt(String(b.code).replace(/\D/g, ''), 10);
     return (isNaN(na) ? 0 : na) - (isNaN(nb) ? 0 : nb);
   });
+  if (highlight) list = list.filter((it) => it.code === highlight);
   if (chip) list = list.filter((it) => it.priority === chip);
   if (q.trim()) {
     const s = q.trim().toLowerCase();
@@ -635,8 +896,15 @@ function WarehouseView({ setState }) {
 
   return (
     <>
+      {highlight && (
+        <div className="scan-banner">
+          <span>Відскановано ящик <b>{highlight}</b></span>
+          <button className="act-btn" onClick={() => setHighlight(null)}>Показати всі</button>
+        </div>
+      )}
+
       <div className="toolbar">
-        <input className="search-input" placeholder="Пошук: код, назва, вміст..." value={q} onChange={(e) => setQ(e.target.value)} />
+        <SearchBox value={q} onChange={setQ} placeholder="Пошук: код, назва, вміст..." />
         {data.priorities.map((p) => (
           <div key={p.value} className={'chip' + (chip === p.value ? ' on' : '')}
             title={p.label} onClick={() => setChip(chip === p.value ? null : p.value)}>
@@ -652,7 +920,7 @@ function WarehouseView({ setState }) {
       ) : (
         <div className="grid">
           {list.map((it) => (
-            <div className="card" key={it.row}>
+            <div className={'card' + (it.code === highlight ? ' highlight' : '')} key={it.row} id={'box-' + it.code}>
               <div className="wh-top">
                 <span className="wh-code">{it.code}</span>
                 <select
@@ -670,6 +938,18 @@ function WarehouseView({ setState }) {
               ) : (
                 <div className="wh-photo-ph">немає фото</div>
               )}
+
+              <PhotoField
+                value={it.photoUrl}
+                showPreview={false}
+                onChange={(url) => {
+                  setData((p) => ({
+                    ...p,
+                    items: p.items.map((x) => (x.row === it.row ? { ...x, photoUrl: url } : x)),
+                  }));
+                  save(it.row, 'photoUrl', url);
+                }}
+              />
 
               {[
                 ['Назва', 'name'], ['Вміст', 'contents'], ['Розташування', 'location'],
@@ -698,8 +978,14 @@ function WarehouseView({ setState }) {
                 <button className="act-btn act-qr" onClick={() => setQr(it)}>QR</button>
                 <button className="act-btn act-del" onClick={async () => {
                   if (!confirm('Видалити ящик ' + it.code + '?')) return;
-                  const d = await api('/api/warehouse', { method: 'DELETE', body: { row: it.row } });
-                  setData({ ...data, items: d.items });
+                  setState('видалення…');
+                  try {
+                    const d = await api('/api/warehouse', { method: 'DELETE', body: { row: it.row } });
+                    setData((p) => ({ ...p, items: d.items }));
+                    setState('синхронізовано');
+                  } catch (e) {
+                    setState('помилка: ' + e.message);
+                  }
                 }}>Видалити</button>
               </div>
             </div>
@@ -725,7 +1011,7 @@ function WarehouseView({ setState }) {
           onCancel={() => setAdding(false)}
           onSave={async (body) => {
             const d = await api('/api/warehouse', { method: 'POST', body });
-            setData({ ...data, items: d.items });
+            setData((p) => ({ ...p, items: d.items }));
             setAdding(false);
           }}
         />
@@ -766,6 +1052,7 @@ function QrModal({ item, onClose }) {
 function AddWarehouseModal({ priorities, onCancel, onSave }) {
   const [f, setF] = useState({ priority: '3', name: '', contents: '', location: '', notes: '', photoUrl: '' });
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
   const up = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
   return (
@@ -773,11 +1060,18 @@ function AddWarehouseModal({ priorities, onCancel, onSave }) {
       title="Новий ящик"
       onCancel={onCancel}
       busy={busy}
+      error={err}
       onSave={async () => {
-        if (!f.name.trim()) return alert('Вкажіть назву');
+        if (!f.name.trim()) return setErr('Вкажіть назву');
         setBusy(true);
-        await onSave(f);
-        setBusy(false);
+        setErr('');
+        try {
+          await onSave(f);
+        } catch (e) {
+          setErr(e.message || 'Помилка збереження');
+        } finally {
+          setBusy(false);
+        }
       }}
     >
       <div style={{ marginTop: 10 }}><label>Пріоритет</label>
@@ -785,12 +1079,15 @@ function AddWarehouseModal({ priorities, onCancel, onSave }) {
           {priorities.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select></div>
       {[['Назва', 'name'], ['Вміст', 'contents'], ['Розташування', 'location'],
-        ['Примітки', 'notes'], ['Посилання на фото', 'photoUrl']].map(([label, key]) => (
+        ['Примітки', 'notes']].map(([label, key]) => (
         <div style={{ marginTop: 10 }} key={key}>
           <label>{label}</label>
           <input type="text" value={f[key]} onChange={(e) => up(key, e.target.value)} />
         </div>
       ))}
+      <div style={{ marginTop: 10 }}>
+        <PhotoField value={f.photoUrl} onChange={(v) => up('photoUrl', v)} />
+      </div>
     </Modal>
   );
 }
