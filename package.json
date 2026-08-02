@@ -1,0 +1,18 @@
+{
+  "name": "oblik-mayna",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.14.1",
+    "googleapis": "^144.0.0",
+    "next": "14.2.15",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "qrcode": "^1.5.4"
+  }
+}
