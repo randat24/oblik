@@ -48,7 +48,7 @@ git push -u origin main
 
 | Name | Value |
 |---|---|
-| `SPREADSHEET_ID` | `1E5k8fE2LnHO4PsSOT9RgtMZZNOfNYQ7Oj1ifO0gfIhY` |
+| `SPREADSHEET_ID` | `1E5k8fE2LnHO4PsSOT9Rg` |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | `client_email` з JSON |
 | `GOOGLE_PRIVATE_KEY` | `private_key` з JSON — **повністю, разом з `-----BEGIN...`** |
 | `APP_PASSWORD` | пароль для входу на сайт |
