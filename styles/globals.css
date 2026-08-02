@@ -58,7 +58,26 @@ input[type=text], input[type=number], input[type=date], input[type=password], se
   padding: 10px 12px; border-radius: 2px; font-size: 1rem; font-family: var(--sans);
 }
 input:focus, select:focus { outline: 1px solid var(--amber); }
-.search-input { min-width: 240px; flex: 1 1 240px; }
+
+/* Пошук */
+.search-wrap { position: relative; display: flex; align-items: center; flex: 1 1 280px; min-width: 240px; }
+.search-wrap .search-input {
+  width: 100%; padding-left: 38px; padding-right: 38px;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 2px; font-size: 1rem; font-family: var(--sans); padding-top: 11px; padding-bottom: 11px;
+}
+.search-wrap .search-input::placeholder { color: var(--muted); }
+.search-wrap:focus-within .search-input { border-color: var(--amber); outline: none; }
+.search-icon {
+  position: absolute; left: 12px; font-size: 0.9rem; opacity: .65; pointer-events: none; line-height: 1;
+}
+.search-clear {
+  position: absolute; right: 8px; width: 24px; height: 24px; display: flex;
+  align-items: center; justify-content: center; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 50%; color: var(--muted);
+  font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0;
+}
+.search-clear:hover { color: var(--text); border-color: var(--amber); }
 
 .chip {
   font-family: var(--mono); font-size: 0.8rem; letter-spacing: .5px; padding: 8px 14px;
@@ -86,6 +105,18 @@ input:focus, select:focus { outline: 1px solid var(--amber); }
   position: absolute; top: 12px; right: 12px;
   font-family: var(--mono); font-size: 0.7rem; color: var(--muted);
 }
+.card.highlight {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 2px var(--amber-dim);
+}
+
+.scan-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; margin-bottom: 12px; padding: 12px 14px;
+  background: var(--amber-dim); border: 1px solid var(--amber); border-radius: 3px;
+  font-family: var(--mono); font-size: 0.85rem;
+}
+.scan-banner .act-btn { flex: 0 0 auto; color: var(--text); border-color: var(--amber); }
 .field { margin-top: 10px; }
 .field:first-child { margin-top: 0; }
 label {
@@ -105,6 +136,7 @@ label {
   color: var(--muted); cursor: pointer; font-size: 0.8rem; padding: 7px 12px;
   border-radius: 2px; font-family: var(--mono); text-transform: uppercase;
 }
+.act-btn:disabled { opacity: .4; cursor: default; }
 .act-issue { color: var(--green); border-color: var(--green); }
 .act-return { color: var(--blue); border-color: var(--blue); }
 .act-qr { color: var(--amber); border-color: var(--amber); }
@@ -117,9 +149,10 @@ label {
 
 /* Ledger */
 .ledger-card .name { font-size: 1.05rem; font-weight: 600; margin-bottom: 10px; }
+.ledger-edit { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ledger-stats {
-  display: flex; justify-content: space-between;
-  font-family: var(--mono); font-size: 0.85rem; color: var(--muted); margin-bottom: 10px;
+  display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 0.85rem; color: var(--muted); margin: 10px 0;
 }
 .remainder { font-size: 1.15rem; font-family: var(--mono); font-weight: 700; }
 .remainder.low { color: var(--red); }
@@ -138,6 +171,15 @@ label {
   display: flex; align-items: center; justify-content: center; color: var(--muted);
   font-family: var(--mono); font-size: 0.75rem; cursor: pointer; border: 1px dashed var(--line);
 }
+
+/* Фото */
+.photo-field { margin-top: 10px; }
+.photo-preview {
+  width: 100%; max-height: 180px; object-fit: cover;
+  border-radius: 3px; margin-bottom: 6px; display: block; background: var(--panel-2);
+}
+.photo-actions { display: flex; gap: 6px; }
+.photo-actions .act-btn { flex: 1; }
 
 /* Search results */
 .section { margin-bottom: 22px; }
@@ -197,6 +239,7 @@ label {
   body { padding: 12px; }
   .grid { grid-template-columns: 1fr; }
   .toolbar { flex-direction: column; align-items: stretch; }
+  .search-wrap { min-width: 0; width: 100%; flex: 0 0 auto; }
   .search-input { min-width: 0; width: 100%; flex: 0 0 auto; }
   .btn { width: 100%; }
   .tab { flex: 1 1 auto; text-align: center; }

@@ -19,6 +19,7 @@ export default withAuth(async (req, res) => {
         name: c.name,
         kind: c.kind,
         noIssue: !!c.noIssue,
+        hideStatus: !!c.hideStatus,
       })),
     });
   }
@@ -58,6 +59,7 @@ export default withAuth(async (req, res) => {
     name,
     kind: cfg.kind,
     noIssue: !!cfg.noIssue,
+    hideStatus: !!cfg.hideStatus,
     maskCols: cfg.maskPasswords ? cols.maskCols : [],
     headers,
     items,

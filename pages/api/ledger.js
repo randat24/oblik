@@ -1,5 +1,5 @@
 import { withAuth } from '../../lib/auth';
-import { readSheet, writeCells, appendRow, colToA1 } from '../../lib/sheets';
+import { readSheet, writeCells, appendRow, deleteRow } from '../../lib/sheets';
 
 /** Знаходить структуру відомості: рядок заголовків і ключові колонки */
 function getMeta(values) {
@@ -13,6 +13,7 @@ function getMeta(values) {
     if (found) {
       headerRow = r;
       headers = values[r];
+      break;
     }
   }
   if (headerRow === -1) throw new Error('Не знайдено рядок заголовків із "Найменування"');
@@ -24,6 +25,14 @@ function getMeta(values) {
   const remainderCol = find('залиш');
   if (remainderCol === -1) throw new Error('Не знайдено колонку "Залишок"');
 
+  // Пари «К-сть / Дата» часто не мають заголовків, тож ширину беремо
+  // з найдовшого рядка даних, а не з рядка заголовків
+  let width = headers.length;
+  for (let r = headerRow + 1; r < values.length; r++) {
+    const len = (values[r] || []).length;
+    if (len > width) width = len;
+  }
+
   return {
     headerRow,
     nameCol,
@@ -31,7 +40,8 @@ function getMeta(values) {
     receivedCol,
     remainderCol,
     pairsStart: remainderCol + 1,
-    lastCol: headers.length,
+    lastCol: width,
+    headerCols: headers.length,
   };
 }
 
@@ -82,35 +92,64 @@ export default withAuth(async (req, res) => {
     const { action } = req.body;
 
     if (action === 'writeoff') {
-      const { row, qty, date } = req.body;
+      const { row, date } = req.body;
+      const qty = Number(req.body.qty);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        return res.status(400).json({ error: 'Кількість має бути більшою за 0' });
+      }
+
       const rowVals = values[row - 1] || [];
+      const isEmpty = (v) => v === null || v === undefined || v.toString().trim() === '';
 
-      // шукаємо першу вільну пару "К-сть / Дата"
-      let targetCol = -1;
-      for (let c = meta.pairsStart; c < meta.lastCol; c += 2) {
-        const v = rowVals[c];
-        if (v === '' || v === null || v === undefined) {
-          targetCol = c;
-          break;
-        }
-      }
-      if (targetCol === -1) targetCol = meta.lastCol; // додаємо в кінець
+      // перша вільна пара «К-сть / Дата»; за межами рядка комірки завжди порожні,
+      // тож цикл завжди завершується і пари лишаються вирівняними
+      let targetCol = meta.pairsStart;
+      while (!isEmpty(rowVals[targetCol])) targetCol += 2;
 
-      // рахуємо новий залишок
+      // новий залишок — по всій ширині рядка, а не лише по заголовках
       let total = 0;
-      for (let c = meta.pairsStart; c < meta.lastCol; c += 2) {
-        const v = rowVals[c];
-        if (v !== '' && v !== null && v !== undefined) total += Number(v) || 0;
+      for (let c = meta.pairsStart; c < rowVals.length; c += 2) {
+        if (!isEmpty(rowVals[c])) total += Number(rowVals[c]) || 0;
       }
-      total += Number(qty) || 0;
       const received = meta.receivedCol >= 0 ? Number(rowVals[meta.receivedCol]) || 0 : 0;
+      if (total + qty > received) {
+        return res.status(400).json({
+          error: `Недостатньо залишку: доступно ${received - total}, вказано ${qty}`,
+        });
+      }
 
       await writeCells(sheet, [
         { row, col: targetCol + 1, value: qty },
         { row, col: targetCol + 2, value: date },
-        { row, col: meta.remainderCol + 1, value: received - total },
+        { row, col: meta.remainderCol + 1, value: received - total - qty },
       ]);
 
+      const updated = await readSheet(sheet);
+      return res.json({ items: parseItems(updated, getMeta(updated)) });
+    }
+
+    if (action === 'update') {
+      const { row, field, value } = req.body;
+      const colMap = { name: meta.nameCol, unit: meta.unitCol, received: meta.receivedCol };
+      const col = colMap[field];
+      if (col === undefined || col < 0) {
+        return res.status(400).json({ error: `Невідоме поле: ${field}` });
+      }
+
+      const updates = [{ row, col: col + 1, value }];
+
+      // зміна отриманого змінює й залишок
+      if (field === 'received') {
+        const rowVals = values[row - 1] || [];
+        const isEmpty = (v) => v === null || v === undefined || v.toString().trim() === '';
+        let total = 0;
+        for (let c = meta.pairsStart; c < rowVals.length; c += 2) {
+          if (!isEmpty(rowVals[c])) total += Number(rowVals[c]) || 0;
+        }
+        updates.push({ row, col: meta.remainderCol + 1, value: (Number(value) || 0) - total });
+      }
+
+      await writeCells(sheet, updates);
       const updated = await readSheet(sheet);
       return res.json({ items: parseItems(updated, getMeta(updated)) });
     }
@@ -119,13 +158,23 @@ export default withAuth(async (req, res) => {
     const { name, unit, received } = req.body;
     if (!name) return res.status(400).json({ error: 'Не вказано назву' });
 
-    const row = new Array(meta.lastCol).fill('');
+    const row = new Array(meta.headerCols).fill('');
     if (meta.nameCol >= 0) row[meta.nameCol] = name;
     if (meta.unitCol >= 0) row[meta.unitCol] = unit || '';
     if (meta.receivedCol >= 0) row[meta.receivedCol] = Number(received) || 0;
     row[meta.remainderCol] = Number(received) || 0;
 
     await appendRow(sheet, row);
+    const updated = await readSheet(sheet);
+    return res.json({ items: parseItems(updated, getMeta(updated)) });
+  }
+
+  if (req.method === 'DELETE') {
+    const { row } = req.body;
+    if (!row || row <= meta.headerRow + 1) {
+      return res.status(400).json({ error: 'Некоректний рядок' });
+    }
+    await deleteRow(sheet, row);
     const updated = await readSheet(sheet);
     return res.json({ items: parseItems(updated, getMeta(updated)) });
   }

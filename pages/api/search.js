@@ -27,18 +27,22 @@ export default withAuth(async (req, res) => {
       const headers = values[0] || [];
       const cols = findColumns(headers);
       const rows = values.slice(1);
+      const masked = cfg.maskPasswords ? new Set(cols.maskCols) : new Set();
 
       rows.forEach((rawRow, i) => {
         const row = [...rawRow];
         while (row.length < headers.length) row.push('');
         if (row.join('').trim() === '') return;
 
+        // колонки з паролями не віддаємо в результати пошуку
+        const safeRow = row.map((v, c) => (masked.has(c) && v ? '••••••' : v));
+
         const entry = {
           sheet: cfg.name,
           row: i + 2,
           headers,
-          values: row,
-          status: cols.status >= 0 ? row[cols.status] || '' : '',
+          values: safeRow,
+          status: cfg.hideStatus || cols.status < 0 ? '' : row[cols.status] || '',
           who: cols.who >= 0 ? row[cols.who] || '' : '',
           matchedValue: '',
           noIssue: !!cfg.noIssue,
@@ -49,7 +53,7 @@ export default withAuth(async (req, res) => {
         for (const c of cols.snCols) {
           const rawSn = (row[c] || '').toString();
           const norm = rawSn.replace(/[\s\-/\\:]/g, '').toLowerCase().replace(/^sn#?/, '');
-          if (norm && qNorm.length >= 3 && norm.includes(qNorm)) {
+          if (norm && norm.includes(qNorm)) {
             entry.matchedValue = rawSn;
             snMatch = true;
             break;
@@ -70,7 +74,7 @@ export default withAuth(async (req, res) => {
 
         // 3) будь-де інде
         for (let c = 0; c < row.length; c++) {
-          if (c === cols.who) continue;
+          if (c === cols.who || masked.has(c)) continue;
           const cell = (row[c] || '').toString();
           if (cell && cell.toLowerCase().includes(qText)) {
             entry.matchedValue = cell;
