@@ -186,7 +186,15 @@ function PhotoField({ value, onChange, showPreview = true }) {
       // фото приватні — зберігаємо шлях, а не URL: показує їх наш маршрут після входу
       onChange(blob.pathname);
     } catch (e) {
-      setErr(e.message || 'Помилка завантаження');
+      // SDK ховає причину за загальним «Failed to retrieve the client token» — питаємо її окремо
+      let msg = e.message || 'Помилка завантаження';
+      if (/client token/i.test(msg)) {
+        const why = await fetch('/api/upload')
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null);
+        if (why?.reason) msg = why.reason;
+      }
+      setErr(msg);
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';
