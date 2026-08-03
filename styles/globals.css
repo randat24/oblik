@@ -266,19 +266,6 @@ label {
 .log-arrow { color: var(--muted); }
 .log-after { color: var(--text); overflow-wrap: anywhere; }
 
-/* Резервні копії */
-.backup-note {
-  font-size: 0.85rem; color: var(--muted); line-height: 1.5;
-  flex: 1 1 320px; min-width: 0;
-}
-.backup-err { margin-bottom: 12px; line-height: 1.5; }
-.backup-row { align-items: center; }
-.backup-name { font-family: var(--mono); font-size: 0.85rem; overflow-wrap: anywhere; }
-.backup-dl {
-  flex: 0 0 auto; text-decoration: none; text-align: center;
-  display: inline-block; align-self: center;
-}
-
 /* Modal */
 .overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.7);
@@ -325,5 +312,4 @@ label {
   .toast { width: 100%; }
   .log-row { flex-direction: column; gap: 6px; }
   .log-when { flex-direction: row; gap: 8px; }
-  .backup-dl { width: 100%; }
 }
