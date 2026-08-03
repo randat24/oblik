@@ -364,6 +364,12 @@ export default function Home() {
           >
             🕘 Журнал
           </div>
+          <div
+            className={'tab' + (view.kind === 'backup' ? ' active' : '')}
+            onClick={() => setView({ kind: 'backup', name: null })}
+          >
+            🗄 Копії
+          </div>
         </div>
 
         {view.kind === 'search' && <SearchView sheets={sheets} setState={setState} onOpen={setView} />}
@@ -373,6 +379,7 @@ export default function Home() {
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
         {view.kind === 'warehouse' && <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} />}
         {view.kind === 'log' && <LogView setState={setState} />}
+        {view.kind === 'backup' && <BackupView setState={setState} />}
       </div>
       <ToastHost toasts={toasts} onClose={close} />
     </ToastCtx.Provider>
@@ -1360,6 +1367,108 @@ function LogView({ setState }) {
                   </div>
                 )}
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ---------- Резервні копії ---------- */
+function fmtSize(n) {
+  if (!n) return '';
+  return n < 1024 * 1024 ? `${Math.round(n / 1024)} КБ` : `${(n / 1024 / 1024).toFixed(1)} МБ`;
+}
+
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return new Intl.DateTimeFormat('uk-UA', {
+    timeZone: 'Europe/Kyiv',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(d);
+}
+
+function BackupView({ setState }) {
+  const [backups, setBackups] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  const load = useCallback(async () => {
+    setState('завантаження…');
+    setErr('');
+    try {
+      const d = await api('/api/backup');
+      setBackups(d.backups);
+      setState('синхронізовано');
+    } catch (e) {
+      setBackups([]);
+      setErr(e.message);
+      setState('помилка');
+    }
+  }, [setState]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const run = async () => {
+    setBusy(true);
+    setState('створення копії…');
+    try {
+      const d = await api('/api/backup', { method: 'POST' });
+      toast(`Копію створено: ${d.rows} рядків із ${d.sheets} листів`);
+      if (d.skipped?.length) {
+        toast(`Не вдалося прочитати: ${d.skipped.map((s) => s.name).join(', ')}`, { type: 'warn' });
+      }
+      await load();
+    } catch (e) {
+      setErr(e.message);
+      toast('Не вдалося створити копію: ' + e.message, { type: 'err' });
+    }
+    setBusy(false);
+  };
+
+  if (!backups) return <div className="loading">Завантаження…</div>;
+
+  return (
+    <>
+      <div className="toolbar">
+        <div className="backup-note">
+          Копія всіх листів разом із журналом створюється щодня о 05:00 за Києвом.
+          Зберігаються останні 30.
+        </div>
+        <div className="spacer" />
+        <button className="btn" onClick={run} disabled={busy}>
+          {busy ? 'Створення…' : 'Зробити копію зараз'}
+        </button>
+      </div>
+
+      {err && <div className="err backup-err">{err}</div>}
+
+      {backups.length === 0 ? (
+        <div className="empty">{err ? 'Копій поки немає' : 'Копій ще немає — створіть першу кнопкою вище'}</div>
+      ) : (
+        <div className="log-list">
+          {backups.map((b, i) => (
+            <div className="log-row backup-row" key={b.pathname}>
+              <div className="log-when">
+                <span>{fmtWhen(b.uploadedAt)}</span>
+                <span className="log-time">{fmtSize(b.size)}</span>
+              </div>
+              <div className="log-what">
+                <div className="log-head">
+                  {i === 0 && <span className="log-action log-add">Найновіша</span>}
+                  <span className="backup-name">{b.pathname.replace(/^backup\//, '')}</span>
+                </div>
+              </div>
+              <a
+                className="act-btn act-qr backup-dl"
+                href={'/api/backup?download=' + encodeURIComponent(b.pathname)}
+              >
+                Завантажити
+              </a>
             </div>
           ))}
         </div>
