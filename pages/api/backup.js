@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream';
 import { get } from '@vercel/blob';
 import { isAuthed } from '../../lib/auth';
+import { blobOpts, blobToken } from '../../lib/blob';
 import { createBackup, listBackups, BACKUP_PREFIX } from '../../lib/backup';
 
 /** Vercel Cron надсилає GET із заголовком Authorization: Bearer CRON_SECRET */
@@ -15,10 +16,10 @@ export default async function handler(req, res) {
   const authed = cron || isAuthed(req);
   if (!authed) return res.status(401).json({ error: 'Не авторизовано' });
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  if (!blobToken()) {
     return res.status(503).json({
       error: 'Резервні копії зберігаються у Vercel Blob, а сховище не підключене до проєкту. '
-        + 'Storage → oblik-blob → Projects → Connect, потім Redeploy.',
+        + 'Storage → ваш стор → Projects → Connect, потім Redeploy.',
     });
   }
 
@@ -35,7 +36,7 @@ export default async function handler(req, res) {
       if (!download.startsWith(BACKUP_PREFIX) || download.includes('..')) {
         return res.status(400).json({ error: 'Некоректний шлях' });
       }
-      const result = await get(download, { access: 'private' });
+      const result = await get(download, blobOpts({ access: 'private' }));
       if (!result || result.statusCode !== 200) {
         return res.status(404).json({ error: 'Копію не знайдено' });
       }
