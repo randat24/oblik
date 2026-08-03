@@ -19,5 +19,12 @@ export default withAuth(async (req, res) => {
   res.setHeader('Content-Type', result.blob.contentType || 'image/jpeg');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'private, max-age=3600');
-  Readable.fromWeb(result.stream).pipe(res);
+
+  // заголовки вже надіслані, тож на обриві лишається тільки закрити зʼєднання
+  const stream = Readable.fromWeb(result.stream);
+  stream.on('error', (err) => {
+    console.error('Обрив потоку фото:', err.message);
+    res.destroy(err);
+  });
+  stream.pipe(res);
 });
