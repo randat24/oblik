@@ -14,8 +14,16 @@ const api = async (url, opts = {}) => {
   return data;
 };
 
+const VERSION = 'v2.0';
 // Vercel сам підставляє це під час збірки — видно, який код зараз живий
 const BUILD = (process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || '').slice(0, 7);
+
+/** Сьогоднішня дата у форматі, який використовує таблиця */
+function todayStr() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
+}
 
 /* Векторні іконки — емодзі виглядають по-різному в кожній системі */
 const IconSearch = ({ size = 15 }) => (
@@ -335,7 +343,7 @@ export default function Home() {
     <ToastCtx.Provider value={push}>
       <div className="wrap">
         <header>
-          <h1>Облік майна</h1>
+          <h1>Облік майна<span className="ver">{VERSION}</span></h1>
           <div className="state">
             {state}
             {BUILD && <span className="build" title="Версія збірки">{BUILD}</span>}
@@ -745,7 +753,8 @@ function ItemsView({ name, setState, focusRow }) {
 }
 
 function AddItemModal({ headers, cols, statusOptions, typeOptions, hideStatus, onCancel, onSave }) {
-  const [vals, setVals] = useState(() => headers.map(() => ''));
+  // дату підставляємо сьогоднішню — її однаково майже завжди ставлять поточну
+  const [vals, setVals] = useState(() => headers.map((_, i) => (i === cols.date ? todayStr() : '')));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
