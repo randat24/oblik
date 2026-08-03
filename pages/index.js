@@ -218,13 +218,6 @@ function PhotoField({ value, onChange, showPreview = true }) {
           </button>
         )}
       </div>
-      <input
-        type="text"
-        placeholder="або вставте посилання"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ marginTop: 6 }}
-      />
       {err && <div className="err">{err}</div>}
     </div>
   );
