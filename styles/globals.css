@@ -164,12 +164,17 @@ input:focus, select:focus, textarea:focus {
   margin-top: 2px; overflow-wrap: anywhere;
 }
 
-/* Ідентифікатор — той самий акцент, що й код ящика на складі */
-.id-badge {
-  flex: 0 0 auto; font-family: var(--mono); font-size: 0.82rem; font-weight: 700;
+/* Власний номер речі — той самий акцент, що й код ящика на складі.
+   Це поле, а не просто текст: номер має лишатись редагованим. */
+.id-badge, input.id-badge {
+  flex: 0 0 auto; width: auto; min-width: 2.6em; max-width: 7em;
+  font-family: var(--mono); font-size: 0.82rem; font-weight: 700;
   color: var(--amber); background: var(--amber-dim);
-  padding: 2px 8px; border-radius: var(--r-sm); line-height: 1.4;
+  border: 1px solid transparent; padding: 3px 8px; border-radius: var(--r-sm);
+  line-height: 1.4; text-align: center;
 }
+input.id-badge:hover { border-color: var(--amber); }
+input.id-badge:focus { outline: none; border-color: var(--amber); background: var(--panel-3); }
 
 /* Поля-привиди: виглядають як текст, редагуються за кліком.
    Селектор із елементом — інакше глобальне input[type=text] перебиває клас. */
