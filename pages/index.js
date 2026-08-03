@@ -14,6 +14,9 @@ const api = async (url, opts = {}) => {
   return data;
 };
 
+// Vercel сам підставляє це під час збірки — видно, який код зараз живий
+const BUILD = (process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || '').slice(0, 7);
+
 function statusColor(s) {
   const v = (s || '').toLowerCase();
   if (v.includes('видан') || v.includes('выдан')) return 'var(--green)';
@@ -331,7 +334,10 @@ export default function Home() {
       <div className="wrap">
         <header>
           <h1>Облік майна</h1>
-          <div className="state">{state}</div>
+          <div className="state">
+            {state}
+            {BUILD && <span className="build" title="Версія збірки">{BUILD}</span>}
+          </div>
         </header>
 
         <div className="tabs">
