@@ -38,8 +38,11 @@ body {
   font-family: var(--sans);
   font-size: 0.95rem;
   line-height: 1.5;
-  padding: 18px;
+  /* viewport-fit=cover пускає вміст під «чубчик» — повертаємо безпечні відступи */
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
+           max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 .wrap { max-width: 1500px; margin: 0 auto; }
 
@@ -103,7 +106,12 @@ input:focus, select:focus, textarea:focus {
 }
 .search-wrap .search-input::placeholder { color: var(--muted); }
 .search-wrap:focus-within .search-input { border-color: var(--amber); background: var(--panel-2); }
-.search-icon { position: absolute; left: 13px; font-size: .85rem; opacity: .5; pointer-events: none; }
+.search-icon {
+  position: absolute; left: 12px; display: flex; align-items: center;
+  color: var(--muted); pointer-events: none;
+}
+.search-wrap:focus-within .search-icon { color: var(--amber); }
+.ico { display: block; flex: 0 0 auto; }
 .search-clear {
   position: absolute; right: 8px; width: 22px; height: 22px;
   display: flex; align-items: center; justify-content: center;
@@ -142,20 +150,25 @@ input:focus, select:focus, textarea:focus {
 .card.highlight {
   border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim);
 }
-.rownum {
-  position: absolute; top: 10px; right: 12px;
-  font-family: var(--mono); font-size: 0.65rem; color: var(--muted); opacity: .5;
-}
-
 /* Заголовок картки: головне — назва й статус */
 .card-head {
   display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 10px; margin-bottom: 10px; padding-right: 34px;
+  gap: 10px; margin-bottom: 10px;
 }
-.card-title { min-width: 0; flex: 1; }
+.card-title { min-width: 0; flex: 1 1 auto; }
+.title-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* без min-width:0 інпут не стискається у flex і залазить під пігулку статусу */
+.title-line input.ghost { flex: 1 1 auto; width: auto; min-width: 0; }
 .card-sn {
   font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
   margin-top: 2px; overflow-wrap: anywhere;
+}
+
+/* Ідентифікатор — той самий акцент, що й код ящика на складі */
+.id-badge {
+  flex: 0 0 auto; font-family: var(--mono); font-size: 0.82rem; font-weight: 700;
+  color: var(--amber); background: var(--amber-dim);
+  padding: 2px 8px; border-radius: var(--r-sm); line-height: 1.4;
 }
 
 /* Поля-привиди: виглядають як текст, редагуються за кліком.
@@ -176,10 +189,11 @@ select.ghost { cursor: pointer; }
 
 /* Статус як кольорова пігулка */
 .pill {
-  flex: 0 0 auto; font-size: 0.72rem; font-weight: 700; letter-spacing: .04em;
+  flex: 0 0 auto; max-width: 45%; font-size: 0.72rem; font-weight: 700; letter-spacing: .04em;
   text-transform: uppercase; padding: 4px 10px; border-radius: 20px;
   border: 1px solid currentColor; background: transparent; cursor: pointer;
   appearance: none; -webkit-appearance: none; text-align: center;
+  text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
 }
 .pill:focus { outline: none; box-shadow: 0 0 0 2px var(--amber-dim); }
 .pill option { background: var(--panel-2); color: var(--text); text-transform: none; }
@@ -404,12 +418,18 @@ label {
 
 /* ---------- Телефон ---------- */
 @media (max-width: 720px) {
-  body { padding: 12px; }
+  body {
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+             max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
   .grid { grid-template-columns: 1fr; }
   .tabs {
     flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
     margin: 0 -12px 12px; padding: 0 12px 4px;
   }
+  /* на вузькому екрані статус переїжджає під назву, а не тисне її */
+  .card-head { flex-wrap: wrap; }
+  .pill { max-width: 100%; }
   .tabs::-webkit-scrollbar { display: none; }
   .toolbar { gap: 6px; }
   .search-wrap { flex: 1 1 100%; }
