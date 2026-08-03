@@ -367,6 +367,12 @@ export default function Home() {
             </div>
           ))}
           <div
+            className={'tab' + (view.kind === 'acts' ? ' active' : '')}
+            onClick={() => setView({ kind: 'acts', name: null })}
+          >
+            Приймання
+          </div>
+          <div
             className={'tab' + (view.kind === 'log' ? ' active' : '')}
             onClick={() => setView({ kind: 'log', name: null })}
           >
@@ -380,6 +386,7 @@ export default function Home() {
         )}
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
         {view.kind === 'warehouse' && <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} />}
+        {view.kind === 'acts' && <ActsView setState={setState} />}
         {view.kind === 'log' && <LogView setState={setState} />}
       </div>
       <ToastHost toasts={toasts} onClose={close} />
@@ -1393,6 +1400,7 @@ function actionClass(a) {
 function LogView({ setState }) {
   const [entries, setEntries] = useState(null);
   const [q, setQ] = useState('');
+  const [big, setBig] = useState(null);
 
   const load = useCallback(async () => {
     setState('завантаження…');
@@ -1451,10 +1459,231 @@ function LogView({ setState }) {
                   </div>
                 )}
               </div>
+              {e.photo && (
+                <img className="log-photo" src={photoSrc(e.photo)} alt=""
+                  onClick={() => setBig(e)} title="Натисніть, щоб збільшити" />
+              )}
             </div>
           ))}
         </div>
       )}
+
+      {big && (
+        <div className="overlay" style={{ background: 'rgba(0,0,0,.92)' }} onClick={() => setBig(null)}>
+          <div style={{ textAlign: 'center' }}>
+            <img src={photoSrc(big.photo)} alt="" style={{ maxWidth: '96vw', maxHeight: '80vh', objectFit: 'contain' }} />
+            <div style={{ fontFamily: 'var(--mono)', marginTop: 12 }}>{big.action} · {big.sheet} · {big.date}</div>
+            <button className="btn" style={{ marginTop: 12 }} onClick={() => setBig(null)}>Закрити</button>
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+/* ---------- Приймання та видача за актом ---------- */
+function ActsView({ setState }) {
+  const [data, setData] = useState(null);
+  const [q, setQ] = useState('');
+  const [form, setForm] = useState(null); // 'accept' | 'issue'
+  const [photo, setPhoto] = useState(null);
+  const toast = useToast();
+
+  const load = useCallback(async () => {
+    setState('завантаження…');
+    try {
+      const d = await api('/api/act');
+      setData(d);
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  }, [setState]);
+
+  useEffect(() => { load(); }, [load]);
+  if (!data) return <div className="loading">Завантаження…</div>;
+
+  const list = q.trim()
+    ? data.acts.filter((a) =>
+        [a.titles, a.from, a.to, a.sheet, a.note, a.kind].join(' ')
+          .toLowerCase().includes(q.trim().toLowerCase()))
+    : data.acts;
+
+  return (
+    <>
+      <div className="toolbar">
+        <SearchBox value={q} onChange={setQ} placeholder="Пошук за актами: що, від кого, кому..." />
+        <div className="spacer" />
+        <button className="btn btn-accept" onClick={() => setForm('accept')}>Прийняти майно</button>
+        <button className="btn" onClick={() => setForm('issue')}>Видати майно</button>
+      </div>
+
+      {list.length === 0 ? (
+        <div className="empty">
+          {data.acts.length === 0
+            ? 'Актів ще немає. Натисніть «Прийняти майно», щоб оформити перший.'
+            : 'Нічого не знайдено'}
+        </div>
+      ) : (
+        <div className="log-list">
+          {list.map((a, i) => (
+            <div className="log-row act-row" key={i}>
+              <div className="log-when">
+                <span>{a.date}</span>
+                <span className="log-time">{a.time}</span>
+              </div>
+              <div className="log-what">
+                <div className="log-head">
+                  <span className={'log-action ' + (a.kind === 'Прийнято' ? 'log-add' : 'log-writeoff')}>
+                    {a.kind}
+                  </span>
+                  <span className="badge">{a.sheet}</span>
+                  <span className="log-target">{a.count} поз.</span>
+                  {a.condition && <span className="log-field">{a.condition}</span>}
+                </div>
+                <div className="act-titles">{a.titles}</div>
+                <div className="act-people">
+                  <span>{a.from}</span>
+                  <span className="log-arrow">→</span>
+                  <span>{a.to}</span>
+                  {a.note && <span className="act-note">{a.note}</span>}
+                </div>
+              </div>
+              {a.photo && (
+                <img className="act-photo" src={photoSrc(a.photo)} alt=""
+                  onClick={() => setPhoto(a)} title="Натисніть, щоб збільшити" />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {photo && (
+        <div className="overlay" style={{ background: 'rgba(0,0,0,.92)' }} onClick={() => setPhoto(null)}>
+          <div style={{ textAlign: 'center' }}>
+            <img src={photoSrc(photo.photo)} alt="" style={{ maxWidth: '96vw', maxHeight: '80vh', objectFit: 'contain' }} />
+            <div style={{ fontFamily: 'var(--mono)', marginTop: 12 }}>{photo.kind}: {photo.titles}</div>
+            <button className="btn" style={{ marginTop: 12 }} onClick={() => setPhoto(null)}>Закрити</button>
+          </div>
+        </div>
+      )}
+
+      {form && (
+        <ActModal
+          kind={form}
+          sheets={data.sheets}
+          conditions={data.conditions}
+          onCancel={() => setForm(null)}
+          onSave={async (body) => {
+            const d = await api('/api/act', { method: 'POST', body: { ...body, kind: form } });
+            setForm(null);
+            toast(`${form === 'accept' ? 'Прийнято' : 'Видано'}: ${d.count} поз.`);
+            load();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+const emptyItem = () => ({ title: '', number: '', serial: '' });
+
+function ActModal({ kind, sheets, conditions, onCancel, onSave }) {
+  const accept = kind === 'accept';
+  const [sheet, setSheet] = useState(sheets[0] || '');
+  const [items, setItems] = useState([emptyItem()]);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [condition, setCondition] = useState(accept ? conditions[1] : '');
+  const [note, setNote] = useState('');
+  const [photo, setPhoto] = useState('');
+  const [date] = useState(todayStr());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const upItem = (i, k, v) => setItems((p) => p.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const filled = items.filter((it) => it.title.trim()).length;
+
+  return (
+    <Modal
+      title={accept ? 'Прийняти майно' : 'Видати майно'}
+      saveLabel={accept ? 'Прийняти' : 'Видати'}
+      onCancel={onCancel}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        if (!from.trim()) return setErr('Вкажіть, хто віддав');
+        if (!to.trim()) return setErr('Вкажіть, хто прийняв');
+        if (!filled) return setErr('Додайте хоча б одну позицію');
+        setBusy(true);
+        setErr('');
+        try {
+          await onSave({ sheet, items, from, to, condition, note, photo, date });
+        } catch (e) {
+          setErr(e.message || 'Не вдалося зберегти');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <div style={{ marginTop: 10 }}>
+        <label>Категорія</label>
+        <select value={sheet} onChange={(e) => setSheet(e.target.value)}>
+          {sheets.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <label>Що {accept ? 'приймаємо' : 'видаємо'}{filled ? ` — ${filled} поз.` : ''}</label>
+        {items.map((it, i) => (
+          <div className="act-item" key={i}>
+            <input type="text" placeholder="Назва" value={it.title}
+              onChange={(e) => upItem(i, 'title', e.target.value)} />
+            <div className="act-item-sub">
+              <input type="text" placeholder="№" value={it.number}
+                onChange={(e) => upItem(i, 'number', e.target.value)} />
+              <input type="text" placeholder="S/N" value={it.serial}
+                onChange={(e) => upItem(i, 'serial', e.target.value)} />
+              {items.length > 1 && (
+                <button type="button" className="act-btn act-del"
+                  onClick={() => setItems((p) => p.filter((_, j) => j !== i))}>✕</button>
+              )}
+            </div>
+          </div>
+        ))}
+        <button type="button" className="act-btn" style={{ width: '100%', marginTop: 6 }}
+          onClick={() => setItems((p) => [...p, emptyItem()])}>
+          + Ще позиція
+        </button>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <label>Хто віддав *</label>
+        <input type="text" value={from} onChange={(e) => setFrom(e.target.value)}
+          placeholder="позивний або підрозділ" />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Хто прийняв *</label>
+        <input type="text" value={to} onChange={(e) => setTo(e.target.value)}
+          placeholder="позивний" />
+      </div>
+
+      <div style={{ marginTop: 10 }}>
+        <label>Стан</label>
+        <select value={condition} onChange={(e) => setCondition(e.target.value)}>
+          <option value="">—</option>
+          {conditions.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      <div style={{ marginTop: 10 }}>
+        <label>Примітка</label>
+        <input type="text" value={note} onChange={(e) => setNote(e.target.value)} />
+      </div>
+
+      <PhotoField value={photo} onChange={setPhoto} />
+
+      <div className="act-hint">Дата: {date}</div>
+    </Modal>
   );
 }
