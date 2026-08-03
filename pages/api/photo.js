@@ -1,22 +1,32 @@
 import { withAuth } from '../../lib/auth';
-import { cloudinary, cloudinaryReady } from '../../lib/cloudinary';
+import { getPhotoStream, driveReady } from '../../lib/drive';
 
-// Фото приватні: віддаємо посилання на них лише тому, хто увійшов на сайт
+// Фото приватні: віддаємо їх лише тому, хто увійшов на сайт
 export default withAuth(async (req, res) => {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const publicId = (req.query.p || '').toString();
-  if (!publicId || !/^sklad\/[A-Za-z0-9_-]+$/.test(publicId)) {
-    return res.status(400).json({ error: 'Некоректний шлях' });
+  const fileId = (req.query.p || '').toString();
+  if (!fileId || !/^[A-Za-z0-9_-]+$/.test(fileId)) {
+    return res.status(400).json({ error: 'Некоректний ідентифікатор' });
   }
-  if (!cloudinaryReady()) {
-    return res.status(503).json({ error: 'Не підключено Cloudinary у налаштуваннях Vercel' });
+  if (!driveReady()) {
+    return res.status(503).json({ error: 'Не підключено Google Drive для фото' });
   }
 
-  const url = cloudinary.url(publicId, {
-    type: 'authenticated',
-    sign_url: true,
-    secure: true,
+  let stream, mimeType;
+  try {
+    ({ stream, mimeType } = await getPhotoStream(fileId));
+  } catch (err) {
+    return res.status(404).json({ error: 'Фото не знайдено' });
+  }
+
+  res.setHeader('Content-Type', mimeType);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+
+  stream.on('error', (err) => {
+    console.error('Обрив потоку фото:', err.message);
+    res.destroy(err);
   });
-  res.redirect(302, url);
+  stream.pipe(res);
 });
