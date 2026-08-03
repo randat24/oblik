@@ -42,7 +42,14 @@ h1 {
   font-size: clamp(1.3rem, 1rem + 1vw, 1.7rem);
   letter-spacing: 2px; text-transform: uppercase; margin: 0;
 }
-.state { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); letter-spacing: 1px; }
+.state {
+  font-family: var(--mono); font-size: 0.75rem; color: var(--muted); letter-spacing: 1px;
+  display: flex; align-items: center; gap: 10px;
+}
+.build {
+  font-size: 0.65rem; letter-spacing: .5px; color: var(--muted); opacity: .55;
+  border: 1px solid var(--line); border-radius: 10px; padding: 2px 7px;
+}
 
 .tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
 .tab {
