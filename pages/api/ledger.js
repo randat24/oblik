@@ -1,5 +1,6 @@
 import { withAuth } from '../../lib/auth';
-import { readSheet, writeCells, appendRow, deleteRow } from '../../lib/sheets';
+import { readSheet, writeCells, appendRow, deleteRow, insertRowAt } from '../../lib/sheets';
+import { logChange } from '../../lib/log';
 
 /** Знаходить структуру відомості: рядок заголовків і ключові колонки */
 function getMeta(values) {
@@ -124,6 +125,22 @@ export default withAuth(async (req, res) => {
         { row, col: meta.remainderCol + 1, value: received - total - qty },
       ]);
 
+      const name = meta.nameCol >= 0 ? rowVals[meta.nameCol] : '';
+      await logChange({
+        sheet, row, action: 'Списано',
+        field: name,
+        before: `залишок ${received - total}`,
+        after: `-${qty}, залишок ${received - total - qty} (${date})`,
+      });
+
+      const updated = await readSheet(sheet);
+      return res.json({ items: parseItems(updated, getMeta(updated)) });
+    }
+
+    if (action === 'restore') {
+      const { row, values: rowValues } = req.body;
+      await insertRowAt(sheet, row, rowValues);
+      await logChange({ sheet, row, action: 'Відновлення', after: (rowValues || []).join(' | ') });
       const updated = await readSheet(sheet);
       return res.json({ items: parseItems(updated, getMeta(updated)) });
     }
@@ -136,11 +153,11 @@ export default withAuth(async (req, res) => {
         return res.status(400).json({ error: `Невідоме поле: ${field}` });
       }
 
+      const rowVals = values[row - 1] || [];
       const updates = [{ row, col: col + 1, value }];
 
       // зміна отриманого змінює й залишок
       if (field === 'received') {
-        const rowVals = values[row - 1] || [];
         const isEmpty = (v) => v === null || v === undefined || v.toString().trim() === '';
         let total = 0;
         for (let c = meta.pairsStart; c < rowVals.length; c += 2) {
@@ -150,6 +167,13 @@ export default withAuth(async (req, res) => {
       }
 
       await writeCells(sheet, updates);
+      await logChange({
+        sheet, row, action: 'Редагування',
+        field: { name: 'Найменування', unit: 'Од. виміру', received: 'Отримано' }[field],
+        before: rowVals[col] ?? '',
+        after: value,
+      });
+
       const updated = await readSheet(sheet);
       return res.json({ items: parseItems(updated, getMeta(updated)) });
     }
@@ -165,6 +189,7 @@ export default withAuth(async (req, res) => {
     row[meta.remainderCol] = Number(received) || 0;
 
     await appendRow(sheet, row);
+    await logChange({ sheet, action: 'Додано позицію', field: name, after: `отримано ${Number(received) || 0} ${unit || ''}`.trim() });
     const updated = await readSheet(sheet);
     return res.json({ items: parseItems(updated, getMeta(updated)) });
   }
@@ -174,9 +199,14 @@ export default withAuth(async (req, res) => {
     if (!row || row <= meta.headerRow + 1) {
       return res.status(400).json({ error: 'Некоректний рядок' });
     }
+
+    // зберігаємо рядок, щоб можна було скасувати видалення
+    const deleted = values[row - 1] || [];
+
     await deleteRow(sheet, row);
+    await logChange({ sheet, row, action: 'Видалено позицію', before: deleted.join(' | ') });
     const updated = await readSheet(sheet);
-    return res.json({ items: parseItems(updated, getMeta(updated)) });
+    return res.json({ items: parseItems(updated, getMeta(updated)), deleted });
   }
 
   res.status(405).json({ error: 'Method not allowed' });

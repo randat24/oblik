@@ -203,6 +203,69 @@ label {
 .fields { font-family: var(--mono); font-size: 0.8rem; line-height: 1.6; }
 .fields .k { color: var(--muted); }
 
+/* Сповіщення */
+.toast-host {
+  position: fixed; right: 16px; bottom: 16px; z-index: 200;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+  max-width: min(420px, calc(100vw - 32px));
+}
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--panel-2); border: 1px solid var(--line); border-left-width: 3px;
+  border-radius: 3px; padding: 11px 12px; font-size: 0.9rem;
+  box-shadow: 0 6px 20px rgba(0,0,0,.45);
+  animation: toast-in .18s ease-out;
+}
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+.toast-ok { border-left-color: var(--green); }
+.toast-err { border-left-color: var(--red); }
+.toast-warn { border-left-color: var(--amber); }
+.toast-msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.toast-action {
+  flex: 0 0 auto; background: none; border: 1px solid var(--amber); color: var(--amber);
+  font-family: var(--mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: .5px;
+  padding: 6px 10px; border-radius: 2px; cursor: pointer; font-weight: 700;
+}
+.toast-action:hover { background: var(--amber-dim); }
+.toast-x {
+  flex: 0 0 auto; background: none; border: none; color: var(--muted);
+  font-size: 1.2rem; line-height: 1; cursor: pointer; padding: 0 2px;
+}
+.toast-x:hover { color: var(--text); }
+
+/* Журнал змін */
+.log-list { display: flex; flex-direction: column; gap: 4px; }
+.log-row {
+  display: flex; gap: 14px; padding: 10px 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 3px;
+}
+.log-when {
+  flex: 0 0 auto; display: flex; flex-direction: column;
+  font-family: var(--mono); font-size: 0.75rem; color: var(--muted); min-width: 84px;
+}
+.log-time { opacity: .7; }
+.log-what { flex: 1; min-width: 0; }
+.log-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.log-action {
+  font-family: var(--mono); font-size: 0.75rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.log-add { color: var(--green); }
+.log-del { color: var(--red); }
+.log-restore { color: var(--blue); }
+.log-writeoff { color: var(--amber); }
+.log-edit { color: var(--muted); }
+.log-target, .log-field { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+.log-field { color: var(--text); }
+.log-diff {
+  margin-top: 4px; font-family: var(--mono); font-size: 0.8rem;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline;
+}
+.log-before { color: var(--muted); text-decoration: line-through; overflow-wrap: anywhere; }
+.log-arrow { color: var(--muted); }
+.log-after { color: var(--text); overflow-wrap: anywhere; }
+
 /* Modal */
 .overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.7);
@@ -245,4 +308,8 @@ label {
   .tab { flex: 1 1 auto; text-align: center; }
   .modal { width: 100%; max-width: 100%; border-radius: 0; height: 100%; max-height: 100vh; }
   .overlay { align-items: stretch; }
+  .toast-host { left: 12px; right: 12px; bottom: 12px; max-width: none; }
+  .toast { width: 100%; }
+  .log-row { flex-direction: column; gap: 6px; }
+  .log-when { flex-direction: row; gap: 8px; }
 }

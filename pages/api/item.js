@@ -1,30 +1,49 @@
 import { withAuth } from '../../lib/auth';
 import {
-  SHEET_CONFIGS,
   readSheet,
   writeCell,
   writeCells,
   appendRow,
   deleteRow,
+  insertRowAt,
   findColumns,
   todayStr,
 } from '../../lib/sheets';
+import { logChange } from '../../lib/log';
 
 export default withAuth(async (req, res) => {
   if (req.method === 'PATCH') {
-    const { sheet, row, col, value } = req.body;
+    const { sheet, row, col, value, prev } = req.body;
     await writeCell(sheet, row, col + 1, value);
+
+    const headers = (await readSheet(sheet))[0] || [];
+    await logChange({
+      sheet,
+      row,
+      action: 'Редагування',
+      field: headers[col] || `Колонка ${col + 1}`,
+      before: prev,
+      after: value,
+    });
     return res.json({ ok: true });
   }
 
   if (req.method === 'POST') {
     const { sheet, values, action } = req.body;
 
+    if (action === 'restore') {
+      const { row, values: rowValues } = req.body;
+      await insertRowAt(sheet, row, rowValues);
+      await logChange({ sheet, row, action: 'Відновлення', after: (rowValues || []).join(' | ') });
+      return res.json({ ok: true });
+    }
+
     if (action === 'issue' || action === 'return') {
       const data = await readSheet(sheet);
       const headers = data[0] || [];
       const cols = findColumns(headers);
       const { row, who, where, date } = req.body;
+      const before = data[row - 1] || [];
       const updates = [];
       const d = date || todayStr();
 
@@ -43,17 +62,33 @@ export default withAuth(async (req, res) => {
       }
 
       if (updates.length) await writeCells(sheet, updates);
+
+      await logChange({
+        sheet,
+        row,
+        action: action === 'issue' ? 'Видано' : 'Прийнято на КСП',
+        field: cols.who >= 0 ? headers[cols.who] || 'Отримав' : '',
+        before: cols.who >= 0 ? before[cols.who] || '' : '',
+        after: action === 'issue' ? [who, where].filter(Boolean).join(', ') : 'КСП',
+      });
       return res.json({ ok: true });
     }
 
     await appendRow(sheet, values);
+    await logChange({ sheet, action: 'Додано запис', after: (values || []).join(' | ') });
     return res.json({ ok: true });
   }
 
   if (req.method === 'DELETE') {
     const { sheet, row } = req.body;
+
+    // зберігаємо рядок, щоб можна було скасувати видалення
+    const data = await readSheet(sheet);
+    const deleted = data[row - 1] || [];
+
     await deleteRow(sheet, row);
-    return res.json({ ok: true });
+    await logChange({ sheet, row, action: 'Видалено запис', before: deleted.join(' | ') });
+    return res.json({ ok: true, deleted });
   }
 
   res.status(405).json({ error: 'Method not allowed' });

@@ -4,10 +4,18 @@ import {
   writeCell,
   appendRow,
   deleteRow,
+  insertRowAt,
   todayStr,
   WAREHOUSE_PRIORITIES,
   WAREHOUSE_STATUS_OPTIONS,
 } from '../../lib/sheets';
+import { logChange } from '../../lib/log';
+
+const FIELD_LABELS = {
+  code: 'Код', priority: 'Пріоритет', name: 'Назва', contents: 'Вміст',
+  location: 'Розташування', photoUrl: 'Фото', status: 'Статус',
+  checkedDate: 'Перевірено', notes: 'Примітки',
+};
 
 const SHEET = 'Склад';
 
@@ -76,6 +84,14 @@ export default withAuth(async (req, res) => {
   }
 
   if (req.method === 'POST') {
+    if (req.body.action === 'restore') {
+      const { row, values: rowValues } = req.body;
+      await insertRowAt(SHEET, row, rowValues);
+      await logChange({ sheet: SHEET, row, action: 'Відновлення', after: (rowValues || []).join(' | ') });
+      const restored = await readSheet(SHEET);
+      return res.json({ items: parseItems(restored) });
+    }
+
     const { priority, name, contents, location, notes, photoUrl } = req.body;
     if (!name) return res.status(400).json({ error: 'Не вказано назву' });
 
@@ -95,23 +111,34 @@ export default withAuth(async (req, res) => {
     row[COLS.notes] = notes || '';
 
     await appendRow(SHEET, row);
+    await logChange({ sheet: SHEET, action: 'Додано ящик', field: 'Код', after: `${code} — ${name}` });
     const updated = await readSheet(SHEET);
     return res.json({ items: parseItems(updated), code });
   }
 
   if (req.method === 'PATCH') {
-    const { row, field, value } = req.body;
+    const { row, field, value, prev } = req.body;
     const idx = COLS[field];
     if (idx === undefined) return res.status(400).json({ error: `Невідоме поле: ${field}` });
     await writeCell(SHEET, row, idx + 1, value);
+    await logChange({
+      sheet: SHEET, row, action: 'Редагування',
+      field: FIELD_LABELS[field] || field, before: prev, after: value,
+    });
     return res.json({ ok: true });
   }
 
   if (req.method === 'DELETE') {
     const { row } = req.body;
+
+    // зберігаємо рядок, щоб можна було скасувати видалення
+    const before = await readSheet(SHEET);
+    const deleted = before[row - 1] || [];
+
     await deleteRow(SHEET, row);
+    await logChange({ sheet: SHEET, row, action: 'Видалено ящик', before: deleted.join(' | ') });
     const updated = await readSheet(SHEET);
-    return res.json({ items: parseItems(updated) });
+    return res.json({ items: parseItems(updated), deleted });
   }
 
   res.status(405).json({ error: 'Method not allowed' });

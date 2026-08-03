@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  useState, useEffect, useCallback, useRef, useContext, createContext,
+} from 'react';
 
 const api = async (url, opts = {}) => {
   const res = await fetch(url, {
@@ -19,6 +21,55 @@ function statusColor(s) {
   if (v.includes('ксп') || v.includes('склад')) return 'var(--blue)';
   if (v.includes('спис')) return 'var(--gray)';
   return 'var(--amber)';
+}
+
+/** Зовнішнє посилання лишаємо як є, приватне фото віддає наш маршрут */
+function photoSrc(v) {
+  if (!v) return '';
+  return /^https?:\/\//i.test(v) ? v : '/api/photo?p=' + encodeURIComponent(v);
+}
+
+/* ---------- Сповіщення ---------- */
+const ToastCtx = createContext(() => {});
+const useToast = () => useContext(ToastCtx);
+
+function ToastHost({ toasts, onClose }) {
+  return (
+    <div className="toast-host">
+      {toasts.map((t) => (
+        <div key={t.id} className={'toast toast-' + (t.type || 'ok')}>
+          <span className="toast-msg">{t.msg}</span>
+          {t.action && (
+            <button
+              className="toast-action"
+              onClick={() => { onClose(t.id); t.action.run(); }}
+            >
+              {t.action.label}
+            </button>
+          )}
+          <button className="toast-x" onClick={() => onClose(t.id)} aria-label="Закрити">×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function useToasts() {
+  const [toasts, setToasts] = useState([]);
+  const seq = useRef(0);
+
+  const close = useCallback((id) => setToasts((p) => p.filter((t) => t.id !== id)), []);
+
+  const push = useCallback((msg, opts = {}) => {
+    const id = ++seq.current;
+    // undo має жити довше, ніж звичайне сповіщення
+    const ttl = opts.ttl ?? (opts.action ? 9000 : 3500);
+    setToasts((p) => [...p, { id, msg, type: opts.type, action: opts.action }]);
+    if (ttl > 0) setTimeout(() => close(id), ttl);
+    return id;
+  }, [close]);
+
+  return { toasts, push, close };
 }
 
 /* ---------- Логін ---------- */
@@ -63,6 +114,14 @@ function Login({ onOk }) {
 
 /* ---------- Модальні вікна ---------- */
 function Modal({ title, children, onCancel, onSave, saveLabel = 'Зберегти', busy, error }) {
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onCancel(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
   return (
     <div className="overlay" onClick={(e) => e.target.className === 'overlay' && onCancel()}>
       <div className="modal">
@@ -122,9 +181,10 @@ function PhotoField({ value, onChange, showPreview = true }) {
     try {
       const small = await shrinkImage(file);
       const { upload } = await import('@vercel/blob/client');
-      const name = `box-${Date.now()}.jpg`;
-      const blob = await upload(name, small, { access: 'public', handleUploadUrl: '/api/upload' });
-      onChange(blob.url);
+      const name = `sklad/box-${Date.now()}.jpg`;
+      const blob = await upload(name, small, { access: 'private', handleUploadUrl: '/api/upload' });
+      // фото приватні — зберігаємо шлях, а не URL: показує їх наш маршрут після входу
+      onChange(blob.pathname);
     } catch (e) {
       setErr(e.message || 'Помилка завантаження');
     } finally {
@@ -136,7 +196,7 @@ function PhotoField({ value, onChange, showPreview = true }) {
   return (
     <div className="photo-field">
       <label>Фото</label>
-      {showPreview && value && <img className="photo-preview" src={value} alt="" />}
+      {showPreview && value && <img className="photo-preview" src={photoSrc(value)} alt="" />}
       <input
         ref={inputRef}
         type="file"
@@ -169,22 +229,46 @@ function PhotoField({ value, onChange, showPreview = true }) {
 
 /* ---------- Поле пошуку: живий пошук + кнопка очищення ---------- */
 function SearchBox({ value, onChange, placeholder, autoFocus }) {
+  const ref = useRef(null);
+
+  // Ctrl/Cmd+F або «/» — фокус у пошук
+  useEffect(() => {
+    const onKey = (e) => {
+      const hot = (e.key === 'f' && (e.ctrlKey || e.metaKey)) ||
+        (e.key === '/' && !e.ctrlKey && !e.metaKey && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName));
+      if (!hot) return;
+      if (document.querySelector('.overlay')) return;
+      e.preventDefault();
+      ref.current?.focus();
+      ref.current?.select();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     <div className="search-wrap">
       <span className="search-icon">🔍</span>
       <input
+        ref={ref}
         type="text"
         className="search-input"
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Escape') return;
+          e.stopPropagation();
+          if (value) onChange('');
+          else e.target.blur();
+        }}
         autoFocus={autoFocus}
       />
       {value && (
         <button
           type="button"
           className="search-clear"
-          onClick={() => onChange('')}
+          onClick={() => { onChange(''); ref.current?.focus(); }}
           aria-label="Очистити пошук"
         >
           ×
@@ -194,12 +278,27 @@ function SearchBox({ value, onChange, placeholder, autoFocus }) {
   );
 }
 
+/** Ctrl/Cmd+N — створити запис у поточній вкладці */
+function useNewRecordHotkey(open) {
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'n' || !(e.ctrlKey || e.metaKey)) return;
+      if (document.querySelector('.overlay')) return;
+      e.preventDefault();
+      open();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+}
+
 /* ---------- Головна ---------- */
 export default function Home() {
   const [authed, setAuthed] = useState(null);
   const [sheets, setSheets] = useState([]);
   const [view, setView] = useState({ kind: 'search', name: null });
   const [state, setState] = useState('');
+  const { toasts, push, close } = useToasts();
 
   useEffect(() => {
     api('/api/login')
@@ -228,7 +327,7 @@ export default function Home() {
   if (!authed) return <Login onOk={() => setAuthed(true)} />;
 
   return (
-    <>
+    <ToastCtx.Provider value={push}>
       <div className="wrap">
         <header>
           <h1>Облік майна</h1>
@@ -251,6 +350,12 @@ export default function Home() {
               {s.name}
             </div>
           ))}
+          <div
+            className={'tab' + (view.kind === 'log' ? ' active' : '')}
+            onClick={() => setView({ kind: 'log', name: null })}
+          >
+            🕘 Журнал
+          </div>
         </div>
 
         {view.kind === 'search' && <SearchView sheets={sheets} setState={setState} onOpen={setView} />}
@@ -259,8 +364,10 @@ export default function Home() {
         )}
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
         {view.kind === 'warehouse' && <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} />}
+        {view.kind === 'log' && <LogView setState={setState} />}
       </div>
-    </>
+      <ToastHost toasts={toasts} onClose={close} />
+    </ToastCtx.Provider>
   );
 }
 
@@ -371,6 +478,9 @@ function ItemsView({ name, setState, focusRow }) {
   const [adding, setAdding] = useState(false);
   const [issuing, setIssuing] = useState(null);
   const [highlightRow, setHighlightRow] = useState(focusRow || null);
+  const toast = useToast();
+
+  useNewRecordHotkey(useCallback(() => setAdding(true), []));
 
   const load = useCallback(async () => {
     setState('завантаження…');
@@ -399,13 +509,15 @@ function ItemsView({ name, setState, focusRow }) {
 
   const { headers, items, cols, statusOptions, typeOptions, maskCols, noIssue, hideStatus } = data;
 
-  const save = async (row, colIdx, value) => {
+  const save = async (row, colIdx, value, prev) => {
     setState('збереження…');
     try {
-      await api('/api/item', { method: 'PATCH', body: { sheet: name, row, col: colIdx, value } });
+      await api('/api/item', { method: 'PATCH', body: { sheet: name, row, col: colIdx, value, prev } });
       setState('синхронізовано');
+      toast('Збережено');
     } catch (e) {
       setState('помилка збереження');
+      toast('Не вдалося зберегти: ' + e.message, { type: 'err' });
     }
   };
 
@@ -444,7 +556,7 @@ function ItemsView({ name, setState, focusRow }) {
                   {ci === cols.status || ci === cols.type ? (
                     <select
                       defaultValue={it.values[ci]}
-                      onChange={(e) => save(it.row, ci, e.target.value)}
+                      onChange={(e) => save(it.row, ci, e.target.value, it.values[ci])}
                     >
                       {!(ci === cols.status ? statusOptions : typeOptions).includes(it.values[ci]) &&
                         it.values[ci] && <option value={it.values[ci]}>{it.values[ci]}</option>}
@@ -456,7 +568,7 @@ function ItemsView({ name, setState, focusRow }) {
                     <input
                       type={maskCols?.includes(ci) ? 'password' : 'text'}
                       defaultValue={it.values[ci]}
-                      onBlur={(e) => e.target.value !== it.values[ci] && save(it.row, ci, e.target.value)}
+                      onBlur={(e) => e.target.value !== it.values[ci] && save(it.row, ci, e.target.value, it.values[ci])}
                     />
                   )}
                 </div>
@@ -473,9 +585,11 @@ function ItemsView({ name, setState, focusRow }) {
                         setState('збереження…');
                         try {
                           await api('/api/item', { method: 'POST', body: { sheet: name, action: 'return', row: it.row } });
+                          toast('Прийнято на КСП');
                           load();
                         } catch (e) {
                           setState('помилка: ' + e.message);
+                          toast('Не вдалося прийняти: ' + e.message, { type: 'err' });
                         }
                       }}
                     >
@@ -489,10 +603,29 @@ function ItemsView({ name, setState, focusRow }) {
                     if (!confirm(`Видалити запис (рядок ${it.row})?`)) return;
                     setState('видалення…');
                     try {
-                      await api('/api/item', { method: 'DELETE', body: { sheet: name, row: it.row } });
+                      const d = await api('/api/item', { method: 'DELETE', body: { sheet: name, row: it.row } });
                       load();
+                      toast(`Видалено рядок ${it.row}`, {
+                        type: 'warn',
+                        action: {
+                          label: 'Повернути',
+                          run: async () => {
+                            try {
+                              await api('/api/item', {
+                                method: 'POST',
+                                body: { sheet: name, action: 'restore', row: it.row, values: d.deleted },
+                              });
+                              toast('Запис повернено');
+                              load();
+                            } catch (e) {
+                              toast('Не вдалося повернути: ' + e.message, { type: 'err' });
+                            }
+                          },
+                        },
+                      });
                     } catch (e) {
                       setState('помилка: ' + e.message);
+                      toast('Не вдалося видалити: ' + e.message, { type: 'err' });
                     }
                   }}
                 >
@@ -515,6 +648,7 @@ function ItemsView({ name, setState, focusRow }) {
           onSave={async (values) => {
             await api('/api/item', { method: 'POST', body: { sheet: name, values } });
             setAdding(false);
+            toast('Запис додано');
             load();
           }}
         />
@@ -531,6 +665,7 @@ function ItemsView({ name, setState, focusRow }) {
               body: { sheet: name, action: 'issue', row: issuing.row, who, where, date },
             });
             setIssuing(null);
+            toast(`Видано${who ? ' → ' + who : ''}`);
             load();
           }}
         />
@@ -639,6 +774,9 @@ function LedgerView({ name, setState }) {
   const [q, setQ] = useState('');
   const [wo, setWo] = useState(null);
   const [adding, setAdding] = useState(false);
+  const toast = useToast();
+
+  useNewRecordHotkey(useCallback(() => setAdding(true), []));
 
   const load = useCallback(async () => {
     setState('завантаження…');
@@ -664,8 +802,10 @@ function LedgerView({ name, setState }) {
       const d = await api('/api/ledger', { method: 'POST', body: { sheet: name, action: 'update', row, field, value } });
       setItems(d.items);
       setState('синхронізовано');
+      toast('Збережено');
     } catch (e) {
       setState('помилка: ' + e.message);
+      toast('Не вдалося зберегти: ' + e.message, { type: 'err' });
     }
   };
 
@@ -714,8 +854,27 @@ function LedgerView({ name, setState }) {
                   const d = await api('/api/ledger', { method: 'DELETE', body: { sheet: name, row: it.row } });
                   setItems(d.items);
                   setState('синхронізовано');
+                  toast(`Видалено «${it.name}»`, {
+                    type: 'warn',
+                    action: {
+                      label: 'Повернути',
+                      run: async () => {
+                        try {
+                          const r = await api('/api/ledger', {
+                            method: 'POST',
+                            body: { sheet: name, action: 'restore', row: it.row, values: d.deleted },
+                          });
+                          setItems(r.items);
+                          toast('Позицію повернено');
+                        } catch (e) {
+                          toast('Не вдалося повернути: ' + e.message, { type: 'err' });
+                        }
+                      },
+                    },
+                  });
                 } catch (e) {
                   setState('помилка: ' + e.message);
+                  toast('Не вдалося видалити: ' + e.message, { type: 'err' });
                 }
               }}>Видалити</button>
             </div>
@@ -738,6 +897,7 @@ function LedgerView({ name, setState }) {
           onSave={async ({ qty, date }) => {
             const d = await api('/api/ledger', { method: 'POST', body: { sheet: name, action: 'writeoff', row: wo.row, qty, date } });
             setItems(d.items);
+            toast(`Списано ${qty} ${wo.unit || 'шт'} — ${wo.name}`);
             setWo(null);
           }}
         />
@@ -749,6 +909,7 @@ function LedgerView({ name, setState }) {
           onSave={async (body) => {
             await api('/api/ledger', { method: 'POST', body: { sheet: name, ...body } });
             setAdding(false);
+            toast('Позицію додано');
             load();
           }}
         />
@@ -847,6 +1008,9 @@ function WarehouseView({ setState, focusCode }) {
   const [photo, setPhoto] = useState(null);
   const [qr, setQr] = useState(null);
   const [highlight, setHighlight] = useState(focusCode || null);
+  const toast = useToast();
+
+  useNewRecordHotkey(useCallback(() => setAdding(true), []));
 
   const load = useCallback(async () => {
     setState('завантаження…');
@@ -872,12 +1036,16 @@ function WarehouseView({ setState, focusCode }) {
 
   if (!data) return <div className="loading">Завантаження…</div>;
 
-  const save = async (row, field, value) => {
+  const save = async (row, field, value, prev) => {
     setState('збереження…');
     try {
-      await api('/api/warehouse', { method: 'PATCH', body: { row, field, value } });
+      await api('/api/warehouse', { method: 'PATCH', body: { row, field, value, prev } });
       setState('синхронізовано');
-    } catch { setState('помилка збереження'); }
+      toast('Збережено');
+    } catch (e) {
+      setState('помилка збереження');
+      toast('Не вдалося зберегти: ' + e.message, { type: 'err' });
+    }
   };
 
   let list = [...data.items].sort((a, b) => {
@@ -926,14 +1094,14 @@ function WarehouseView({ setState, focusCode }) {
                 <select
                   defaultValue={it.priority}
                   style={{ width: 'auto', fontSize: '.7rem', padding: '3px 6px' }}
-                  onChange={(e) => save(it.row, 'priority', e.target.value)}
+                  onChange={(e) => save(it.row, 'priority', e.target.value, it.priority)}
                 >
                   {data.priorities.map((p) => <option key={p.value} value={p.value}>Пріоритет {p.value}</option>)}
                 </select>
               </div>
 
               {it.photoUrl ? (
-                <img className="wh-photo" src={it.photoUrl} alt="" onClick={() => setPhoto(it)}
+                <img className="wh-photo" src={photoSrc(it.photoUrl)} alt="" onClick={() => setPhoto(it)}
                   title="Натисніть, щоб відкрити в повному розмірі" />
               ) : (
                 <div className="wh-photo-ph">немає фото</div>
@@ -943,11 +1111,12 @@ function WarehouseView({ setState, focusCode }) {
                 value={it.photoUrl}
                 showPreview={false}
                 onChange={(url) => {
+                  const prev = it.photoUrl;
                   setData((p) => ({
                     ...p,
                     items: p.items.map((x) => (x.row === it.row ? { ...x, photoUrl: url } : x)),
                   }));
-                  save(it.row, 'photoUrl', url);
+                  save(it.row, 'photoUrl', url, prev);
                 }}
               />
 
@@ -957,13 +1126,13 @@ function WarehouseView({ setState, focusCode }) {
                 <div className="field" key={field}>
                   <label>{label}</label>
                   <input type="text" defaultValue={it[field]}
-                    onBlur={(e) => e.target.value !== it[field] && save(it.row, field, e.target.value)} />
+                    onBlur={(e) => e.target.value !== it[field] && save(it.row, field, e.target.value, it[field])} />
                 </div>
               ))}
 
               <div className="field">
                 <label>Статус</label>
-                <select defaultValue={it.status} onChange={(e) => save(it.row, 'status', e.target.value)}>
+                <select defaultValue={it.status} onChange={(e) => save(it.row, 'status', e.target.value, it.status)}>
                   {data.statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
@@ -971,7 +1140,7 @@ function WarehouseView({ setState, focusCode }) {
               <div className="field">
                 <label>Примітки</label>
                 <input type="text" defaultValue={it.notes}
-                  onBlur={(e) => e.target.value !== it.notes && save(it.row, 'notes', e.target.value)} />
+                  onBlur={(e) => e.target.value !== it.notes && save(it.row, 'notes', e.target.value, it.notes)} />
               </div>
 
               <div className="actions">
@@ -983,8 +1152,27 @@ function WarehouseView({ setState, focusCode }) {
                     const d = await api('/api/warehouse', { method: 'DELETE', body: { row: it.row } });
                     setData((p) => ({ ...p, items: d.items }));
                     setState('синхронізовано');
+                    toast(`Видалено ящик ${it.code}`, {
+                      type: 'warn',
+                      action: {
+                        label: 'Повернути',
+                        run: async () => {
+                          try {
+                            const r = await api('/api/warehouse', {
+                              method: 'POST',
+                              body: { action: 'restore', row: it.row, values: d.deleted },
+                            });
+                            setData((p) => ({ ...p, items: r.items }));
+                            toast(`Ящик ${it.code} повернено`);
+                          } catch (e) {
+                            toast('Не вдалося повернути: ' + e.message, { type: 'err' });
+                          }
+                        },
+                      },
+                    });
                   } catch (e) {
                     setState('помилка: ' + e.message);
+                    toast('Не вдалося видалити: ' + e.message, { type: 'err' });
                   }
                 }}>Видалити</button>
               </div>
@@ -996,7 +1184,7 @@ function WarehouseView({ setState, focusCode }) {
       {photo && (
         <div className="overlay" style={{ background: 'rgba(0,0,0,.92)' }} onClick={() => setPhoto(null)}>
           <div style={{ textAlign: 'center' }}>
-            <img src={photo.photoUrl} alt="" style={{ maxWidth: '96vw', maxHeight: '80vh', objectFit: 'contain' }} />
+            <img src={photoSrc(photo.photoUrl)} alt="" style={{ maxWidth: '96vw', maxHeight: '80vh', objectFit: 'contain' }} />
             <div style={{ fontFamily: 'var(--mono)', marginTop: 12 }}>{photo.code} — {photo.name}</div>
             <button className="btn" style={{ marginTop: 12 }} onClick={() => setPhoto(null)}>Закрити</button>
           </div>
@@ -1013,6 +1201,7 @@ function WarehouseView({ setState, focusCode }) {
             const d = await api('/api/warehouse', { method: 'POST', body });
             setData((p) => ({ ...p, items: d.items }));
             setAdding(false);
+            toast(`Ящик ${d.code} додано`);
           }}
         />
       )}
@@ -1089,5 +1278,84 @@ function AddWarehouseModal({ priorities, onCancel, onSave }) {
         <PhotoField value={f.photoUrl} onChange={(v) => up('photoUrl', v)} />
       </div>
     </Modal>
+  );
+}
+
+/* ---------- Журнал змін ---------- */
+function actionClass(a) {
+  const v = (a || '').toLowerCase();
+  if (v.includes('видален')) return 'log-del';
+  if (v.includes('віднов')) return 'log-restore';
+  if (v.includes('додано')) return 'log-add';
+  if (v.includes('спис')) return 'log-writeoff';
+  return 'log-edit';
+}
+
+function LogView({ setState }) {
+  const [entries, setEntries] = useState(null);
+  const [q, setQ] = useState('');
+
+  const load = useCallback(async () => {
+    setState('завантаження…');
+    try {
+      const d = await api('/api/log');
+      setEntries(d.entries);
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  }, [setState]);
+
+  useEffect(() => { load(); }, [load]);
+  if (!entries) return <div className="loading">Завантаження…</div>;
+
+  const list = q.trim()
+    ? entries.filter((e) =>
+        [e.date, e.sheet, e.action, e.field, e.before, e.after].join(' ').toLowerCase()
+          .includes(q.trim().toLowerCase()))
+    : entries;
+
+  return (
+    <>
+      <div className="toolbar">
+        <SearchBox value={q} onChange={setQ} placeholder="Пошук у журналі: лист, дія, значення..." />
+        <div className="spacer" />
+        <button className="btn" onClick={load}>Оновити</button>
+      </div>
+
+      {list.length === 0 ? (
+        <div className="empty">
+          {entries.length === 0
+            ? 'Журнал порожній — він заповнюється з першої зміни'
+            : 'Нічого не знайдено'}
+        </div>
+      ) : (
+        <div className="log-list">
+          {list.map((e, i) => (
+            <div className="log-row" key={i}>
+              <div className="log-when">
+                <span>{e.date}</span>
+                <span className="log-time">{e.time}</span>
+              </div>
+              <div className="log-what">
+                <div className="log-head">
+                  <span className={'log-action ' + actionClass(e.action)}>{e.action}</span>
+                  <span className="badge">{e.sheet}</span>
+                  {e.target && <span className="log-target">ряд. {e.target}</span>}
+                  {e.field && <span className="log-field">{e.field}</span>}
+                </div>
+                {(e.before || e.after) && (
+                  <div className="log-diff">
+                    {e.before && <span className="log-before">{e.before}</span>}
+                    {e.before && e.after && <span className="log-arrow">→</span>}
+                    {e.after && <span className="log-after">{e.after}</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
