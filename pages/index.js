@@ -184,7 +184,7 @@ function PhotoField({ value, onChange, showPreview = true }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Помилка завантаження');
       // фото приватні — зберігаємо ідентифікатор, а не URL: показує їх наш маршрут після входу
-      onChange(data.publicId);
+      onChange(data.fileId);
     } catch (e) {
       setErr(e.message || 'Помилка завантаження');
     } finally {

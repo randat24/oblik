@@ -1,5 +1,5 @@
 import { withAuth } from '../../lib/auth';
-import { cloudinary, cloudinaryReady } from '../../lib/cloudinary';
+import { uploadPhoto, driveReady } from '../../lib/drive';
 
 // Фото вже стиснуте в браузері (до ~1.5 МБ), тож приймаємо тіло напряму,
 // без стандартного JSON bodyParser
@@ -20,27 +20,19 @@ async function readBody(req) {
 
 export default withAuth(async (req, res) => {
   if (req.method === 'GET') {
-    return res.json({ ready: cloudinaryReady() });
+    return res.json({ ready: driveReady() });
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!cloudinaryReady()) {
+  if (!driveReady()) {
     return res.status(503).json({
-      error: 'Не підключено Cloudinary у налаштуваннях Vercel. Додайте змінну CLOUDINARY_URL '
-        + '(конектор Cloudinary робить це сам) і зробіть Redeploy.',
+      error: 'Не підключено Google Drive для фото. Додайте змінну GOOGLE_DRIVE_FOLDER_ID '
+        + '(ID папки на Спільному диску, до якої надано доступ сервісному акаунту) і зробіть Redeploy.',
     });
   }
 
   const buf = await readBody(req);
   if (!buf.length) return res.status(400).json({ error: 'Порожній файл' });
 
-  const publicId = `sklad/box-${Date.now()}`;
-  const result = await new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { public_id: publicId, resource_type: 'image', type: 'authenticated', overwrite: true },
-      (err, uploaded) => (err ? reject(err) : resolve(uploaded))
-    );
-    stream.end(buf);
-  });
-
-  res.json({ publicId: result.public_id });
+  const fileId = await uploadPhoto(buf, 'image/jpeg', `box-${Date.now()}.jpg`);
+  res.json({ fileId });
 });
