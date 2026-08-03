@@ -17,6 +17,15 @@ const api = async (url, opts = {}) => {
 // Vercel сам підставляє це під час збірки — видно, який код зараз живий
 const BUILD = (process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || '').slice(0, 7);
 
+/* Векторні іконки — емодзі виглядають по-різному в кожній системі */
+const IconSearch = ({ size = 15 }) => (
+  <svg className="ico" viewBox="0 0 16 16" width={size} height={size} fill="none"
+    stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+    <circle cx="6.8" cy="6.8" r="4.6" />
+    <path d="M10.3 10.3 14 14" />
+  </svg>
+);
+
 function statusColor(s) {
   const v = (s || '').toLowerCase();
   if (v.includes('видан') || v.includes('выдан')) return 'var(--green)';
@@ -244,7 +253,7 @@ function SearchBox({ value, onChange, placeholder, autoFocus }) {
 
   return (
     <div className="search-wrap">
-      <span className="search-icon">🔍</span>
+      <span className="search-icon"><IconSearch /></span>
       <input
         ref={ref}
         type="text"
@@ -338,7 +347,7 @@ export default function Home() {
             className={'tab' + (view.kind === 'search' ? ' active' : '')}
             onClick={() => setView({ kind: 'search', name: null })}
           >
-            🔍 Пошук
+            Пошук
           </div>
           {sheets.map((s) => (
             <div
@@ -353,7 +362,7 @@ export default function Home() {
             className={'tab' + (view.kind === 'log' ? ' active' : '')}
             onClick={() => setView({ kind: 'log', name: null })}
           >
-            🕘 Журнал
+            Журнал
           </div>
         </div>
 
@@ -555,17 +564,18 @@ function ItemsView({ name, setState, focusRow }) {
         <div className="grid">
           {list.map((it) => (
             <div className={'card' + (it.row === highlightRow ? ' highlight' : '')} key={it.row} id={'item-row-' + it.row}>
-              <div className="rownum">{it.row}</div>
-
               <div className="card-head">
                 <div className="card-title">
-                  <input
-                    className="ghost big"
-                    type="text"
-                    defaultValue={it.values[0]}
-                    placeholder={headers[0] || 'Назва'}
-                    onBlur={(e) => e.target.value !== it.values[0] && save(it.row, 0, e.target.value, it.values[0])}
-                  />
+                  <div className="title-line">
+                    <span className="id-badge" title={'Рядок у таблиці: ' + it.row}>{it.row}</span>
+                    <input
+                      className="ghost big"
+                      type="text"
+                      defaultValue={it.values[0]}
+                      placeholder={headers[0] || 'Назва'}
+                      onBlur={(e) => e.target.value !== it.values[0] && save(it.row, 0, e.target.value, it.values[0])}
+                    />
+                  </div>
                   {snIdx >= 0 && (
                     <input
                       className="ghost mono card-sn"
@@ -871,12 +881,13 @@ function LedgerView({ name, setState }) {
       <div className="grid">
         {list.map((it) => (
           <div className="card ledger-card" key={it.row}>
-            <div className="rownum">{it.row}</div>
-
             <div className="card-head">
               <div className="card-title">
-                <input className="ghost big" type="text" defaultValue={it.name} placeholder="Найменування"
-                  onBlur={(e) => e.target.value.trim() && e.target.value !== it.name && save(it.row, 'name', e.target.value.trim())} />
+                <div className="title-line">
+                  <span className="id-badge" title={'Рядок у таблиці: ' + it.row}>{it.row}</span>
+                  <input className="ghost big" type="text" defaultValue={it.name} placeholder="Найменування"
+                    onBlur={(e) => e.target.value.trim() && e.target.value !== it.name && save(it.row, 'name', e.target.value.trim())} />
+                </div>
               </div>
               <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
                 <div className="remainder-label">Залишок</div>
