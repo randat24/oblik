@@ -1,216 +1,342 @@
 :root {
-  --bg: #12140f;
-  --panel: #1b1e17;
-  --panel-2: #22261d;
-  --line: #33372c;
-  --text: #e8e6dc;
-  --muted: #8d9280;
-  --amber: #d6a91f;
-  --amber-dim: #6b5719;
-  --green: #5c8c4a;
-  --green-dim: #253a1e;
-  --red: #b7503f;
-  --red-dim: #3d2019;
-  --blue: #557a92;
-  --blue-dim: #1c2c34;
-  --gray: #6b6f62;
-  --gray-dim: #2a2c24;
-  --mono: ui-monospace, "SF Mono", Consolas, monospace;
-  --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Фон і поверхні — три рівні глибини, щоб картки читались як окремі обʼєкти */
+  --bg: #0f1210;
+  --panel: #171b16;
+  --panel-2: #1f241d;
+  --panel-3: #272d24;
+  --line: #2e352a;
+  --line-soft: #232a20;
+
+  --text: #e9e7dc;
+  --text-dim: #b9bdae;
+  --muted: #848a78;
+
+  --amber: #d9ad25;
+  --amber-dim: #4a3c11;
+  --green: #7aa653;
+  --green-dim: #223019;
+  --red: #c4574a;
+  --red-dim: #3a1d18;
+  --blue: #6690ab;
+  --blue-dim: #1b2a33;
+  --gray: #6e7464;
+
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  --sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  --r: 8px;
+  --r-sm: 5px;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.25);
 }
 
 * { box-sizing: border-box; }
-html { font-size: clamp(15px, 1.1vw + 10px, 18px); }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
-  padding: 20px;
-  font-size: 1rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  padding: 18px;
+  -webkit-font-smoothing: antialiased;
 }
-.wrap { max-width: 1400px; margin: 0 auto; }
+.wrap { max-width: 1500px; margin: 0 auto; }
 
+/* ---------- Шапка ---------- */
 header {
-  display: flex; align-items: baseline; justify-content: space-between;
-  flex-wrap: wrap; gap: 10px;
-  border-bottom: 2px solid var(--amber);
-  padding-bottom: 14px; margin-bottom: 18px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding-bottom: 12px; margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
 }
 h1 {
-  font-family: var(--mono);
-  font-size: clamp(1.3rem, 1rem + 1vw, 1.7rem);
-  letter-spacing: 2px; text-transform: uppercase; margin: 0;
+  font-size: 1.05rem; font-weight: 700; margin: 0;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--text);
+}
+h1::before {
+  content: ''; display: inline-block; width: 3px; height: 1em;
+  background: var(--amber); margin-right: 10px; vertical-align: -2px; border-radius: 2px;
 }
 .state {
-  font-family: var(--mono); font-size: 0.75rem; color: var(--muted); letter-spacing: 1px;
+  font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
   display: flex; align-items: center; gap: 10px;
 }
 .build {
-  font-size: 0.65rem; letter-spacing: .5px; color: var(--muted); opacity: .55;
-  border: 1px solid var(--line); border-radius: 10px; padding: 2px 7px;
+  font-size: 0.65rem; color: var(--muted); opacity: .5;
+  border: 1px solid var(--line); border-radius: 20px; padding: 2px 8px;
 }
 
-.tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+/* ---------- Вкладки ---------- */
+.tabs {
+  display: flex; gap: 4px; margin-bottom: 14px; flex-wrap: wrap;
+}
 .tab {
-  font-family: var(--mono); font-size: 0.85rem; letter-spacing: 1px; text-transform: uppercase;
-  padding: 10px 18px; background: var(--panel); border: 1px solid var(--line);
-  color: var(--muted); cursor: pointer; border-radius: 2px;
+  font-size: 0.85rem; font-weight: 500; letter-spacing: .01em;
+  padding: 8px 14px; border-radius: var(--r-sm); cursor: pointer;
+  background: transparent; border: 1px solid transparent; color: var(--muted);
+  white-space: nowrap; transition: background .12s, color .12s;
 }
-.tab.active { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+.tab:hover { background: var(--panel); color: var(--text-dim); }
+.tab.active {
+  background: var(--panel-2); border-color: var(--line); color: var(--amber); font-weight: 600;
+}
 
+/* ---------- Панель інструментів ---------- */
 .toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
-input[type=text], input[type=number], input[type=date], input[type=password], select {
-  background: var(--panel); border: 1px solid var(--line); color: var(--text);
-  padding: 10px 12px; border-radius: 2px; font-size: 1rem; font-family: var(--sans);
-}
-input:focus, select:focus { outline: 1px solid var(--amber); }
-
-/* Пошук */
-.search-wrap { position: relative; display: flex; align-items: center; flex: 1 1 280px; min-width: 240px; }
-.search-wrap .search-input {
-  width: 100%; padding-left: 38px; padding-right: 38px;
-  background: var(--panel); border: 1px solid var(--line); color: var(--text);
-  border-radius: 2px; font-size: 1rem; font-family: var(--sans); padding-top: 11px; padding-bottom: 11px;
-}
-.search-wrap .search-input::placeholder { color: var(--muted); }
-.search-wrap:focus-within .search-input { border-color: var(--amber); outline: none; }
-.search-icon {
-  position: absolute; left: 12px; font-size: 0.9rem; opacity: .65; pointer-events: none; line-height: 1;
-}
-.search-clear {
-  position: absolute; right: 8px; width: 24px; height: 24px; display: flex;
-  align-items: center; justify-content: center; background: var(--panel-2);
-  border: 1px solid var(--line); border-radius: 50%; color: var(--muted);
-  font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0;
-}
-.search-clear:hover { color: var(--text); border-color: var(--amber); }
-
-.chip {
-  font-family: var(--mono); font-size: 0.8rem; letter-spacing: .5px; padding: 8px 14px;
-  border-radius: 20px; border: 1px solid var(--line); cursor: pointer;
-  color: var(--muted); background: var(--panel); text-transform: uppercase;
-}
-.chip.on { background: var(--panel-2); border-color: var(--amber); color: var(--text); }
 .spacer { flex: 1; }
 
+input[type=text], input[type=number], input[type=date], input[type=password], select, textarea {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  padding: 9px 11px; border-radius: var(--r-sm); font-size: 0.92rem; font-family: var(--sans);
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--amber); background: var(--panel-3);
+}
+
+/* Пошук */
+.search-wrap { position: relative; display: flex; align-items: center; flex: 1 1 260px; min-width: 220px; }
+.search-wrap .search-input {
+  width: 100%; padding: 10px 38px; background: var(--panel);
+  border: 1px solid var(--line); color: var(--text);
+  border-radius: var(--r-sm); font-size: 0.95rem;
+}
+.search-wrap .search-input::placeholder { color: var(--muted); }
+.search-wrap:focus-within .search-input { border-color: var(--amber); background: var(--panel-2); }
+.search-icon { position: absolute; left: 13px; font-size: .85rem; opacity: .5; pointer-events: none; }
+.search-clear {
+  position: absolute; right: 8px; width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel-3); border: none; border-radius: 50%;
+  color: var(--muted); font-size: 1rem; line-height: 1; cursor: pointer; padding: 0;
+}
+.search-clear:hover { color: var(--text); background: var(--line); }
+
+/* Фільтри-чипи */
+.chip {
+  font-size: 0.78rem; padding: 7px 13px; border-radius: 20px; cursor: pointer;
+  border: 1px solid var(--line); color: var(--muted); background: transparent;
+  white-space: nowrap; transition: all .12s;
+}
+.chip:hover { color: var(--text-dim); border-color: var(--line); background: var(--panel); }
+.chip.on { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); font-weight: 600; }
+
 .btn {
-  font-family: var(--mono); font-size: 0.85rem; letter-spacing: 1px; text-transform: uppercase;
-  background: var(--amber); color: #181a13; border: none; padding: 12px 22px;
-  border-radius: 2px; cursor: pointer; font-weight: 700;
+  font-size: 0.85rem; font-weight: 600; background: var(--amber); color: #14170f;
+  border: none; padding: 10px 18px; border-radius: var(--r-sm); cursor: pointer;
+  white-space: nowrap;
 }
-.btn:hover { filter: brightness(1.1); }
-.btn:disabled { opacity: .5; cursor: default; }
+.btn:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: .45; cursor: default; }
 
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-
+/* ---------- Картки ---------- */
+.grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px;
+}
 .card {
-  background: var(--panel); border: 1px solid var(--line);
-  border-radius: 4px; padding: 14px; position: relative;
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 14px; position: relative;
+  transition: border-color .15s;
 }
-.card .rownum {
-  position: absolute; top: 12px; right: 12px;
-  font-family: var(--mono); font-size: 0.7rem; color: var(--muted);
-}
+.card:hover { border-color: var(--line); }
 .card.highlight {
-  border-color: var(--amber);
-  box-shadow: 0 0 0 2px var(--amber-dim);
+  border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-dim);
+}
+.rownum {
+  position: absolute; top: 10px; right: 12px;
+  font-family: var(--mono); font-size: 0.65rem; color: var(--muted); opacity: .5;
 }
 
-.scan-banner {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  flex-wrap: wrap; margin-bottom: 12px; padding: 12px 14px;
-  background: var(--amber-dim); border: 1px solid var(--amber); border-radius: 3px;
-  font-family: var(--mono); font-size: 0.85rem;
+/* Заголовок картки: головне — назва й статус */
+.card-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 10px; margin-bottom: 10px; padding-right: 34px;
 }
-.scan-banner .act-btn { flex: 0 0 auto; color: var(--text); border-color: var(--amber); }
-.field { margin-top: 10px; }
-.field:first-child { margin-top: 0; }
+.card-title { min-width: 0; flex: 1; }
+.card-sn {
+  font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
+  margin-top: 2px; overflow-wrap: anywhere;
+}
+
+/* Поля-привиди: виглядають як текст, редагуються за кліком.
+   Селектор із елементом — інакше глобальне input[type=text] перебиває клас. */
+input.ghost, select.ghost {
+  width: 100%; background: transparent; border: 1px solid transparent;
+  color: var(--text); padding: 3px 6px; border-radius: var(--r-sm);
+  font-family: var(--sans); font-size: 0.92rem; appearance: none; -webkit-appearance: none;
+}
+input.ghost:hover, select.ghost:hover { background: var(--panel-2); }
+input.ghost:focus, select.ghost:focus {
+  background: var(--panel-3); border-color: var(--amber); outline: none;
+}
+input.ghost::placeholder { color: var(--muted); opacity: .55; }
+input.ghost.big { font-size: 1.02rem; font-weight: 600; letter-spacing: -.01em; }
+input.ghost.mono { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+select.ghost { cursor: pointer; }
+
+/* Статус як кольорова пігулка */
+.pill {
+  flex: 0 0 auto; font-size: 0.72rem; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; padding: 4px 10px; border-radius: 20px;
+  border: 1px solid currentColor; background: transparent; cursor: pointer;
+  appearance: none; -webkit-appearance: none; text-align: center;
+}
+.pill:focus { outline: none; box-shadow: 0 0 0 2px var(--amber-dim); }
+.pill option { background: var(--panel-2); color: var(--text); text-transform: none; }
+
+/* Рядки даних */
+.card-body {
+  display: flex; flex-direction: column; gap: 2px;
+  border-top: 1px solid var(--line-soft); padding-top: 8px;
+}
+.drow { display: flex; align-items: baseline; gap: 10px; }
+.drow-k {
+  flex: 0 0 40%; max-width: 130px; font-size: 0.72rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; overflow-wrap: anywhere;
+}
+.drow-v { flex: 1; min-width: 0; }
+
 label {
-  display: block; font-family: var(--mono); font-size: 0.7rem;
-  text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 3px;
+  display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); margin-bottom: 4px;
 }
-.card input, .card select {
-  width: 100%; background: var(--panel-2); border: 1px solid var(--line);
-  color: var(--text); padding: 9px 10px; border-radius: 2px;
-  font-family: var(--mono); font-size: 0.95rem;
-}
-.card select { cursor: pointer; font-weight: 600; text-transform: uppercase; font-size: 0.85rem; }
 
-.actions { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
-.act-btn {
-  flex: 1; min-width: 90px; background: none; border: 1px solid var(--line);
-  color: var(--muted); cursor: pointer; font-size: 0.8rem; padding: 7px 12px;
-  border-radius: 2px; font-family: var(--mono); text-transform: uppercase;
+/* ---------- Кнопки дій ---------- */
+.actions {
+  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-soft);
+  display: flex; gap: 6px; flex-wrap: wrap;
 }
+.act-btn {
+  flex: 1; min-width: 84px; background: transparent; border: 1px solid var(--line);
+  color: var(--text-dim); cursor: pointer; font-size: 0.8rem; font-weight: 500;
+  padding: 8px 12px; border-radius: var(--r-sm); font-family: var(--sans);
+  transition: all .12s;
+}
+.act-btn:hover { background: var(--panel-2); border-color: var(--muted); }
 .act-btn:disabled { opacity: .4; cursor: default; }
-.act-issue { color: var(--green); border-color: var(--green); }
-.act-return { color: var(--blue); border-color: var(--blue); }
-.act-qr { color: var(--amber); border-color: var(--amber); }
+.act-issue { color: var(--green); border-color: var(--green-dim); }
+.act-issue:hover { background: var(--green-dim); border-color: var(--green); }
+.act-return { color: var(--blue); border-color: var(--blue-dim); }
+.act-return:hover { background: var(--blue-dim); border-color: var(--blue); }
+.act-qr { color: var(--amber); border-color: var(--amber-dim); }
+.act-qr:hover { background: var(--amber-dim); border-color: var(--amber); }
+.act-del { flex: 0 0 auto; min-width: 0; color: var(--muted); padding: 8px 12px; }
 .act-del:hover { color: #fff; background: var(--red-dim); border-color: var(--red); }
 
 .empty, .loading {
-  padding: 40px; text-align: center; color: var(--muted);
-  font-family: var(--mono); font-size: 0.9rem;
+  padding: 48px 20px; text-align: center; color: var(--muted); font-size: 0.9rem;
 }
 
-/* Ledger */
-.ledger-card .name { font-size: 1.05rem; font-weight: 600; margin-bottom: 10px; }
-.ledger-edit { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+/* ---------- Відомість ---------- */
+.ledger-card .name { font-size: 1.02rem; font-weight: 600; margin-bottom: 2px; }
+.ledger-edit { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
 .ledger-stats {
-  display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
-  font-family: var(--mono); font-size: 0.85rem; color: var(--muted); margin: 10px 0;
+  display: flex; gap: 14px; flex-wrap: wrap;
+  font-size: 0.8rem; color: var(--muted); margin: 8px 0;
 }
-.remainder { font-size: 1.15rem; font-family: var(--mono); font-weight: 700; }
+.remainder {
+  font-size: 1.4rem; font-family: var(--mono); font-weight: 700; line-height: 1.2;
+}
 .remainder.low { color: var(--red); }
 .remainder.ok { color: var(--green); }
-.history { font-size: 0.8rem; color: var(--muted); margin-top: 10px; max-height: 70px; overflow-y: auto; }
+.remainder-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.history {
+  font-size: 0.76rem; color: var(--muted); margin-top: 10px; padding-top: 8px;
+  border-top: 1px solid var(--line-soft); max-height: 78px; overflow-y: auto;
+  font-family: var(--mono);
+}
 
-/* Warehouse */
+/* ---------- Склад ---------- */
 .wh-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.wh-code { font-family: var(--mono); font-size: 1.1rem; font-weight: 700; color: var(--amber); }
+.wh-code {
+  font-family: var(--mono); font-size: 1.05rem; font-weight: 700; color: var(--amber);
+  background: var(--amber-dim); padding: 2px 9px; border-radius: var(--r-sm);
+}
 .wh-photo {
-  width: 100%; height: 150px; object-fit: cover; border-radius: 3px;
-  margin-bottom: 6px; cursor: pointer; background: var(--panel-2); display: block;
+  width: 100%; height: 158px; object-fit: cover; border-radius: var(--r-sm);
+  margin-bottom: 10px; cursor: zoom-in; background: var(--panel-2); display: block;
 }
 .wh-photo-ph {
-  width: 100%; height: 150px; border-radius: 3px; margin-bottom: 10px; background: var(--panel-2);
-  display: flex; align-items: center; justify-content: center; color: var(--muted);
-  font-family: var(--mono); font-size: 0.75rem; cursor: pointer; border: 1px dashed var(--line);
+  width: 100%; height: 92px; border-radius: var(--r-sm); margin-bottom: 10px;
+  background: var(--panel-2); border: 1px dashed var(--line);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 0.78rem;
 }
+.scan-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; margin-bottom: 12px; padding: 11px 14px;
+  background: var(--amber-dim); border: 1px solid var(--amber);
+  border-radius: var(--r); font-size: 0.88rem;
+}
+.scan-banner .act-btn { flex: 0 0 auto; color: var(--amber); border-color: var(--amber); }
 
 /* Фото */
 .photo-field { margin-top: 10px; }
 .photo-preview {
-  width: 100%; max-height: 180px; object-fit: cover;
-  border-radius: 3px; margin-bottom: 6px; display: block; background: var(--panel-2);
+  width: 100%; max-height: 180px; object-fit: cover; border-radius: var(--r-sm);
+  margin-bottom: 8px; display: block; background: var(--panel-2);
 }
 .photo-actions { display: flex; gap: 6px; }
 .photo-actions .act-btn { flex: 1; }
 
-/* Search results */
-.section { margin-bottom: 22px; }
+/* ---------- Пошук: результати ---------- */
+.section { margin-bottom: 20px; }
 .section h3 {
-  font-family: var(--mono); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;
-  margin: 0 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line);
+  font-size: 0.78rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600;
+  margin: 0 0 8px; color: var(--muted);
+  display: flex; align-items: center; gap: 8px;
 }
-.section h3.primary { color: var(--amber); border-color: var(--amber); }
-.section h3.sec { color: var(--muted); }
-.count { font-size: 0.75rem; color: var(--muted); margin-left: 8px; }
+.section h3.primary { color: var(--amber); }
+.count {
+  font-size: 0.7rem; color: var(--muted); background: var(--panel-2);
+  padding: 1px 8px; border-radius: 20px; font-weight: 500;
+}
 .result {
-  background: var(--panel); border: 1px solid var(--line);
-  border-radius: 3px; padding: 10px 12px; margin-bottom: 6px;
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 12px 14px; margin-bottom: 6px;
 }
+.result:hover { border-color: var(--line); }
 .result-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
 .badge {
-  font-family: var(--mono); font-size: 0.65rem; text-transform: uppercase; letter-spacing: .5px;
-  background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
-  padding: 3px 8px; border-radius: 10px;
+  font-size: 0.68rem; letter-spacing: .04em; background: var(--panel-3);
+  color: var(--text-dim); padding: 3px 9px; border-radius: 20px;
 }
-.fields { font-family: var(--mono); font-size: 0.8rem; line-height: 1.6; }
+.fields { font-size: 0.82rem; line-height: 1.7; color: var(--text-dim); }
 .fields .k { color: var(--muted); }
+/* у результатах пошуку дія одна — не розтягуємо її на всю картку */
+.result .actions { border-top: none; padding-top: 0; margin-top: 8px; }
+.result .actions .act-btn { flex: 0 0 auto; }
 
-/* Сповіщення */
+/* ---------- Журнал ---------- */
+.log-list { display: flex; flex-direction: column; gap: 4px; }
+.log-row {
+  display: flex; gap: 14px; padding: 10px 14px;
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--r);
+}
+.log-when {
+  flex: 0 0 auto; display: flex; flex-direction: column;
+  font-family: var(--mono); font-size: 0.72rem; color: var(--muted); min-width: 82px;
+}
+.log-time { opacity: .6; }
+.log-what { flex: 1; min-width: 0; }
+.log-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.log-action { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.log-add { color: var(--green); }
+.log-del { color: var(--red); }
+.log-restore { color: var(--blue); }
+.log-writeoff { color: var(--amber); }
+.log-edit { color: var(--muted); }
+.log-target, .log-field { font-size: 0.72rem; color: var(--muted); }
+.log-field { color: var(--text-dim); }
+.log-diff {
+  margin-top: 4px; font-family: var(--mono); font-size: 0.78rem;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline;
+}
+.log-before { color: var(--muted); text-decoration: line-through; overflow-wrap: anywhere; }
+.log-arrow { color: var(--muted); }
+.log-after { color: var(--text); overflow-wrap: anywhere; }
+
+/* ---------- Сповіщення ---------- */
 .toast-host {
   position: fixed; right: 16px; bottom: 16px; z-index: 200;
   display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
@@ -218,10 +344,9 @@ label {
 }
 .toast {
   display: flex; align-items: center; gap: 10px;
-  background: var(--panel-2); border: 1px solid var(--line); border-left-width: 3px;
-  border-radius: 3px; padding: 11px 12px; font-size: 0.9rem;
-  box-shadow: 0 6px 20px rgba(0,0,0,.45);
-  animation: toast-in .18s ease-out;
+  background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--line);
+  border-radius: var(--r); padding: 11px 13px; font-size: 0.88rem;
+  box-shadow: var(--shadow); animation: toast-in .16s ease-out;
 }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
@@ -230,93 +355,70 @@ label {
 .toast-warn { border-left-color: var(--amber); }
 .toast-msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .toast-action {
-  flex: 0 0 auto; background: none; border: 1px solid var(--amber); color: var(--amber);
-  font-family: var(--mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: .5px;
-  padding: 6px 10px; border-radius: 2px; cursor: pointer; font-weight: 700;
+  flex: 0 0 auto; background: var(--amber); border: none; color: #14170f;
+  font-size: 0.78rem; font-weight: 700; padding: 6px 12px;
+  border-radius: var(--r-sm); cursor: pointer;
 }
-.toast-action:hover { background: var(--amber-dim); }
+.toast-action:hover { filter: brightness(1.08); }
 .toast-x {
   flex: 0 0 auto; background: none; border: none; color: var(--muted);
-  font-size: 1.2rem; line-height: 1; cursor: pointer; padding: 0 2px;
+  font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 2px;
 }
 .toast-x:hover { color: var(--text); }
 
-/* Журнал змін */
-.log-list { display: flex; flex-direction: column; gap: 4px; }
-.log-row {
-  display: flex; gap: 14px; padding: 10px 12px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 3px;
-}
-.log-when {
-  flex: 0 0 auto; display: flex; flex-direction: column;
-  font-family: var(--mono); font-size: 0.75rem; color: var(--muted); min-width: 84px;
-}
-.log-time { opacity: .7; }
-.log-what { flex: 1; min-width: 0; }
-.log-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.log-action {
-  font-family: var(--mono); font-size: 0.75rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .5px;
-}
-.log-add { color: var(--green); }
-.log-del { color: var(--red); }
-.log-restore { color: var(--blue); }
-.log-writeoff { color: var(--amber); }
-.log-edit { color: var(--muted); }
-.log-target, .log-field { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
-.log-field { color: var(--text); }
-.log-diff {
-  margin-top: 4px; font-family: var(--mono); font-size: 0.8rem;
-  display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline;
-}
-.log-before { color: var(--muted); text-decoration: line-through; overflow-wrap: anywhere; }
-.log-arrow { color: var(--muted); }
-.log-after { color: var(--text); overflow-wrap: anywhere; }
-
-/* Modal */
+/* ---------- Модальні вікна ---------- */
 .overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.7);
-  display: flex; align-items: center; justify-content: center; z-index: 100;
+  position: fixed; inset: 0; background: rgba(0,0,0,.72); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px;
 }
 .modal {
-  background: var(--panel); border: 1px solid var(--amber); border-radius: 4px;
-  padding: 20px; width: 420px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 20px; width: 440px; max-width: 100%; max-height: 88vh; overflow-y: auto;
+  box-shadow: var(--shadow);
 }
 .modal h2 {
-  font-family: var(--mono); font-size: 1rem; letter-spacing: 1px;
-  text-transform: uppercase; color: var(--amber); margin: 0 0 14px;
+  font-size: 0.92rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--amber); margin: 0 0 16px;
 }
-.modal input, .modal select { width: 100%; margin-top: 3px; }
-.modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+.modal input, .modal select { width: 100%; }
+.modal-actions {
+  display: flex; gap: 8px; margin-top: 20px; padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
 .modal-actions button {
-  flex: 1; padding: 10px; border: none; border-radius: 2px; font-family: var(--mono);
-  font-size: 0.8rem; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; font-weight: 700;
+  flex: 1; padding: 11px; border: none; border-radius: var(--r-sm);
+  font-size: 0.85rem; font-weight: 600; cursor: pointer; font-family: var(--sans);
 }
-.btn-save { background: var(--amber); color: #181a13; }
-.btn-cancel { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line) !important; }
+.btn-save { background: var(--amber); color: #14170f; }
+.btn-save:hover { filter: brightness(1.08); }
+.btn-cancel { background: transparent; color: var(--muted); border: 1px solid var(--line) !important; }
+.btn-cancel:hover { background: var(--panel-2); color: var(--text-dim); }
 
-/* Login */
-.login-wrap {
-  min-height: 80vh; display: flex; align-items: center; justify-content: center;
-}
+/* ---------- Вхід ---------- */
+.login-wrap { min-height: 82vh; display: flex; align-items: center; justify-content: center; }
 .login-box {
-  background: var(--panel); border: 1px solid var(--amber); border-radius: 4px;
-  padding: 30px; width: 340px; max-width: 90vw;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 30px; width: 340px; max-width: 100%; box-shadow: var(--shadow);
 }
-.err { color: var(--red); font-size: 0.85rem; margin-top: 10px; font-family: var(--mono); }
+.err { color: var(--red); font-size: 0.84rem; margin-top: 10px; line-height: 1.5; }
 
-@media (max-width: 640px) {
+/* ---------- Телефон ---------- */
+@media (max-width: 720px) {
   body { padding: 12px; }
   .grid { grid-template-columns: 1fr; }
-  .toolbar { flex-direction: column; align-items: stretch; }
-  .search-wrap { min-width: 0; width: 100%; flex: 0 0 auto; }
-  .search-input { min-width: 0; width: 100%; flex: 0 0 auto; }
-  .btn { width: 100%; }
-  .tab { flex: 1 1 auto; text-align: center; }
-  .modal { width: 100%; max-width: 100%; border-radius: 0; height: 100%; max-height: 100vh; }
-  .overlay { align-items: stretch; }
+  .tabs {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin: 0 -12px 12px; padding: 0 12px 4px;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .toolbar { gap: 6px; }
+  .search-wrap { flex: 1 1 100%; }
+  .btn { flex: 1; }
+  .act-btn { min-width: 0; padding: 10px 8px; font-size: 0.78rem; }
   .toast-host { left: 12px; right: 12px; bottom: 12px; max-width: none; }
   .toast { width: 100%; }
   .log-row { flex-direction: column; gap: 6px; }
   .log-when { flex-direction: row; gap: 8px; }
+  .modal { width: 100%; max-height: 92vh; }
+  .drow-k { flex-basis: 38%; }
 }

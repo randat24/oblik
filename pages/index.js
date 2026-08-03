@@ -470,6 +470,13 @@ function SearchView({ setState, onOpen }) {
 }
 
 /* ---------- Звичайні листи ---------- */
+/** Колонки, що йдуть у тіло картки: без назви, серійника й статусу — вони вже в шапці */
+function bodyCols(headers, cols, snIdx) {
+  return headers
+    .map((_, i) => i)
+    .filter((i) => i !== 0 && i !== snIdx && i !== cols.status);
+}
+
 function ItemsView({ name, setState, focusRow }) {
   const [data, setData] = useState(null);
   const [chip, setChip] = useState(null);
@@ -507,6 +514,8 @@ function ItemsView({ name, setState, focusRow }) {
   if (!data) return <div className="loading">Завантаження…</div>;
 
   const { headers, items, cols, statusOptions, typeOptions, maskCols, noIssue, hideStatus } = data;
+  // назва й серійник ідуть у шапку картки, статус — окремою пігулкою
+  const snIdx = cols.snCols?.find((i) => i !== 0) ?? -1;
 
   const save = async (row, colIdx, value, prev) => {
     setState('збереження…');
@@ -546,33 +555,73 @@ function ItemsView({ name, setState, focusRow }) {
         <div className="grid">
           {list.map((it) => (
             <div className={'card' + (it.row === highlightRow ? ' highlight' : '')} key={it.row} id={'item-row-' + it.row}>
-              <div className="rownum">ряд. {it.row}</div>
-              {headers.map((h, ci) => {
-                if (hideStatus && ci === cols.status) return null;
-                return (
-                <div className="field" key={ci}>
-                  <label>{h || 'Поле ' + (ci + 1)}</label>
-                  {ci === cols.status || ci === cols.type ? (
-                    <select
-                      defaultValue={it.values[ci]}
-                      onChange={(e) => save(it.row, ci, e.target.value, it.values[ci])}
-                    >
-                      {!(ci === cols.status ? statusOptions : typeOptions).includes(it.values[ci]) &&
-                        it.values[ci] && <option value={it.values[ci]}>{it.values[ci]}</option>}
-                      {(ci === cols.status ? statusOptions : typeOptions).map((o) => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
-                    </select>
-                  ) : (
+              <div className="rownum">{it.row}</div>
+
+              <div className="card-head">
+                <div className="card-title">
+                  <input
+                    className="ghost big"
+                    type="text"
+                    defaultValue={it.values[0]}
+                    placeholder={headers[0] || 'Назва'}
+                    onBlur={(e) => e.target.value !== it.values[0] && save(it.row, 0, e.target.value, it.values[0])}
+                  />
+                  {snIdx >= 0 && (
                     <input
-                      type={maskCols?.includes(ci) ? 'password' : 'text'}
-                      defaultValue={it.values[ci]}
-                      onBlur={(e) => e.target.value !== it.values[ci] && save(it.row, ci, e.target.value, it.values[ci])}
+                      className="ghost mono card-sn"
+                      type="text"
+                      defaultValue={it.values[snIdx]}
+                      placeholder={headers[snIdx] || 'S/N'}
+                      onBlur={(e) => e.target.value !== it.values[snIdx] && save(it.row, snIdx, e.target.value, it.values[snIdx])}
                     />
                   )}
                 </div>
-                );
-              })}
+                {!hideStatus && cols.status >= 0 && (
+                  <select
+                    className="pill"
+                    style={{ color: statusColor(it.values[cols.status]) }}
+                    defaultValue={it.values[cols.status]}
+                    onChange={(e) => save(it.row, cols.status, e.target.value, it.values[cols.status])}
+                  >
+                    {!statusOptions.includes(it.values[cols.status]) && it.values[cols.status] && (
+                      <option value={it.values[cols.status]}>{it.values[cols.status]}</option>
+                    )}
+                    {statusOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                )}
+              </div>
+
+              <div className="card-body">
+                {bodyCols(headers, cols, snIdx).map((ci) => (
+                  <div className="drow" key={ci}>
+                    <span className="drow-k">{headers[ci] || 'Поле ' + (ci + 1)}</span>
+                    <span className="drow-v">
+                      {ci === cols.type ? (
+                        <select
+                          className="ghost"
+                          defaultValue={it.values[ci]}
+                          onChange={(e) => save(it.row, ci, e.target.value, it.values[ci])}
+                        >
+                          <option value=""></option>
+                          {!typeOptions.includes(it.values[ci]) && it.values[ci] && (
+                            <option value={it.values[ci]}>{it.values[ci]}</option>
+                          )}
+                          {typeOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      ) : (
+                        <input
+                          className="ghost"
+                          type={maskCols?.includes(ci) ? 'password' : 'text'}
+                          defaultValue={it.values[ci]}
+                          placeholder="—"
+                          onBlur={(e) => e.target.value !== it.values[ci] && save(it.row, ci, e.target.value, it.values[ci])}
+                        />
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
               <div className="actions">
                 {!noIssue && (
                   <>
@@ -822,28 +871,39 @@ function LedgerView({ name, setState }) {
       <div className="grid">
         {list.map((it) => (
           <div className="card ledger-card" key={it.row}>
-            <div className="rownum">ряд. {it.row}</div>
-            <div className="field">
-              <label>Найменування</label>
-              <input type="text" defaultValue={it.name}
-                onBlur={(e) => e.target.value.trim() && e.target.value !== it.name && save(it.row, 'name', e.target.value.trim())} />
-            </div>
-            <div className="ledger-edit">
-              <div className="field">
-                <label>Од. виміру</label>
-                <input type="text" defaultValue={it.unit}
-                  onBlur={(e) => e.target.value !== it.unit && save(it.row, 'unit', e.target.value)} />
+            <div className="rownum">{it.row}</div>
+
+            <div className="card-head">
+              <div className="card-title">
+                <input className="ghost big" type="text" defaultValue={it.name} placeholder="Найменування"
+                  onBlur={(e) => e.target.value.trim() && e.target.value !== it.name && save(it.row, 'name', e.target.value.trim())} />
               </div>
-              <div className="field">
-                <label>Отримано</label>
-                <input type="number" min="0" defaultValue={it.received}
-                  onBlur={(e) => Number(e.target.value) !== it.received && save(it.row, 'received', Number(e.target.value) || 0)} />
+              <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
+                <div className="remainder-label">Залишок</div>
+                <div className={'remainder ' + (it.remainder <= 0 ? 'low' : 'ok')}>{it.remainder}</div>
               </div>
             </div>
-            <div className="ledger-stats">
-              <span>Списано: {it.writtenOff}</span>
+
+            <div className="card-body">
+              <div className="drow">
+                <span className="drow-k">Од. виміру</span>
+                <span className="drow-v">
+                  <input className="ghost" type="text" defaultValue={it.unit} placeholder="шт."
+                    onBlur={(e) => e.target.value !== it.unit && save(it.row, 'unit', e.target.value)} />
+                </span>
+              </div>
+              <div className="drow">
+                <span className="drow-k">Отримано</span>
+                <span className="drow-v">
+                  <input className="ghost" type="number" min="0" defaultValue={it.received}
+                    onBlur={(e) => Number(e.target.value) !== it.received && save(it.row, 'received', Number(e.target.value) || 0)} />
+                </span>
+              </div>
+              <div className="drow">
+                <span className="drow-k">Списано</span>
+                <span className="drow-v" style={{ padding: '3px 6px', color: 'var(--text-dim)' }}>{it.writtenOff}</span>
+              </div>
             </div>
-            <div className={'remainder ' + (it.remainder <= 0 ? 'low' : 'ok')}>Залишок: {it.remainder}</div>
             <div className="actions">
               <button className="act-btn act-issue" disabled={it.remainder <= 0} onClick={() => setWo(it)}>Списати</button>
               <button className="act-btn act-del" onClick={async () => {
@@ -1088,14 +1148,19 @@ function WarehouseView({ setState, focusCode }) {
         <div className="grid">
           {list.map((it) => (
             <div className={'card' + (it.code === highlight ? ' highlight' : '')} key={it.row} id={'box-' + it.code}>
-              <div className="wh-top">
-                <span className="wh-code">{it.code}</span>
+              <div className="card-head">
+                <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="wh-code">{it.code}</span>
+                  <input className="ghost big" type="text" defaultValue={it.name} placeholder="Назва"
+                    onBlur={(e) => e.target.value !== it.name && save(it.row, 'name', e.target.value, it.name)} />
+                </div>
                 <select
-                  defaultValue={it.priority}
-                  style={{ width: 'auto', fontSize: '.7rem', padding: '3px 6px' }}
-                  onChange={(e) => save(it.row, 'priority', e.target.value, it.priority)}
+                  className="pill"
+                  style={{ color: statusColor(it.status) }}
+                  defaultValue={it.status}
+                  onChange={(e) => save(it.row, 'status', e.target.value, it.status)}
                 >
-                  {data.priorities.map((p) => <option key={p.value} value={p.value}>Пріоритет {p.value}</option>)}
+                  {data.statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
 
@@ -1105,6 +1170,32 @@ function WarehouseView({ setState, focusCode }) {
               ) : (
                 <div className="wh-photo-ph">немає фото</div>
               )}
+
+              <div className="card-body">
+                {[
+                  ['Вміст', 'contents'], ['Розташування', 'location'], ['Примітки', 'notes'],
+                ].map(([label, field]) => (
+                  <div className="drow" key={field}>
+                    <span className="drow-k">{label}</span>
+                    <span className="drow-v">
+                      <input className="ghost" type="text" defaultValue={it[field]} placeholder="—"
+                        onBlur={(e) => e.target.value !== it[field] && save(it.row, field, e.target.value, it[field])} />
+                    </span>
+                  </div>
+                ))}
+                <div className="drow">
+                  <span className="drow-k">Пріоритет</span>
+                  <span className="drow-v">
+                    <select className="ghost" defaultValue={it.priority}
+                      onChange={(e) => save(it.row, 'priority', e.target.value, it.priority)}
+                      title={data.priorities.find((p) => p.value === it.priority)?.label}>
+                      {data.priorities.map((p) => (
+                        <option key={p.value} value={p.value} title={p.label}>{p.value} — {p.label.split(' — ')[1] || p.label}</option>
+                      ))}
+                    </select>
+                  </span>
+                </div>
+              </div>
 
               <PhotoField
                 value={it.photoUrl}
@@ -1118,29 +1209,6 @@ function WarehouseView({ setState, focusCode }) {
                   save(it.row, 'photoUrl', url, prev);
                 }}
               />
-
-              {[
-                ['Назва', 'name'], ['Вміст', 'contents'], ['Розташування', 'location'],
-              ].map(([label, field]) => (
-                <div className="field" key={field}>
-                  <label>{label}</label>
-                  <input type="text" defaultValue={it[field]}
-                    onBlur={(e) => e.target.value !== it[field] && save(it.row, field, e.target.value, it[field])} />
-                </div>
-              ))}
-
-              <div className="field">
-                <label>Статус</label>
-                <select defaultValue={it.status} onChange={(e) => save(it.row, 'status', e.target.value, it.status)}>
-                  {data.statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-
-              <div className="field">
-                <label>Примітки</label>
-                <input type="text" defaultValue={it.notes}
-                  onBlur={(e) => e.target.value !== it.notes && save(it.row, 'notes', e.target.value, it.notes)} />
-              </div>
 
               <div className="actions">
                 <button className="act-btn act-qr" onClick={() => setQr(it)}>QR</button>
