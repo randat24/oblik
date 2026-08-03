@@ -479,11 +479,11 @@ function SearchView({ setState, onOpen }) {
 }
 
 /* ---------- Звичайні листи ---------- */
-/** Колонки, що йдуть у тіло картки: без назви, серійника й статусу — вони вже в шапці */
-function bodyCols(headers, cols, snIdx) {
+/** Колонки, що йдуть у тіло картки: без назви, номера, серійника й статусу — вони вже в шапці */
+function bodyCols(headers, cols, snIdx, idIdx) {
   return headers
     .map((_, i) => i)
-    .filter((i) => i !== 0 && i !== snIdx && i !== cols.status);
+    .filter((i) => i !== 0 && i !== snIdx && i !== idIdx && i !== cols.status);
 }
 
 function ItemsView({ name, setState, focusRow }) {
@@ -523,8 +523,9 @@ function ItemsView({ name, setState, focusRow }) {
   if (!data) return <div className="loading">Завантаження…</div>;
 
   const { headers, items, cols, statusOptions, typeOptions, maskCols, noIssue, hideStatus } = data;
-  // назва й серійник ідуть у шапку картки, статус — окремою пігулкою
-  const snIdx = cols.snCols?.find((i) => i !== 0) ?? -1;
+  // у шапці картки: власний номер речі бейджем, назва, серійник виробника під нею
+  const idIdx = cols.id >= 0 && cols.id !== 0 ? cols.id : -1;
+  const snIdx = cols.snCols?.find((i) => i !== 0 && i !== idIdx) ?? -1;
 
   const save = async (row, colIdx, value, prev) => {
     setState('збереження…');
@@ -567,7 +568,18 @@ function ItemsView({ name, setState, focusRow }) {
               <div className="card-head">
                 <div className="card-title">
                   <div className="title-line">
-                    <span className="id-badge" title={'Рядок у таблиці: ' + it.row}>{it.row}</span>
+                    {idIdx >= 0 ? (
+                      <input
+                        className="id-badge"
+                        type="text"
+                        defaultValue={it.values[idIdx]}
+                        title={headers[idIdx] || 'Номер'}
+                        size={Math.max(2, String(it.values[idIdx] || '').length)}
+                        onBlur={(e) => e.target.value !== it.values[idIdx] && save(it.row, idIdx, e.target.value, it.values[idIdx])}
+                      />
+                    ) : (
+                      <span className="id-badge" title={'Рядок у таблиці: ' + it.row}>{it.row}</span>
+                    )}
                     <input
                       className="ghost big"
                       type="text"
@@ -602,7 +614,7 @@ function ItemsView({ name, setState, focusRow }) {
               </div>
 
               <div className="card-body">
-                {bodyCols(headers, cols, snIdx).map((ci) => (
+                {bodyCols(headers, cols, snIdx, idIdx).map((ci) => (
                   <div className="drow" key={ci}>
                     <span className="drow-k">{headers[ci] || 'Поле ' + (ci + 1)}</span>
                     <span className="drow-v">
