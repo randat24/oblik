@@ -180,21 +180,13 @@ function PhotoField({ value, onChange, showPreview = true }) {
     setErr('');
     try {
       const small = await shrinkImage(file);
-      const { upload } = await import('@vercel/blob/client');
-      const name = `sklad/box-${Date.now()}.jpg`;
-      const blob = await upload(name, small, { access: 'private', handleUploadUrl: '/api/upload' });
-      // фото приватні — зберігаємо шлях, а не URL: показує їх наш маршрут після входу
-      onChange(blob.pathname);
+      const res = await fetch('/api/upload', { method: 'POST', body: small });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Помилка завантаження');
+      // фото приватні — зберігаємо ідентифікатор, а не URL: показує їх наш маршрут після входу
+      onChange(data.publicId);
     } catch (e) {
-      // SDK ховає причину за загальним «Failed to retrieve the client token» — питаємо її окремо
-      let msg = e.message || 'Помилка завантаження';
-      if (/client token/i.test(msg)) {
-        const why = await fetch('/api/upload')
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null);
-        if (why?.reason) msg = why.reason;
-      }
-      setErr(msg);
+      setErr(e.message || 'Помилка завантаження');
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';

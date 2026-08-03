@@ -1,50 +1,46 @@
-import { handleUpload } from '@vercel/blob/client';
-import { isAuthed } from '../../lib/auth';
-import { blobToken, blobTokenVar } from '../../lib/blob';
+import { withAuth } from '../../lib/auth';
+import { cloudinary, cloudinaryReady } from '../../lib/cloudinary';
 
-// Завантаження йде з браузера напряму у Vercel Blob, тож ліміт тіла
-// запиту serverless-функції (4.5 МБ) не заважає великим фото
-export default async function handler(req, res) {
-  const authed = isAuthed(req);
-  const token = blobToken();
+// Фото вже стиснуте в браузері (до ~1.5 МБ), тож приймаємо тіло напряму,
+// без стандартного JSON bodyParser
+export const config = { api: { bodyParser: false } };
 
-  // Діагностика: SDK показує лише загальне «Failed to retrieve the client token»,
-  // тож справжню причину доводиться питати окремо
-  if (req.method === 'GET') {
-    return res.json({
-      ready: !!token && authed,
-      tokenVar: blobTokenVar(),
-      authed,
-      reason: !token
-        ? 'Жодного токена сховища не знайдено. Підключіть Blob-стор до проєкту (Storage → ваш стор → Projects → Connect), увімкніть змінну для середовища Preview, а не лише Production, і зробіть Redeploy.'
-        : !authed
-          ? 'Сесія застаріла. Перезайдіть на сайт і спробуйте ще раз.'
-          : '',
-    });
+const MAX_BYTES = 8 * 1024 * 1024;
+
+async function readBody(req) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BYTES) throw new Error('Фото завелике (максимум 8 МБ)');
+    chunks.push(chunk);
   }
-
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!token) {
-    return res.status(500).json({ error: 'Не підключено Blob Storage у налаштуваннях Vercel' });
-  }
-
-  try {
-    const result = await handleUpload({
-      request: req,
-      body: req.body,
-      token,
-      onBeforeGenerateToken: async () => {
-        if (!authed) throw new Error('Не авторизовано');
-        return {
-          allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp'],
-          maximumSizeInBytes: 8 * 1024 * 1024,
-          addRandomSuffix: true,
-        };
-      },
-      onUploadCompleted: async () => {},
-    });
-    return res.json(result);
-  } catch (err) {
-    return res.status(400).json({ error: err.message || 'Помилка завантаження' });
-  }
+  return Buffer.concat(chunks);
 }
+
+export default withAuth(async (req, res) => {
+  if (req.method === 'GET') {
+    return res.json({ ready: cloudinaryReady() });
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!cloudinaryReady()) {
+    return res.status(503).json({
+      error: 'Не підключено Cloudinary у налаштуваннях Vercel. Додайте змінну CLOUDINARY_URL '
+        + '(конектор Cloudinary робить це сам) і зробіть Redeploy.',
+    });
+  }
+
+  const buf = await readBody(req);
+  if (!buf.length) return res.status(400).json({ error: 'Порожній файл' });
+
+  const publicId = `sklad/box-${Date.now()}`;
+  const result = await new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { public_id: publicId, resource_type: 'image', type: 'authenticated', overwrite: true },
+      (err, uploaded) => (err ? reject(err) : resolve(uploaded))
+    );
+    stream.end(buf);
+  });
+
+  res.json({ publicId: result.public_id });
+});
