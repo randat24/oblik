@@ -189,7 +189,7 @@ function shrinkImage(file, maxSide = 1600, quality = 0.82) {
   });
 }
 
-function PhotoField({ value, onChange, showPreview = true }) {
+function PhotoField({ value, onChange, showPreview = true, label = 'Фото' }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const inputRef = useRef(null);
@@ -215,7 +215,7 @@ function PhotoField({ value, onChange, showPreview = true }) {
 
   return (
     <div className="photo-field">
-      <label>Фото</label>
+      <label>{label}</label>
       {showPreview && value && <img className="photo-preview" src={photoSrc(value)} alt="" />}
       <input
         ref={inputRef}
@@ -236,6 +236,47 @@ function PhotoField({ value, onChange, showPreview = true }) {
         )}
       </div>
       {err && <div className="err">{err}</div>}
+    </div>
+  );
+}
+
+/* ---------- Поле «вибери наявне або впиши нове» ---------- */
+/** Показує вже вживані значення, але не заважає ввести своє — нове стає варіантом наступного разу */
+function Combo({ value, options = [], onChange, placeholder, className = '', autoFocus }) {
+  const [open, setOpen] = useState(false);
+  const q = (value || '').trim().toLowerCase();
+  const hits = options.filter((o) => !q || o.toLowerCase().includes(q)).slice(0, 10);
+  const isNew = !!q && !options.some((o) => o.toLowerCase() === q);
+
+  return (
+    <div className="pick">
+      <input
+        type="text"
+        className={className}
+        placeholder={placeholder}
+        value={value}
+        autoFocus={autoFocus}
+        autoComplete="off"
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        // Escape має ховати підказки, а не закривати всю форму
+        onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}
+      />
+      {open && (hits.length > 0 || isNew) && (
+        <div className="pick-list">
+          {isNew && <div className="pick-opt pick-fresh">Створити «{value.trim()}»</div>}
+          {hits.map((o) => (
+            <div
+              className="pick-opt"
+              key={o}
+              onMouseDown={(e) => { e.preventDefault(); onChange(o); setOpen(false); }}
+            >
+              <span className="pick-title">{o}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -379,6 +420,7 @@ export default function Home() {
           <ItemsView key={view.name + ':' + (view.row || '')} name={view.name} setState={setState} focusRow={view.row} />
         )}
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
+        {view.kind === 'stock' && <StockView setState={setState} />}
         {view.kind === 'warehouse' && <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} />}
         {view.kind === 'log' && <LogView setState={setState} />}
       </div>
@@ -1221,6 +1263,439 @@ function AddLedgerModal({ onCancel, onSave }) {
   );
 }
 
+/* ---------- Великий склад (Рибаківка) ---------- */
+function StockView({ setState }) {
+  const [data, setData] = useState(null);
+  const [q, setQ] = useState('');
+  const [cat, setCat] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [move, setMove] = useState(null); // { item, kind: 'receive' | 'writeoff' }
+  const [hist, setHist] = useState({});
+  const [photo, setPhoto] = useState(null);
+  const toast = useToast();
+
+  useNewRecordHotkey(useCallback(() => setAdding(true), []));
+
+  const load = useCallback(async () => {
+    setState('завантаження…');
+    try {
+      setData(await api('/api/stock'));
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  }, [setState]);
+
+  useEffect(() => { load(); }, [load]);
+  if (!data) return <div className="loading">Завантаження…</div>;
+
+  const save = async (row, field, value, prev) => {
+    if (value === prev) return;
+    setState('збереження…');
+    setData((p) => ({
+      ...p,
+      items: p.items.map((x) => (x.row === row ? { ...x, [field]: value } : x)),
+    }));
+    try {
+      await api('/api/stock', { method: 'PATCH', body: { row, field, value, prev } });
+      setState('синхронізовано');
+      toast('Збережено');
+    } catch (e) {
+      setState('помилка збереження');
+      toast('Не вдалося зберегти: ' + e.message, { type: 'err' });
+    }
+  };
+
+  let list = data.items;
+  if (cat) list = list.filter((it) => it.category === cat);
+  if (q.trim()) {
+    const s = q.trim().toLowerCase();
+    list = list.filter((it) =>
+      [it.id, it.name, it.description, it.category, it.place, it.notes]
+        .join(' ').toLowerCase().includes(s));
+  }
+
+  const totals = list.reduce(
+    (a, it) => ({ items: a.items + 1, left: a.left + it.remainder }),
+    { items: 0, left: 0 }
+  );
+
+  return (
+    <>
+      <div className="toolbar">
+        <SearchBox value={q} onChange={setQ} placeholder="Пошук: назва, опис, категорія, місце..." />
+        <div className="spacer" />
+        <button className="btn btn-accept" onClick={() => setAdding(true)}>+ Додати позицію</button>
+      </div>
+
+      {data.categories.length > 0 && (
+        <div className="chips">
+          {data.categories.map((c) => (
+            <div key={c} className={'chip' + (cat === c ? ' on' : '')}
+              onClick={() => setCat(cat === c ? null : c)}>
+              {c}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="stock-totals">
+        Позицій: <b>{totals.items}</b> · Загальний залишок: <b>{totals.left}</b>
+      </div>
+
+      {list.length === 0 ? (
+        <div className="empty">
+          {data.items.length === 0
+            ? 'Склад порожній. Натисніть «Додати позицію», щоб внести перше майно.'
+            : 'Нічого не знайдено'}
+        </div>
+      ) : (
+        <div className="grid">
+          {list.map((it) => {
+            const moves = data.moves.filter((m) => m.id && m.id === it.id);
+            const open = !!hist[it.row];
+            return (
+              <div className="card stock-card" key={it.row}>
+                <div className="card-head">
+                  <div className="card-title">
+                    <div className="title-line">
+                      <span className="id-badge" title="Номер позиції">{it.id}</span>
+                      <input className="ghost big" type="text" defaultValue={it.name} placeholder="Найменування"
+                        onBlur={(e) => e.target.value.trim() && save(it.row, 'name', e.target.value.trim(), it.name)} />
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
+                    <div className="remainder-label">Залишок</div>
+                    <div className={'remainder ' + (it.remainder <= 0 ? 'low' : 'ok')}>{it.remainder}</div>
+                    {it.unit && <div className="remainder-unit">{it.unit}</div>}
+                  </div>
+                </div>
+
+                {(it.photo1 || it.photo2) && (
+                  <div className="stock-photos">
+                    {[it.photo1, it.photo2].filter(Boolean).map((p, i) => (
+                      <img key={i} src={photoSrc(p)} alt=""
+                        onClick={() => setPhoto({ src: p, title: it.name })}
+                        // недоступне фото не має лишати порожню рамку на картці
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        title="Натисніть, щоб збільшити" />
+                    ))}
+                  </div>
+                )}
+
+                <div className="card-body">
+                  <div className="drow">
+                    <span className="drow-k">Категорія</span>
+                    <span className="drow-v">
+                      <Combo value={it.category} options={data.categories} className="ghost"
+                        placeholder="—" onChange={(v) => save(it.row, 'category', v, it.category)} />
+                    </span>
+                  </div>
+                  <div className="drow">
+                    <span className="drow-k">Опис</span>
+                    <span className="drow-v">
+                      <textarea className="ghost" rows={2} defaultValue={it.description}
+                        placeholder="що це, що всередині"
+                        onBlur={(e) => save(it.row, 'description', e.target.value, it.description)} />
+                    </span>
+                  </div>
+                  <div className="drow">
+                    <span className="drow-k">Од. виміру</span>
+                    <span className="drow-v">
+                      <Combo value={it.unit} options={data.units} className="ghost"
+                        placeholder="шт." onChange={(v) => save(it.row, 'unit', v, it.unit)} />
+                    </span>
+                  </div>
+                  <div className="drow">
+                    <span className="drow-k">Місце</span>
+                    <span className="drow-v">
+                      <Combo value={it.place} options={data.places} className="ghost"
+                        placeholder="—" onChange={(v) => save(it.row, 'place', v, it.place)} />
+                    </span>
+                  </div>
+                  <div className="drow">
+                    <span className="drow-k">Прийнято</span>
+                    <span className="drow-v stock-ro">{it.received} {it.unit}</span>
+                  </div>
+                  <div className="drow">
+                    <span className="drow-k">Списано</span>
+                    <span className="drow-v stock-ro">{it.writtenOff} {it.unit}</span>
+                  </div>
+                  <div className="drow">
+                    <span className="drow-k">Примітки</span>
+                    <span className="drow-v">
+                      <textarea className="ghost" rows={1} defaultValue={it.notes} placeholder="—"
+                        onBlur={(e) => save(it.row, 'notes', e.target.value, it.notes)} />
+                    </span>
+                  </div>
+                </div>
+
+                <div className="stock-photo-fields">
+                  <PhotoField label="Фото 1" value={it.photo1} showPreview={false}
+                    onChange={(v) => save(it.row, 'photo1', v, it.photo1)} />
+                  <PhotoField label="Фото 2" value={it.photo2} showPreview={false}
+                    onChange={(v) => save(it.row, 'photo2', v, it.photo2)} />
+                </div>
+
+                <div className="actions">
+                  <button className="act-btn act-accept" onClick={() => setMove({ item: it, kind: 'receive' })}>
+                    Прийняти
+                  </button>
+                  <button className="act-btn act-issue" disabled={it.remainder <= 0}
+                    onClick={() => setMove({ item: it, kind: 'writeoff' })}>
+                    Списати
+                  </button>
+                  {moves.length > 0 && (
+                    <button className="act-btn" onClick={() => setHist((p) => ({ ...p, [it.row]: !p[it.row] }))}>
+                      Історія ({moves.length})
+                    </button>
+                  )}
+                  <button className="act-btn act-del" onClick={async () => {
+                    if (!confirm(`Видалити позицію «${it.name}»?`)) return;
+                    setState('видалення…');
+                    try {
+                      const d = await api('/api/stock', { method: 'DELETE', body: { row: it.row } });
+                      setData(d);
+                      setState('синхронізовано');
+                      toast(`Видалено «${it.name}»`, {
+                        type: 'warn',
+                        action: {
+                          label: 'Повернути',
+                          run: async () => {
+                            try {
+                              setData(await api('/api/stock', {
+                                method: 'POST',
+                                body: { action: 'restore', row: it.row, values: d.deleted },
+                              }));
+                              toast('Позицію повернено');
+                            } catch (e) {
+                              toast('Не вдалося повернути: ' + e.message, { type: 'err' });
+                            }
+                          },
+                        },
+                      });
+                    } catch (e) {
+                      setState('помилка: ' + e.message);
+                      toast('Не вдалося видалити: ' + e.message, { type: 'err' });
+                    }
+                  }}>Видалити</button>
+                </div>
+
+                {open && (
+                  <div className="history">
+                    {moves.slice().reverse().map((m, i) => (
+                      <div key={i} className="hist-row">
+                        <span className={m.action === 'Прийнято' ? 'hist-in' : 'hist-out'}>
+                          {m.action === 'Прийнято' ? '+' : '−'}{m.qty}
+                        </span>
+                        <span>{m.date}</span>
+                        {m.who && <span className="hist-who">{m.who}</span>}
+                        {m.note && <span className="hist-note">{m.note}</span>}
+                        <span className="hist-left">залишок {m.left}</span>
+                        {m.photo && (
+                          <img className="hist-photo" src={photoSrc(m.photo)} alt=""
+                            onClick={() => setPhoto({ src: m.photo, title: `${m.action}: ${m.name}` })} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {photo && (
+        <div className="overlay" style={{ background: 'rgba(0,0,0,.92)' }} onClick={() => setPhoto(null)}>
+          <div style={{ textAlign: 'center' }}>
+            <img src={photoSrc(photo.src)} alt=""
+              style={{ maxWidth: '96vw', maxHeight: '80vh', objectFit: 'contain' }} />
+            <div style={{ fontFamily: 'var(--mono)', marginTop: 12 }}>{photo.title}</div>
+            <button className="btn" style={{ marginTop: 12 }} onClick={() => setPhoto(null)}>Закрити</button>
+          </div>
+        </div>
+      )}
+
+      {move && (
+        <StockMoveModal
+          item={move.item}
+          kind={move.kind}
+          people={data.people}
+          onCancel={() => setMove(null)}
+          onSave={async (body) => {
+            const d = await api('/api/stock', {
+              method: 'POST',
+              body: { action: move.kind === 'receive' ? 'receive' : 'writeoff', row: move.item.row, ...body },
+            });
+            setData(d);
+            toast(`${move.kind === 'receive' ? 'Прийнято' : 'Списано'} ${body.qty} ${move.item.unit || 'шт.'} — ${move.item.name}`);
+            setMove(null);
+          }}
+        />
+      )}
+
+      {adding && (
+        <AddStockModal
+          data={data}
+          onCancel={() => setAdding(false)}
+          onSave={async (body) => {
+            const d = await api('/api/stock', { method: 'POST', body });
+            setData(d);
+            setAdding(false);
+            toast(`Додано ${d.id} — ${body.name}`);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function StockMoveModal({ item, kind, people, onCancel, onSave }) {
+  const isIn = kind === 'receive';
+  const [qty, setQty] = useState(1);
+  const [date, setDate] = useState(todayStr());
+  const [who, setWho] = useState('');
+  const [note, setNote] = useState('');
+  const [photo, setPhoto] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  return (
+    <Modal
+      title={(isIn ? 'Прийняти: ' : 'Списати: ') + item.name}
+      saveLabel={isIn ? 'Прийняти' : 'Списати'}
+      onCancel={onCancel}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        const n = Number(String(qty).replace(',', '.'));
+        if (!Number.isFinite(n) || n <= 0) return setErr('Вкажіть кількість більше 0');
+        if (!isIn && n > item.remainder) return setErr(`Залишок лише ${item.remainder} ${item.unit || 'шт.'}`);
+        setBusy(true);
+        setErr('');
+        try {
+          await onSave({ qty: n, date, who, note, photo });
+        } catch (e) {
+          setErr(e.message || 'Не вдалося зберегти');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <div className="ledger-stats" style={{ marginBottom: 4 }}>
+        <span>Прийнято: {item.received}</span>
+        <span>Списано: {item.writtenOff}</span>
+        <span>Залишок: {item.remainder}</span>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Кількість {item.unit && `(${item.unit})`}</label>
+        <input type="number" min="1" step="any" max={isIn ? undefined : item.remainder}
+          value={qty} onChange={(e) => setQty(e.target.value)} autoFocus />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Дата</label>
+        <input type="text" value={date} onChange={(e) => setDate(e.target.value)} placeholder="дд.мм.рррр" />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>{isIn ? 'Від кого' : 'Кому / підстава'}</label>
+        <Combo value={who} options={people} onChange={setWho} placeholder="позивний або підрозділ" />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Примітка</label>
+        <input type="text" value={note} onChange={(e) => setNote(e.target.value)} />
+      </div>
+      <PhotoField value={photo} onChange={setPhoto} />
+    </Modal>
+  );
+}
+
+function AddStockModal({ data, onCancel, onSave }) {
+  const [category, setCategory] = useState('');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [unit, setUnit] = useState('шт.');
+  const [received, setReceived] = useState(1);
+  const [place, setPlace] = useState('');
+  const [who, setWho] = useState('');
+  const [notes, setNotes] = useState('');
+  const [photo1, setPhoto1] = useState('');
+  const [photo2, setPhoto2] = useState('');
+  const [date, setDate] = useState(todayStr());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  return (
+    <Modal
+      title="Нова позиція складу"
+      saveLabel="Додати"
+      onCancel={onCancel}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        if (!name.trim()) return setErr('Вкажіть найменування');
+        const n = Number(String(received).replace(',', '.'));
+        if (!Number.isFinite(n) || n < 0) return setErr('Кількість має бути числом');
+        setBusy(true);
+        setErr('');
+        try {
+          await onSave({
+            category: category.trim(), name: name.trim(), description, unit: unit.trim(),
+            received: n, place: place.trim(), who: who.trim(), notes, photo1, photo2, date,
+          });
+        } catch (e) {
+          setErr(e.message || 'Не вдалося зберегти');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <div style={{ marginTop: 10 }}>
+        <label>Категорія</label>
+        <Combo value={category} options={data.categories} onChange={setCategory}
+          placeholder="човни, мотори, ящики…" />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Найменування</label>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Опис — що це або що всередині</label>
+        <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      <div className="two-col">
+        <div>
+          <label>Од. виміру</label>
+          <Combo value={unit} options={data.units} onChange={setUnit} placeholder="шт." />
+        </div>
+        <div>
+          <label>Прийнято, к-сть</label>
+          <input type="number" min="0" step="any" value={received}
+            onChange={(e) => setReceived(e.target.value)} />
+        </div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Місце на складі</label>
+        <Combo value={place} options={data.places} onChange={setPlace} placeholder="ангар, стелаж, причал…" />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Від кого прийнято</label>
+        <Combo value={who} options={data.people} onChange={setWho} placeholder="позивний або підрозділ" />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Дата приймання</label>
+        <input type="text" value={date} onChange={(e) => setDate(e.target.value)} placeholder="дд.мм.рррр" />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Примітки</label>
+        <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </div>
+      <PhotoField label="Фото 1" value={photo1} onChange={setPhoto1} />
+      <PhotoField label="Фото 2" value={photo2} onChange={setPhoto2} />
+    </Modal>
+  );
+}
+
 /* ---------- Склад ---------- */
 function WarehouseView({ setState, focusCode }) {
   const [data, setData] = useState(null);
@@ -1628,6 +2103,8 @@ function ItemPicker({ value, catalog, onPick, onText }) {
         onChange={(e) => { onText(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
+        // Escape має ховати підказки, а не закривати всю форму
+        onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}
       />
       {open && hits.length > 0 && (
         <div className="pick-list">

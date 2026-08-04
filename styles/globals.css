@@ -419,6 +419,50 @@ label {
   font: inherit; color: var(--muted); text-decoration: underline;
 }
 .pick-bound button:hover { color: var(--fg); }
+.pick-fresh { color: var(--green); font-family: var(--mono); font-size: .78rem; }
+
+/* ---------- Великий склад ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.stock-totals {
+  font-family: var(--mono); font-size: .76rem; color: var(--muted); margin-bottom: 10px;
+}
+.stock-totals b { color: var(--text); }
+.remainder-unit { font-size: .68rem; color: var(--muted); font-family: var(--mono); }
+.stock-ro { padding: 3px 6px; color: var(--text-dim); font-family: var(--mono); }
+.stock-photos { display: flex; gap: 6px; margin: 10px 0 4px; }
+.stock-photos img {
+  flex: 1 1 0; min-width: 0; height: 96px; object-fit: cover; cursor: zoom-in;
+  border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--panel-2);
+}
+.stock-photo-fields { display: flex; gap: 10px; }
+.stock-photo-fields > * { flex: 1 1 0; min-width: 0; }
+.two-col { display: flex; gap: 10px; margin-top: 10px; }
+.two-col > * { flex: 1 1 0; min-width: 0; }
+
+/* Історія рухів позиції */
+.hist-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 4px 0; border-bottom: 1px solid var(--line-soft);
+}
+.hist-row:last-child { border-bottom: 0; }
+.hist-in { color: var(--green); font-weight: 700; }
+.hist-out { color: var(--red); font-weight: 700; }
+.hist-who { color: var(--text); }
+.hist-note { color: var(--muted); font-style: italic; }
+.hist-left { margin-left: auto; color: var(--muted); }
+.hist-photo {
+  width: 34px; height: 34px; object-fit: cover; border-radius: 4px;
+  border: 1px solid var(--line); cursor: zoom-in;
+}
+
+/* Багаторядкові поля на картці — довгий опис має бути видно повністю */
+textarea.ghost {
+  width: 100%; background: transparent; border: 1px solid transparent;
+  color: var(--text); padding: 3px 6px; border-radius: var(--r-sm);
+  font-family: var(--sans); font-size: 0.92rem; resize: vertical; min-height: 30px;
+}
+textarea.ghost:hover { border-color: var(--line-soft); background: var(--panel-2); }
+textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); outline: none; }
 .act-hint {
   margin-top: 12px; font-size: 0.78rem; color: var(--muted);
   font-family: var(--mono);
@@ -510,6 +554,8 @@ label {
   }
   /* на вузькому екрані статус переїжджає під назву, а не тисне її */
   .card-head { flex-wrap: wrap; }
+  /* залишок вузький — його переносити нікуди не треба */
+  .stock-card .card-head { flex-wrap: nowrap; }
   .pill { max-width: 100%; }
   .tabs::-webkit-scrollbar { display: none; }
   .toolbar { gap: 6px; }
