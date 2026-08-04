@@ -126,6 +126,58 @@ input:focus, select:focus, textarea:focus {
 }
 .search-clear:hover { color: var(--text); background: var(--line); }
 
+/* ---------- Звірка ---------- */
+.audit-bar {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--bg); padding: 8px 0 10px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.audit-bar-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.audit-bar-top .act-btn { margin-left: auto; }
+.audit-progress { font-family: var(--mono); font-size: .78rem; color: var(--text-dim); }
+.audit-track {
+  height: 4px; background: var(--panel-2); border-radius: 2px;
+  overflow: hidden; margin: 8px 0 6px;
+}
+.audit-fill { height: 100%; background: var(--green); transition: width .2s; }
+.audit-nums {
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+  font-family: var(--mono); font-size: .74rem; color: var(--muted);
+}
+.audit-nums b { color: var(--text); }
+.a-ok b { color: var(--green); }
+.a-miss b { color: var(--red); }
+.a-diff b { color: var(--amber); }
+
+.audit-list { display: flex; flex-direction: column; gap: 6px; }
+.audit-item {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 10px 12px;
+}
+.audit-item.marked { opacity: .6; border-color: var(--line); }
+.audit-what { flex: 1 1 200px; min-width: 0; }
+.audit-name { font-weight: 600; overflow-wrap: anywhere; }
+.audit-meta {
+  display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px;
+  font-size: .76rem; color: var(--muted);
+}
+.audit-ident { font-family: var(--mono); color: var(--amber); }
+.audit-btns, .audit-qty { display: flex; gap: 6px; flex: 0 0 auto; }
+.audit-btns .act-btn { min-width: 78px; }
+.audit-qty input { width: 90px; }
+.act-btn.on { background: currentColor; }
+.act-accept.on { background: var(--green-dim); border-color: var(--green); }
+.act-del.on { background: var(--red-dim); border-color: var(--red); }
+
+@media (max-width: 560px) {
+  .audit-item { gap: 8px; }
+  .audit-btns { flex: 1 1 100%; }
+  .audit-btns .act-btn { flex: 1; }
+  .audit-qty { flex: 1 1 100%; }
+  .audit-qty input { flex: 1; width: auto; }
+}
+
 /* Хто зараз у системі */
 .who {
   flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
