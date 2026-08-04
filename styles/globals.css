@@ -165,6 +165,65 @@ input:focus, select:focus, textarea:focus {
 }
 .home-cols .section { margin-bottom: 0; }
 
+/* ---------- Нижня навігація (тільки телефон) ---------- */
+.bnav { display: none; }
+.sheet-overlay { align-items: flex-end; padding: 0; }
+.sheet {
+  width: 100%; background: var(--panel); border-top: 1px solid var(--line);
+  border-radius: var(--r) var(--r) 0 0; padding: 10px 16px
+    max(16px, calc(env(safe-area-inset-bottom) + 8px));
+  max-height: 80vh; overflow-y: auto;
+}
+.sheet-grab {
+  width: 40px; height: 4px; border-radius: 2px; background: var(--line);
+  margin: 2px auto 12px;
+}
+.sheet-title {
+  font-family: var(--mono); font-size: .7rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+}
+.sheet-list { display: flex; flex-direction: column; gap: 4px; }
+.sheet-i {
+  text-align: left; background: var(--panel-2); border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm); color: var(--text-dim);
+  padding: 13px 14px; font: inherit; cursor: pointer;
+}
+.sheet-i.on { border-color: var(--amber); color: var(--amber); font-weight: 600; }
+
+@media (max-width: 760px) {
+  /* верхній ряд вкладок ховаємо: замість нього нижня панель */
+  .tabs { display: none; }
+  body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .bnav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    display: flex; align-items: stretch;
+    background: var(--panel); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .bnav-b {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    background: none; border: 0; cursor: pointer; padding: 9px 2px 8px;
+    color: var(--muted); font-size: .66rem; font-family: var(--sans);
+  }
+  .bnav-b.on { color: var(--amber); }
+  .bnav-b.accent { color: var(--green); }
+  .bnav-b.accent .ico { transform: scale(1.15); }
+  /* панель звірки не має ховатись під нижньою навігацією */
+  .audit-list, .grid, .log-list, .table-wrap { margin-bottom: 6px; }
+}
+
+/* Теги під назвою: облік, тип, місце — без повторів зі статусом */
+.card-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.tag {
+  font-family: var(--mono); font-size: .68rem; letter-spacing: .03em;
+  padding: 3px 8px; border-radius: 20px;
+  border: 1px solid var(--line); color: var(--muted); background: var(--panel-2);
+  white-space: nowrap;
+}
+.tag-acc { color: var(--amber); border-color: var(--amber-dim); }
+.tag-type { color: var(--text-dim); }
+.tag-where { color: var(--blue); border-color: var(--blue-dim); }
+
 /* ---------- Сканер QR ---------- */
 .scan-open { gap: 6px; }
 .scan-btn { display: inline-flex; align-items: center; gap: 6px; }
