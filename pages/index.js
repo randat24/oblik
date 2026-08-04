@@ -661,6 +661,14 @@ function SearchView({ setState, onOpen }) {
                 <span className="badge">{r.category || 'без категорії'}</span>
                 <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--amber)' }}>{r.id}</span>
                 <span style={{ fontWeight: 600 }}>{r.name}</span>
+                {r.accounting && (
+                  <span style={{
+                    fontFamily: 'var(--mono)', fontSize: '.74rem', fontWeight: 700,
+                    color: r.accounting === 'Облікове' ? 'var(--green)' : 'var(--gray)',
+                  }}>
+                    {r.accounting}
+                  </span>
+                )}
                 <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: '.8rem', fontWeight: 700, color: r.remainder > 0 ? 'var(--green)' : 'var(--red)' }}>
                   залишок {r.remainder} {r.unit}
                 </span>
@@ -1398,6 +1406,7 @@ function StockView({ setState, focusId, onClearFocus }) {
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState(null);
+  const [acct, setAcct] = useState(null);
   const [adding, setAdding] = useState(false);
   const [move, setMove] = useState(null); // { item, kind: 'receive' | 'writeoff' }
   const [hist, setHist] = useState({});
@@ -1439,6 +1448,8 @@ function StockView({ setState, focusId, onClearFocus }) {
   let list = data.items;
   if (focusId) list = list.filter((it) => it.id === focusId);
   if (cat) list = list.filter((it) => it.category === cat);
+  // «не вказано» — окремий фільтр, інакше такі позиції легко загубити
+  if (acct) list = list.filter((it) => (it.accounting || '—') === acct);
   if (q.trim()) {
     const s = q.trim().toLowerCase();
     list = list.filter((it) =>
@@ -1447,6 +1458,8 @@ function StockView({ setState, focusId, onClearFocus }) {
   }
 
   const sum = (pick) => list.reduce((a, it) => a + (Number(pick(it)) || 0), 0);
+  const left = (kind) =>
+    list.filter((it) => (it.accounting || '') === kind).reduce((a, it) => a + it.remainder, 0);
 
   return (
     <>
@@ -1462,6 +1475,18 @@ function StockView({ setState, focusId, onClearFocus }) {
         <div className="spacer" />
         <button className="btn btn-accept" onClick={() => setAdding(true)}>+ Додати позицію</button>
       </div>
+
+      {data.items.length > 0 && (
+        <div className="chips">
+          {[...(data.accountingOptions || []), '—'].map((a) => (
+            <div key={a} className={'chip chip-acct' + (acct === a ? ' on' : '')}
+              title={a === '—' ? 'Облік не вказано' : ''}
+              onClick={() => setAcct(acct === a ? null : a)}>
+              {a === '—' ? 'Облік не вказано' : a}
+            </div>
+          ))}
+        </div>
+      )}
 
       {data.categories.length > 0 && (
         <div className="chips">
@@ -1480,6 +1505,10 @@ function StockView({ setState, focusId, onClearFocus }) {
           ['Прийнято', sum((it) => it.received)],
           ['Списано', sum((it) => it.writtenOff)],
           ['Залишок', sum((it) => it.remainder)],
+          // головне питання складу: скільки з цього числиться за документами
+          ['За документами', left('Облікове')],
+          ['Поза обліком', left('Необлікове')],
+          ['Облік не вказано', left('') || null],
         ]}
         of={list.length !== data.items.length ? data.items.length : undefined}
       />
@@ -1504,6 +1533,15 @@ function StockView({ setState, focusId, onClearFocus }) {
                       <input className="ghost big" type="text" defaultValue={it.name} placeholder="Найменування"
                         onBlur={(e) => e.target.value.trim() && save(it.row, 'name', e.target.value.trim(), it.name)} />
                     </div>
+                    <select
+                      className={'pill acct-' + (it.accounting === 'Облікове' ? 'on' : it.accounting ? 'off' : 'none')}
+                      value={it.accounting}
+                      title="Чи числиться за документами"
+                      onChange={(e) => save(it.row, 'accounting', e.target.value, it.accounting)}
+                    >
+                      <option value="">Облік не вказано</option>
+                      {(data.accountingOptions || []).map((a) => <option key={a} value={a}>{a}</option>)}
+                    </select>
                   </div>
                   <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
                     <div className="remainder-label">Залишок</div>
@@ -1752,6 +1790,7 @@ function StockMoveModal({ item, kind, people, onCancel, onSave }) {
 }
 
 function AddStockModal({ data, onCancel, onSave }) {
+  const [accounting, setAccounting] = useState((data.accountingOptions || [])[0] || '');
   const [category, setCategory] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -1783,6 +1822,7 @@ function AddStockModal({ data, onCancel, onSave }) {
           await onSave({
             category: category.trim(), name: name.trim(), description, unit: unit.trim(),
             received: n, place: place.trim(), who: who.trim(), notes, photo1, photo2, date,
+            accounting,
           });
         } catch (e) {
           setErr(e.message || 'Не вдалося зберегти');
@@ -1791,6 +1831,13 @@ function AddStockModal({ data, onCancel, onSave }) {
         }
       }}
     >
+      <div style={{ marginTop: 10 }}>
+        <label>Облік — чи числиться за документами</label>
+        <select value={accounting} onChange={(e) => setAccounting(e.target.value)}>
+          {(data.accountingOptions || []).map((a) => <option key={a} value={a}>{a}</option>)}
+          <option value="">Поки невідомо</option>
+        </select>
+      </div>
       <div style={{ marginTop: 10 }}>
         <label>Категорія</label>
         <Combo value={category} options={data.categories} onChange={setCategory}

@@ -433,6 +433,14 @@ label {
 
 /* ---------- Великий склад ---------- */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+/* Облік: чи числиться річ за документами */
+.chip-acct.on { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+.pill.acct-on { color: var(--green); }
+.pill.acct-off { color: var(--gray); }
+.pill.acct-none { color: var(--muted); border-style: dashed; }
+.stock-card .card-title { min-width: 0; }
+.stock-card .pill { margin-top: 6px; max-width: 100%; }
 .remainder-unit { font-size: .68rem; color: var(--muted); font-family: var(--mono); }
 .stock-ro { padding: 3px 6px; color: var(--text-dim); font-family: var(--mono); }
 .stock-photos { display: flex; gap: 6px; margin: 10px 0 4px; }
