@@ -767,6 +767,27 @@ function SearchView({ setState, onOpen, initialQuery, autoAct }) {
           .join(' ').toLowerCase().includes(query))
     : allActs.slice(0, 20);
 
+  // у підсумку показуємо тільки те, що справді знайшлося: нулі нічого не кажуть,
+  // а от у яких листах знайшлося — саме те, що потрібно бачити одразу
+  const hits = groups.flatMap((g) => g.data);
+  const stockHits = res?.stock?.length || 0;
+  const found = hits.length + stockHits + acts.length;
+  let totalsParts = [];
+  if (res) {
+    // «нічого не знайдено» вже написано нижче — дублювати нулем не треба
+    if (found) {
+      totalsParts = [
+        ['Знайдено', found],
+        ...countBy(hits, (r) => r.sheet),
+        ...(stockHits ? [['Склад Рибаківки', stockHits]] : []),
+        ...(acts.length ? [['Акти', acts.length]] : []),
+      ];
+    }
+  } else if (allActs.length) {
+    totalsParts = [['Останні акти', acts.length]];
+    if (allActs.length !== acts.length) totalsParts.push(['Усього', allActs.length]);
+  }
+
   return (
     <>
       <div className="toolbar">
@@ -776,17 +797,7 @@ function SearchView({ setState, onOpen, initialQuery, autoAct }) {
         <button className="btn" onClick={() => openAct('issue')}>Видати</button>
       </div>
 
-      <Totals
-        parts={
-          res
-            ? [
-                ['Знайдено', groups.reduce((a, g) => a + g.data.length, 0)],
-                ['Склад Рибаківки', res.stock?.length || 0],
-                ['Актів', acts.length],
-              ]
-            : [['Актів усього', allActs.length]]
-        }
-      />
+      <Totals parts={totalsParts} />
 
       {q.trim().length > 0 && q.trim().length < 2 && (
         <div className="empty">Введіть щонайменше 2 символи</div>
