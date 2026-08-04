@@ -514,6 +514,8 @@ label {
   .tabs::-webkit-scrollbar { display: none; }
   .toolbar { gap: 6px; }
   .search-wrap { flex: 1 1 100%; }
+  /* поле пошуку і так займає рядок — розпірка лише крала б місце в кнопок */
+  .toolbar .spacer { display: none; }
   .btn { flex: 1; }
   .act-btn { min-width: 0; padding: 10px 8px; font-size: 0.78rem; }
   .toast-host { left: 12px; right: 12px; bottom: 12px; max-width: none; }

@@ -367,12 +367,6 @@ export default function Home() {
             </div>
           ))}
           <div
-            className={'tab' + (view.kind === 'acts' ? ' active' : '')}
-            onClick={() => setView({ kind: 'acts', name: null })}
-          >
-            Приймання
-          </div>
-          <div
             className={'tab' + (view.kind === 'log' ? ' active' : '')}
             onClick={() => setView({ kind: 'log', name: null })}
           >
@@ -386,7 +380,6 @@ export default function Home() {
         )}
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
         {view.kind === 'warehouse' && <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} />}
-        {view.kind === 'acts' && <ActsView setState={setState} />}
         {view.kind === 'log' && <LogView setState={setState} />}
       </div>
       <ToastHost toasts={toasts} onClose={close} />
@@ -394,30 +387,40 @@ export default function Home() {
   );
 }
 
-/* ---------- Пошук ---------- */
+/* ---------- Пошук і акти на одній вкладці ---------- */
 function SearchView({ setState, onOpen }) {
   const [q, setQ] = useState('');
   const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
-  const [meta, setMeta] = useState(null);
-  const [act, setAct] = useState(null); // {kind, sheet, row}
+  const [meta, setMeta] = useState(null); // акти + категорії + стани
+  const [act, setAct] = useState(null); // {kind, sheet?, row?}
+  const [photo, setPhoto] = useState(null);
   const reqId = useRef(0);
   const toast = useToast();
 
-  // довідники для акта тягнемо лише тоді, коли справді натиснули «Прийняти»/«Видати»
-  const openAct = async (kind, r) => {
+  const loadMeta = useCallback(async () => {
     try {
-      const m = meta || (await api('/api/act'));
+      const m = await api('/api/act');
       setMeta(m);
-      if (!m.sheets.includes(r.sheet)) {
-        setState(`акт недоступний для листа «${r.sheet}»`);
-        return;
-      }
-      setAct({ kind, sheet: r.sheet, row: r.row });
+      return m;
     } catch (e) {
       setState('помилка: ' + e.message);
+      return null;
     }
+  }, [setState]);
+
+  useEffect(() => { loadMeta(); }, [loadMeta]);
+
+  // без результату — порожня форма; з результатом — одразу з тією річчю
+  const openAct = async (kind, r) => {
+    const m = meta || (await loadMeta());
+    if (!m) return;
+    if (r && !m.sheets.includes(r.sheet)) {
+      setState(`акт недоступний для листа «${r.sheet}»`);
+      return;
+    }
+    setAct(r ? { kind, sheet: r.sheet, row: r.row } : { kind });
   };
 
   useEffect(() => {
@@ -456,16 +459,30 @@ function SearchView({ setState, onOpen }) {
       ].filter((g) => g.data.length)
     : [];
 
+  // той самий рядок пошуку відсіює й акти
+  const query = q.trim().toLowerCase();
+  const allActs = meta?.acts || [];
+  const acts = query.length >= 2
+    ? allActs.filter((a) =>
+        [a.titles, a.from, a.to, a.sheet, a.note, a.kind, a.condition]
+          .join(' ').toLowerCase().includes(query))
+    : allActs.slice(0, 20);
+
   return (
     <>
       <div className="toolbar">
-        <SearchBox value={q} onChange={setQ} placeholder="S/N, позивний, модель, місце, примітка..." autoFocus />
+        <SearchBox value={q} onChange={setQ} placeholder="S/N, позивний, модель, акт, місце..." autoFocus />
+        <div className="spacer" />
+        <button className="btn btn-accept" onClick={() => openAct('accept')}>Прийняти</button>
+        <button className="btn" onClick={() => openAct('issue')}>Видати</button>
       </div>
 
       {q.trim().length > 0 && q.trim().length < 2 && (
         <div className="empty">Введіть щонайменше 2 символи</div>
       )}
-      {!busy && res && groups.length === 0 && <div className="empty">Нічого не знайдено</div>}
+      {!busy && res && groups.length === 0 && acts.length === 0 && (
+        <div className="empty">Нічого не знайдено</div>
+      )}
 
       {groups.map((g) => (
         <div className="section" key={g.title}>
@@ -513,6 +530,26 @@ function SearchView({ setState, onOpen }) {
         </div>
       ))}
 
+      {acts.length > 0 && (
+        <div className="section">
+          <h3 className="sec">
+            {query.length >= 2 ? 'Акти' : 'Останні акти'}
+            <span className="count">{acts.length}</span>
+          </h3>
+          <div className="log-list">
+            {acts.map((a, i) => <ActRow key={i} act={a} onPhoto={setPhoto} />)}
+          </div>
+        </div>
+      )}
+
+      {!res && allActs.length === 0 && meta && (
+        <div className="empty">
+          Знайдіть річ у пошуку або натисніть «Прийняти», щоб оформити перший акт.
+        </div>
+      )}
+
+      {photo && <PhotoLightbox act={photo} onClose={() => setPhoto(null)} />}
+
       {act && meta && (
         <ActModal
           kind={act.kind}
@@ -526,10 +563,57 @@ function SearchView({ setState, onOpen }) {
             setAct(null);
             toast(`${act.kind === 'accept' ? 'Прийнято' : 'Видано'}: ${d.count} поз.`);
             setTick((t) => t + 1);
+            loadMeta();
           }}
         />
       )}
     </>
+  );
+}
+
+/** Рядок акта — і в списку останніх, і в результатах пошуку */
+function ActRow({ act: a, onPhoto }) {
+  return (
+    <div className="log-row act-row">
+      <div className="log-when">
+        <span>{a.date}</span>
+        <span className="log-time">{a.time}</span>
+      </div>
+      <div className="log-what">
+        <div className="log-head">
+          <span className={'log-action ' + (a.kind === 'Прийнято' ? 'log-add' : 'log-writeoff')}>
+            {a.kind}
+          </span>
+          <span className="badge">{a.sheet}</span>
+          <span className="log-target">{a.count} поз.</span>
+          {a.condition && <span className="log-field">{a.condition}</span>}
+        </div>
+        <div className="act-titles">{a.titles}</div>
+        <div className="act-people">
+          <span>{a.from}</span>
+          <span className="log-arrow">→</span>
+          <span>{a.to}</span>
+          {a.note && <span className="act-note">{a.note}</span>}
+        </div>
+      </div>
+      {a.photo && (
+        <img className="act-photo" src={photoSrc(a.photo)} alt=""
+          onClick={() => onPhoto(a)} title="Натисніть, щоб збільшити" />
+      )}
+    </div>
+  );
+}
+
+function PhotoLightbox({ act, onClose }) {
+  return (
+    <div className="overlay" style={{ background: 'rgba(0,0,0,.92)' }} onClick={onClose}>
+      <div style={{ textAlign: 'center' }}>
+        <img src={photoSrc(act.photo)} alt=""
+          style={{ maxWidth: '96vw', maxHeight: '80vh', objectFit: 'contain' }} />
+        <div style={{ fontFamily: 'var(--mono)', marginTop: 12 }}>{act.kind}: {act.titles}</div>
+        <button className="btn" style={{ marginTop: 12 }} onClick={onClose}>Закрити</button>
+      </div>
+    </div>
   );
 }
 
@@ -1521,111 +1605,7 @@ function LogView({ setState }) {
   );
 }
 
-/* ---------- Приймання та видача за актом ---------- */
-function ActsView({ setState }) {
-  const [data, setData] = useState(null);
-  const [q, setQ] = useState('');
-  const [form, setForm] = useState(null); // 'accept' | 'issue'
-  const [photo, setPhoto] = useState(null);
-  const toast = useToast();
-
-  const load = useCallback(async () => {
-    setState('завантаження…');
-    try {
-      const d = await api('/api/act');
-      setData(d);
-      setState('синхронізовано');
-    } catch (e) {
-      setState('помилка: ' + e.message);
-    }
-  }, [setState]);
-
-  useEffect(() => { load(); }, [load]);
-  if (!data) return <div className="loading">Завантаження…</div>;
-
-  const list = q.trim()
-    ? data.acts.filter((a) =>
-        [a.titles, a.from, a.to, a.sheet, a.note, a.kind].join(' ')
-          .toLowerCase().includes(q.trim().toLowerCase()))
-    : data.acts;
-
-  return (
-    <>
-      <div className="toolbar">
-        <SearchBox value={q} onChange={setQ} placeholder="Пошук за актами: що, від кого, кому..." />
-        <div className="spacer" />
-        <button className="btn btn-accept" onClick={() => setForm('accept')}>Прийняти майно</button>
-        <button className="btn" onClick={() => setForm('issue')}>Видати майно</button>
-      </div>
-
-      {list.length === 0 ? (
-        <div className="empty">
-          {data.acts.length === 0
-            ? 'Актів ще немає. Натисніть «Прийняти майно», щоб оформити перший.'
-            : 'Нічого не знайдено'}
-        </div>
-      ) : (
-        <div className="log-list">
-          {list.map((a, i) => (
-            <div className="log-row act-row" key={i}>
-              <div className="log-when">
-                <span>{a.date}</span>
-                <span className="log-time">{a.time}</span>
-              </div>
-              <div className="log-what">
-                <div className="log-head">
-                  <span className={'log-action ' + (a.kind === 'Прийнято' ? 'log-add' : 'log-writeoff')}>
-                    {a.kind}
-                  </span>
-                  <span className="badge">{a.sheet}</span>
-                  <span className="log-target">{a.count} поз.</span>
-                  {a.condition && <span className="log-field">{a.condition}</span>}
-                </div>
-                <div className="act-titles">{a.titles}</div>
-                <div className="act-people">
-                  <span>{a.from}</span>
-                  <span className="log-arrow">→</span>
-                  <span>{a.to}</span>
-                  {a.note && <span className="act-note">{a.note}</span>}
-                </div>
-              </div>
-              {a.photo && (
-                <img className="act-photo" src={photoSrc(a.photo)} alt=""
-                  onClick={() => setPhoto(a)} title="Натисніть, щоб збільшити" />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {photo && (
-        <div className="overlay" style={{ background: 'rgba(0,0,0,.92)' }} onClick={() => setPhoto(null)}>
-          <div style={{ textAlign: 'center' }}>
-            <img src={photoSrc(photo.photo)} alt="" style={{ maxWidth: '96vw', maxHeight: '80vh', objectFit: 'contain' }} />
-            <div style={{ fontFamily: 'var(--mono)', marginTop: 12 }}>{photo.kind}: {photo.titles}</div>
-            <button className="btn" style={{ marginTop: 12 }} onClick={() => setPhoto(null)}>Закрити</button>
-          </div>
-        </div>
-      )}
-
-      {form && (
-        <ActModal
-          kind={form}
-          sheets={data.sheets}
-          conditions={data.conditions}
-          onCancel={() => setForm(null)}
-          onSave={async (body) => {
-            const d = await api('/api/act', { method: 'POST', body: { ...body, kind: form } });
-            setForm(null);
-            toast(`${form === 'accept' ? 'Прийнято' : 'Видано'}: ${d.count} поз.`);
-            load();
-          }}
-        />
-      )}
-    </>
-  );
-}
-
+/* ---------- Форма приймання та видачі за актом ---------- */
 const emptyItem = () => ({ title: '', number: '', serial: '' });
 
 /** Поле назви з підказками з обраного листа: вибрав річ — акт оновить її рядок */
