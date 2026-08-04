@@ -474,8 +474,9 @@ label {
   border-radius: var(--r-sm); padding: 8px; margin-top: 6px;
 }
 .act-item input { width: 100%; }
-.act-item-sub { display: flex; gap: 6px; margin-top: 6px; }
-.act-item-sub input { flex: 1; min-width: 0; }
+/* полів у різних листів різна кількість, тож ряд переноситься по два в рядок */
+.act-item-sub { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.act-item-sub input { flex: 1 1 45%; min-width: 0; }
 .act-item-sub .act-btn { flex: 0 0 auto; min-width: 0; padding: 8px 12px; }
 .act-item-bound { border-color: var(--blue); }
 .act-accept { color: var(--green); border-color: var(--green-dim); }
