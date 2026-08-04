@@ -240,6 +240,146 @@ function PhotoField({ value, onChange, showPreview = true, label = 'Фото' })
   );
 }
 
+/* ---------- Командна панель ---------- */
+function CommandPalette({ commands, onClose }) {
+  const [q, setQ] = useState('');
+  const [sel, setSel] = useState(0);
+  const listRef = useRef(null);
+
+  const s = q.trim().toLowerCase();
+  const cmds = commands.filter((c) => !c.query);
+  const searchCmd = commands.find((c) => c.query);
+  const hits = s ? cmds.filter((c) => c.label.toLowerCase().includes(s)) : cmds;
+  // «Шукати» йде останнім: коли назва команди збіглася, Enter має спрацювати саме на ній
+  const list = s && searchCmd
+    ? [...hits, { ...searchCmd, label: `Шукати: «${q.trim()}»`, run: () => searchCmd.run(q.trim()) }]
+    : hits;
+
+  useEffect(() => { setSel(0); }, [q]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); return; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSel((i) => Math.min(i + 1, list.length - 1)); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSel((i) => Math.max(i - 1, 0)); }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const cmd = list[sel];
+        if (cmd) { cmd.run(); onClose(); }
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [list, sel, onClose]);
+
+  useEffect(() => {
+    listRef.current?.querySelector('.cmd-opt.on')?.scrollIntoView({ block: 'nearest' });
+  }, [sel]);
+
+  return (
+    <div className="overlay cmd-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="cmd">
+        <input
+          type="text"
+          className="cmd-input"
+          placeholder="Введіть команду або назву листа..."
+          value={q}
+          autoFocus
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <div className="cmd-list" ref={listRef}>
+          {list.length === 0 && <div className="cmd-empty">Нічого не знайдено</div>}
+          {list.map((c, i) => (
+            <div
+              key={c.label}
+              className={'cmd-opt' + (i === sel ? ' on' : '')}
+              onMouseEnter={() => setSel(i)}
+              onMouseDown={(e) => { e.preventDefault(); c.run(); onClose(); }}
+            >
+              <span>{c.label}</span>
+              {c.hint && <span className="cmd-hint">{c.hint}</span>}
+            </div>
+          ))}
+        </div>
+        <div className="cmd-foot">
+          <span>↑↓ навігація</span><span>Enter вибрати</span><span>Esc закрити</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Картки або таблиця ---------- */
+const MODE_KEY = 'oblik-view-mode';
+
+/** Вибір зберігаємо, щоб не перемикати його щоразу заново */
+function useViewMode() {
+  const [mode, setMode] = useState('cards');
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(MODE_KEY);
+      if (saved === 'table' || saved === 'cards') setMode(saved);
+    } catch {}
+  }, []);
+  const change = useCallback((m) => {
+    setMode(m);
+    try { localStorage.setItem(MODE_KEY, m); } catch {}
+  }, []);
+  return [mode, change];
+}
+
+function ViewToggle({ mode, onChange }) {
+  return (
+    <div className="vtoggle" role="group" aria-label="Вигляд списку">
+      <button className={mode === 'cards' ? 'on' : ''} onClick={() => onChange('cards')}>Картки</button>
+      <button className={mode === 'table' ? 'on' : ''} onClick={() => onChange('table')}>Таблиця</button>
+    </div>
+  );
+}
+
+/** Щільна таблиця: колонки задає той, хто її викликає */
+function DataTable({ columns, rows, onPick, pickLabel = 'Картка' }) {
+  return (
+    <div className="table-wrap">
+      <table className="data-table">
+        <thead>
+          <tr>
+            {columns.map((c) => <th key={c.key} className={c.cls}>{c.title}</th>)}
+            {onPick && <th />}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key} onClick={onPick ? () => onPick(r.item) : undefined}>
+              {columns.map((c) => {
+                const v = c.render(r.item);
+                return (
+                  <td
+                    key={c.key}
+                    className={c.cls}
+                    style={c.style?.(r.item)}
+                    // клітинка в один рядок, тож довге значення видно у підказці
+                    title={typeof v === 'string' || typeof v === 'number' ? String(v) : undefined}
+                  >
+                    {v}
+                  </td>
+                );
+              })}
+              {onPick && (
+                <td className="col-act">
+                  <button className="act-btn" onClick={(e) => { e.stopPropagation(); onPick(r.item); }}>
+                    {pickLabel}
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /* ---------- Підсумковий рядок ---------- */
 /**
  * Числа під фільтрами: скільки видно зараз і скільки всього.
@@ -394,6 +534,7 @@ export default function Home({ startView }) {
   const [sheets, setSheets] = useState([]);
   const [view, setView] = useState(startView || { kind: 'search', name: null });
   const [state, setState] = useState('');
+  const [palette, setPalette] = useState(false);
   const { toasts, push, close } = useToasts();
 
   // параметри адреси читаємо один раз до того, як почнемо її переписувати
@@ -408,6 +549,18 @@ export default function Home({ startView }) {
     if (startView?.kind !== 'stock' || !params.id) return;
     setView({ ...startView, id: params.id });
   }, [startView, params.id]);
+
+  // ⌘K / Ctrl+K — командна панель
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K' || e.key === 'л' || e.key === 'Л')) {
+        e.preventDefault();
+        setPalette((p) => !p);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // адреса має відповідати вкладці, щоб склад можна було надіслати посиланням
   useEffect(() => {
@@ -438,6 +591,20 @@ export default function Home({ startView }) {
     if (wh) setView({ kind: 'warehouse', name: wh.name, box: params.box });
   }, [sheets, params.box]);
 
+  const commands = [
+    { label: 'Пошук і акти', hint: 'екран', run: () => setView({ kind: 'search', name: null }) },
+    { label: 'Прийняти майно', hint: 'дія', run: () => setView({ kind: 'search', name: null, act: 'accept' }) },
+    { label: 'Видати майно', hint: 'дія', run: () => setView({ kind: 'search', name: null, act: 'issue' }) },
+    ...sheets.map((s) => ({
+      label: 'Відкрити лист: ' + s.name,
+      hint: 'лист',
+      run: () => setView({ kind: s.kind, name: s.name }),
+    })),
+    { label: 'Журнал змін', hint: 'екран', run: () => setView({ kind: 'log', name: null }) },
+    // цей рядок не показується сам по собі — він стає «Шукати: …», коли є текст
+    { query: true, label: 'Шукати', hint: 'пошук', run: (q) => setView({ kind: 'search', name: null, q }) },
+  ];
+
   if (authed === null) return <div className="loading">Завантаження…</div>;
   if (!authed) return <Login onOk={() => setAuthed(true)} />;
 
@@ -450,6 +617,9 @@ export default function Home({ startView }) {
             {state}
             {BUILD && <span className="build" title="Версія збірки">{BUILD}</span>}
           </div>
+          <button className="cmd-open" onClick={() => setPalette(true)} title="Пошук та дії">
+            Пошук та дії<kbd>⌘K</kbd>
+          </button>
         </header>
 
         <div className="tabs">
@@ -476,7 +646,15 @@ export default function Home({ startView }) {
           </div>
         </div>
 
-        {view.kind === 'search' && <SearchView sheets={sheets} setState={setState} onOpen={setView} />}
+        {view.kind === 'search' && (
+          <SearchView
+            key={(view.q || '') + (view.act || '')}
+            setState={setState}
+            onOpen={setView}
+            initialQuery={view.q}
+            autoAct={view.act}
+          />
+        )}
         {view.kind === 'items' && (
           <ItemsView key={view.name + ':' + (view.row || '')} name={view.name} setState={setState} focusRow={view.row} />
         )}
@@ -492,14 +670,15 @@ export default function Home({ startView }) {
         {view.kind === 'warehouse' && <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} />}
         {view.kind === 'log' && <LogView setState={setState} />}
       </div>
+      {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       <ToastHost toasts={toasts} onClose={close} />
     </ToastCtx.Provider>
   );
 }
 
 /* ---------- Пошук і акти на одній вкладці ---------- */
-function SearchView({ setState, onOpen }) {
-  const [q, setQ] = useState('');
+function SearchView({ setState, onOpen, initialQuery, autoAct }) {
+  const [q, setQ] = useState(initialQuery || '');
   const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
@@ -521,6 +700,14 @@ function SearchView({ setState, onOpen }) {
   }, [setState]);
 
   useEffect(() => { loadMeta(); }, [loadMeta]);
+
+  // «Прийняти майно» з командної панелі одразу відкриває форму
+  const acted = useRef(false);
+  useEffect(() => {
+    if (!autoAct || acted.current || !meta) return;
+    acted.current = true;
+    setAct({ kind: autoAct });
+  }, [autoAct, meta]);
 
   // без результату — порожня форма; з результатом — одразу з тією річчю
   const openAct = async (kind, r) => {
@@ -784,6 +971,13 @@ function bodyCols(headers, cols, snIdx, idIdx) {
     .filter((i) => i !== 0 && i !== snIdx && i !== idIdx && i !== cols.status);
 }
 
+/** Плавно підводить до потрібного рядка після перемикання на картки */
+function scrollToRow(row) {
+  setTimeout(() => {
+    document.getElementById('item-row-' + row)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 60);
+}
+
 function ItemsView({ name, setState, focusRow }) {
   const [data, setData] = useState(null);
   const [chip, setChip] = useState(null);
@@ -791,6 +985,7 @@ function ItemsView({ name, setState, focusRow }) {
   const [adding, setAdding] = useState(false);
   const [issuing, setIssuing] = useState(null);
   const [highlightRow, setHighlightRow] = useState(focusRow || null);
+  const [mode, setMode] = useViewMode();
   const toast = useToast();
 
   useNewRecordHotkey(useCallback(() => setAdding(true), []));
@@ -854,6 +1049,7 @@ function ItemsView({ name, setState, focusRow }) {
           </div>
         ))}
         <div className="spacer" />
+        <ViewToggle mode={mode} onChange={setMode} />
         <button className="btn" onClick={() => setAdding(true)}>+ Додати запис</button>
       </div>
 
@@ -869,6 +1065,18 @@ function ItemsView({ name, setState, focusRow }) {
 
       {list.length === 0 ? (
         <div className="empty">Немає записів</div>
+      ) : mode === 'table' ? (
+        <DataTable
+          columns={headers.map((h, ci) => ({
+            key: ci,
+            title: h || 'Поле ' + (ci + 1),
+            cls: ci === cols.status ? 'col-status' : ci === idIdx || ci === snIdx ? 'col-mono' : '',
+            style: ci === cols.status ? (it) => ({ color: statusColor(it.values[ci]) }) : undefined,
+            render: (it) => (maskCols?.includes(ci) && it.values[ci] ? '••••••' : it.values[ci]) || '—',
+          }))}
+          rows={list.map((it) => ({ key: it.row, item: it }))}
+          onPick={(it) => { setMode('cards'); setHighlightRow(it.row); scrollToRow(it.row); }}
+        />
       ) : (
         <div className="grid">
           {list.map((it) => (
@@ -1411,6 +1619,7 @@ function StockView({ setState, focusId, onClearFocus }) {
   const [move, setMove] = useState(null); // { item, kind: 'receive' | 'writeoff' }
   const [hist, setHist] = useState({});
   const [photo, setPhoto] = useState(null);
+  const [mode, setMode] = useViewMode();
   const toast = useToast();
 
   useNewRecordHotkey(useCallback(() => setAdding(true), []));
@@ -1473,6 +1682,7 @@ function StockView({ setState, focusId, onClearFocus }) {
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Пошук: назва, опис, категорія, місце..." />
         <div className="spacer" />
+        <ViewToggle mode={mode} onChange={setMode} />
         <button className="btn btn-accept" onClick={() => setAdding(true)}>+ Додати позицію</button>
       </div>
 
@@ -1519,6 +1729,31 @@ function StockView({ setState, focusId, onClearFocus }) {
             ? 'Склад порожній. Натисніть «Додати позицію», щоб внести перше майно.'
             : 'Нічого не знайдено'}
         </div>
+      ) : mode === 'table' ? (
+        <DataTable
+          columns={[
+            { key: 'id', title: 'ID', cls: 'col-mono col-id', render: (it) => it.id },
+            { key: 'cat', title: 'Категорія', render: (it) => it.category || '—' },
+            { key: 'name', title: 'Найменування', cls: 'col-name', render: (it) => it.name },
+            { key: 'desc', title: 'Опис', render: (it) => it.description || '—' },
+            { key: 'unit', title: 'Од.', cls: 'col-mono', render: (it) => it.unit || '—' },
+            { key: 'in', title: 'Прийнято', cls: 'col-num', render: (it) => it.received },
+            { key: 'out', title: 'Списано', cls: 'col-num', render: (it) => it.writtenOff },
+            {
+              key: 'left', title: 'Залишок', cls: 'col-num col-strong',
+              style: (it) => ({ color: it.remainder > 0 ? 'var(--green)' : 'var(--red)' }),
+              render: (it) => it.remainder,
+            },
+            { key: 'place', title: 'Місце', render: (it) => it.place || '—' },
+            {
+              key: 'acct', title: 'Облік', cls: 'col-mono',
+              style: (it) => ({ color: it.accounting === 'Облікове' ? 'var(--green)' : 'var(--gray)' }),
+              render: (it) => it.accounting || '—',
+            },
+          ]}
+          rows={list.map((it) => ({ key: it.row, item: it }))}
+          onPick={(it) => setMode('cards')}
+        />
       ) : (
         <div className="grid">
           {list.map((it) => {
