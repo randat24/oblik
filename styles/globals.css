@@ -193,7 +193,7 @@ input:focus, select:focus, textarea:focus {
 @media (max-width: 760px) {
   /* верхній ряд вкладок ховаємо: замість нього нижня панель */
   .tabs { display: none; }
-  body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  body { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
   .bnav {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
     display: flex; align-items: stretch;
@@ -525,6 +525,9 @@ input:focus, select:focus, textarea:focus {
 .card-sn {
   font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
   margin-top: 2px; overflow-wrap: anywhere;
+  /* поле-привид має власні 6px відступу — компенсуємо, щоб текст став
+     на ту саму ліву межу, що й підписи рядків нижче */
+  margin-left: -6px; width: calc(100% + 6px);
 }
 
 /* Власний номер речі — той самий акцент, що й код ящика на складі.
@@ -907,9 +910,23 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 /* ---------- Телефон ---------- */
 @media (max-width: 720px) {
   body {
+    /* знизу лишаємо місце під нижню навігацію — інакше вона накриває кнопки картки */
     padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
-             max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+             calc(88px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   }
+  /* iOS Safari сам збільшує сторінку, коли фокус потрапляє в поле зі шрифтом < 16px —
+     саме через це екран «стрибає» при натисканні на поле. Тому всі поля вводу — 16px. */
+  input, textarea,
+  input[type=text], input[type=number], input[type=date], input[type=password],
+  input[type=search], input[type=tel], input[type=email],
+  input.ghost, input.ghost.mono, textarea.ghost,
+  .id-badge, input.id-badge,
+  .search-wrap .search-input,
+  .cmd-input {
+    font-size: 16px;
+  }
+  /* назва має лишатись помітнішою за серійник, який теж підріс до 16px */
+  input.ghost.big { font-size: 18px; }
   .grid { grid-template-columns: 1fr; }
   .tabs {
     flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
@@ -934,7 +951,11 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   .toolbar .spacer { display: none; }
   .btn { flex: 1; }
   .act-btn { min-width: 0; padding: 10px 8px; font-size: 0.78rem; }
-  .toast-host { left: 12px; right: 12px; bottom: 12px; max-width: none; }
+  /* сповіщення підіймаємо над нижньою навігацією, щоб не перекривали кнопки */
+  .toast-host {
+    left: 12px; right: 12px; max-width: none;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+  }
   .toast { width: 100%; }
   .log-row { flex-direction: column; gap: 6px; }
   .log-when { flex-direction: row; gap: 8px; }
