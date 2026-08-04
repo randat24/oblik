@@ -60,7 +60,7 @@ export default withAuth(async (req, res) => {
         { row: item.row, col: C.writtenOff + 1, value: writtenOff },
         { row: item.row, col: C.remainder + 1, value: left },
         { row: item.row, col: C.updated + 1, value: date },
-      ]);
+      ], { raw: true });
 
       await appendMove({
         id: item.id, name: item.name, action: isIn ? 'Прийнято' : 'Списано',
@@ -90,7 +90,7 @@ export default withAuth(async (req, res) => {
     await appendRow(STOCK_SHEET, stockRow({
       id, category, name, description, unit, received, writtenOff: 0,
       place, photo1, photo2, notes, date, accounting,
-    }));
+    }), { raw: true });
 
     if (received > 0) {
       await appendMove({
@@ -115,7 +115,7 @@ export default withAuth(async (req, res) => {
       return res.status(400).json({ error: `Невідоме поле: ${field}` });
     }
     await writeCell(STOCK_SHEET, row, col + 1, value);
-    await writeCell(STOCK_SHEET, row, C.updated + 1, todayStr());
+    await writeCell(STOCK_SHEET, row, C.updated + 1, todayStr(), { raw: true });
     await logChange({
       sheet: STOCK_SHEET, row, action: 'Редагування',
       field: FIELD_LABELS[field], before: prev, after: value,

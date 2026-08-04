@@ -8,6 +8,7 @@ import {
   deleteRow,
   insertRowAt,
   todayStr,
+  fromSerial,
   WAREHOUSE_PRIORITIES,
   WAREHOUSE_STATUS_OPTIONS,
 } from '../../lib/sheets';
@@ -66,7 +67,7 @@ async function backfillCreated(values) {
       if (row) row[COLS.created] = checked;
     }
   });
-  if (ups.length) await writeCells(SHEET, ups);
+  if (ups.length) await writeCells(SHEET, ups, { raw: true });
   return values;
 }
 
@@ -89,8 +90,8 @@ function parseItems(values) {
       status: (row[COLS.status] || '').toString(),
       checkedDate: (row[COLS.checkedDate] || '').toString(),
       notes: (row[COLS.notes] || '').toString(),
-      created: (row[COLS.created] || '').toString(),
-      updated: (row[COLS.updated] || '').toString(),
+      created: fromSerial(row[COLS.created]),
+      updated: fromSerial(row[COLS.updated]),
     });
   });
   return items;
@@ -151,7 +152,7 @@ export default withAuth(async (req, res) => {
     row[COLS.created] = todayStr();
     row[COLS.updated] = todayStr();
 
-    await appendRow(SHEET, row);
+    await appendRow(SHEET, row, { raw: true });
     await logChange({ sheet: SHEET, action: 'Додано ящик', field: code, after: `${code} — ${name}` });
     const updated = await readSheet(SHEET);
     return res.json({ items: parseItems(updated), code });
@@ -165,7 +166,7 @@ export default withAuth(async (req, res) => {
     }
     const today = todayStr();
     await writeCell(SHEET, row, idx + 1, value);
-    await writeCell(SHEET, row, COLS.updated + 1, today);
+    await writeCell(SHEET, row, COLS.updated + 1, today, { raw: true });
     // код у записі журналу дає змогу знайти всю історію конкретного ящика
     await logChange({
       sheet: SHEET, row, action: 'Редагування',
