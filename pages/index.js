@@ -226,6 +226,85 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
   );
 }
 
+/* ---------- Нижня навігація для телефона ---------- */
+const IconHome = ({ size = 20 }) => (
+  <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
+    stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 8.5 10 3l7 5.5V16a1 1 0 0 1-1 1h-3v-5H7v5H4a1 1 0 0 1-1-1z" />
+  </svg>
+);
+const IconList = ({ size = 20 }) => (
+  <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
+    stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+    <path d="M7 5h10M7 10h10M7 15h10M3.5 5h.01M3.5 10h.01M3.5 15h.01" />
+  </svg>
+);
+const IconCheck = ({ size = 20 }) => (
+  <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
+    stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 10.5 8 14l8-8.5" />
+  </svg>
+);
+
+/**
+ * На телефоні верхній ряд вкладок доводилося гортати й тягтися вгору.
+ * Головне тримаємо внизу під великим пальцем, решта — у списку «Ще».
+ */
+function BottomNav({ view, sheets, onOpen, onScan, extra = [] }) {
+  const [more, setMore] = useState(false);
+  const is = (k) => view.kind === k;
+
+  const items = [
+    { key: 'home', label: 'Головна', icon: <IconHome />, on: is('home'), run: () => onOpen({ kind: 'home', name: null }) },
+    { key: 'search', label: 'Пошук', icon: <IconSearch size={20} />, on: is('search'), run: () => onOpen({ kind: 'search', name: null }) },
+    { key: 'scan', label: 'Скан', icon: <IconQr size={20} />, on: false, run: onScan, accent: true },
+    { key: 'audit', label: 'Звірка', icon: <IconCheck />, on: is('audit'), run: () => onOpen({ kind: 'audit', name: null }) },
+    { key: 'more', label: 'Ще', icon: <IconList />, on: ['items', 'ledger', 'stock', 'warehouse', 'log', 'people'].includes(view.kind), run: () => setMore(true) },
+  ];
+
+  return (
+    <>
+      <nav className="bnav">
+        {items.map((it) => (
+          <button key={it.key} className={'bnav-b' + (it.on ? ' on' : '') + (it.accent ? ' accent' : '')}
+            onClick={it.run}>
+            {it.icon}
+            <span>{it.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {more && (
+        <div className="overlay sheet-overlay" onClick={(e) => e.target === e.currentTarget && setMore(false)}>
+          <div className="sheet">
+            <div className="sheet-grab" />
+            <div className="sheet-title">Куди перейти</div>
+            <div className="sheet-list">
+              {sheets.map((s) => (
+                <button key={s.name}
+                  className={'sheet-i' + (view.name === s.name ? ' on' : '')}
+                  onClick={() => { setMore(false); onOpen({ kind: s.kind, name: s.name }); }}>
+                  {s.name}
+                </button>
+              ))}
+              {extra.map((e) => (
+                <button key={e.label}
+                  className={'sheet-i' + (view.kind === e.kind ? ' on' : '')}
+                  onClick={() => { setMore(false); e.run(); }}>
+                  {e.label}
+                </button>
+              ))}
+            </div>
+            <button className="btn" style={{ width: '100%', marginTop: 12 }} onClick={() => setMore(false)}>
+              Закрити
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ---------- Сканування QR камерою ---------- */
 const IconQr = ({ size = 15 }) => (
   <svg className="ico" viewBox="0 0 16 16" width={size} height={size} fill="none"
@@ -482,13 +561,78 @@ function HomeView({ setState, onOpen, me }) {
       </div>
 
       <div className="stats">
-        <Stat label="Речей на обліку" value={d.items.total}
-          sub={d.items.perSheet.slice(0, 2).map((s) => `${s.name}: ${s.count}`).join(' · ')} />
-        <Stat label="Ящиків на складі" value={d.warehouse.total} />
-        <Stat label="Залишок Рибаківки" value={d.stock.remainder}
-          sub={`позицій: ${d.stock.positions}`} />
-        <Stat label="За документами" value={d.stock.booked} tone="ok"
-          sub={`поза обліком: ${d.stock.unbooked}`} />
+        <Stat label="Усього одиниць" value={d.items.total}
+          sub="радейки, ПНВ, теплаки, автомобільні, Кропива" />
+        <Stat label="В наявності" value={d.items.available} tone="ok"
+          sub="статус «КСП» або «Склад»" />
+        <Stat label="На руках" value={d.items.issued}
+          sub="статус «Видано»" />
+        <Stat label="За документами" value={d.items.booked} tone="ok"
+          sub="«на обліку» або тип «Учт.»" />
+      </div>
+
+      <div className="section">
+        <h3 className="sec">За категоріями</h3>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Категорія</th>
+                <th className="col-num">Усього</th>
+                <th className="col-num">В наявності</th>
+                <th className="col-num">На руках</th>
+                <th className="col-num">За док.</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {d.items.perSheet.filter((s) => s.count > 0).map((s) => (
+                <tr key={s.name} onClick={() => onOpen({ kind: 'items', name: s.name })}>
+                  <td className="col-name">{s.name}</td>
+                  <td className="col-num col-strong">{s.count}</td>
+                  <td className="col-num" style={{ color: 'var(--green)' }}>{s.available}</td>
+                  <td className="col-num">{s.issued}</td>
+                  <td className="col-num" style={{ color: 'var(--amber)' }}>{s.booked}</td>
+                  <td className="col-act">
+                    <button className="act-btn" onClick={(e) => {
+                      e.stopPropagation();
+                      onOpen({ kind: 'items', name: s.name });
+                    }}>Відкрити</button>
+                  </td>
+                </tr>
+              ))}
+              <tr>
+                <td className="col-name">Склад — ящики</td>
+                <td className="col-num col-strong">{d.warehouse.total}</td>
+                <td className="col-num">—</td>
+                <td className="col-num">—</td>
+                <td className="col-num">—</td>
+                <td className="col-act">
+                  <button className="act-btn" onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen({ kind: 'warehouse', name: 'Склад' });
+                  }}>Відкрити</button>
+                </td>
+              </tr>
+              <tr>
+                <td className="col-name">Майно Рибаківки</td>
+                <td className="col-num col-strong">{d.stock.positions}</td>
+                <td className="col-num" style={{ color: 'var(--green)' }}>{d.stock.remainder}</td>
+                <td className="col-num">—</td>
+                <td className="col-num" style={{ color: 'var(--amber)' }}>{d.stock.booked}</td>
+                <td className="col-act">
+                  <button className="act-btn" onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen(STOCK_VIEW);
+                  }}>Відкрити</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="totals" style={{ marginTop: 8 }}>
+          <span>У «В наявності» для Рибаківки — залишок у штуках, а не кількість позицій</span>
+        </div>
       </div>
 
       {d.items.byStatus.length > 0 && (
@@ -1806,6 +1950,19 @@ export default function Home({ startView }) {
         {view.kind === 'audit' && <AuditView setState={setState} />}
         {view.kind === 'people' && me.role === 'admin' && <PeopleView setState={setState} />}
       </div>
+      <BottomNav
+        view={view}
+        sheets={sheets}
+        onOpen={setView}
+        onScan={() => setScan(true)}
+        extra={[
+          { label: 'Журнал змін', kind: 'log', run: () => setView({ kind: 'log', name: null }) },
+          ...(me.role === 'admin'
+            ? [{ label: 'Люди', kind: 'people', run: () => setView({ kind: 'people', name: null }) }]
+            : []),
+        ]}
+      />
+
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       {scan && (
         <QrScanner
@@ -2127,10 +2284,37 @@ function PhotoLightbox({ act, onClose }) {
 
 /* ---------- Звичайні листи ---------- */
 /** Колонки, що йдуть у тіло картки: без назви, номера, серійника й статусу — вони вже в шапці */
-function bodyCols(headers, cols, snIdx, idIdx) {
-  return headers
-    .map((_, i) => i)
-    .filter((i) => i !== 0 && i !== snIdx && i !== idIdx && i !== cols.status);
+function bodyCols(headers, cols, snIdx, idIdx, tagCols = []) {
+  const skip = new Set([0, snIdx, idIdx, cols.status, ...tagCols].filter((i) => i >= 0));
+  return headers.map((_, i) => i).filter((i) => !skip.has(i));
+}
+
+/** Колонка «Оф облік»: числиться річ за документами чи ні */
+function accountingCol(headers) {
+  return headers.findIndex((h) => {
+    const s = (h || '').toString().toLowerCase();
+    return s.includes('облік') && !s.includes('не облік');
+  });
+}
+
+/**
+ * Короткі теги під назвою замість окремих рядків. Однакові значення
+ * показуємо один раз: «Де: КСП» поруч зі статусом «КСП» нічого не додає.
+ */
+function headTags(values, cols, accIdx) {
+  const out = [];
+  const seen = new Set([(values[cols.status] || '').toString().trim().toLowerCase()]);
+  const add = (text, cls) => {
+    const v = (text || '').toString().trim();
+    const key = v.toLowerCase();
+    if (!v || seen.has(key)) return;
+    seen.add(key);
+    out.push({ v, cls });
+  };
+  add(values[accIdx], 'tag-acc');
+  add(cols.type >= 0 ? values[cols.type] : '', 'tag-type');
+  add(cols.where > 0 ? values[cols.where] : '', 'tag-where');
+  return out;
 }
 
 /** Плавно підводить до потрібного рядка після перемикання на картки */
@@ -2181,6 +2365,9 @@ function ItemsView({ name, setState, focusRow }) {
   // у шапці картки: власний номер речі бейджем, назва, серійник виробника під нею
   const idIdx = cols.id >= 0 && cols.id !== 0 ? cols.id : -1;
   const snIdx = cols.snCols?.find((i) => i !== 0 && i !== idIdx) ?? -1;
+  // облік, тип і місце йдуть тегами під назвою, а не окремими рядками
+  const accIdx = accountingCol(headers);
+  const tagCols = [accIdx, cols.type, cols.where > 0 ? cols.where : -1];
 
   const save = async (row, colIdx, value, prev) => {
     setState('збереження…');
@@ -2291,8 +2478,16 @@ function ItemsView({ name, setState, focusRow }) {
                 )}
               </div>
 
+              {headTags(it.values, cols, accIdx).length > 0 && (
+                <div className="card-tags">
+                  {headTags(it.values, cols, accIdx).map((t) => (
+                    <span className={'tag ' + t.cls} key={t.v}>{t.v}</span>
+                  ))}
+                </div>
+              )}
+
               <div className="card-body">
-                {bodyCols(headers, cols, snIdx, idIdx).map((ci) => (
+                {bodyCols(headers, cols, snIdx, idIdx, tagCols).map((ci) => (
                   <div className="drow" key={ci}>
                     <span className="drow-k">{headers[ci] || 'Поле ' + (ci + 1)}</span>
                     <span className="drow-v">

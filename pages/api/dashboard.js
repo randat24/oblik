@@ -10,6 +10,15 @@ const WAREHOUSE = 'Склад';
 const lower = (v) => (v || '').toString().toLowerCase();
 const isLost = (s) => lower(s).includes('втрач') || lower(s).includes('утер');
 const isIssued = (s) => lower(s).includes('видан');
+// «Склад» і «КСП» — це те, що лежить у нас під рукою
+const isAvailable = (s) => lower(s).includes('ксп') || lower(s).includes('склад');
+// За документами річ числиться, якщо так каже колонка обліку або тип «Учт.».
+// Перевіряємо початок рядка: «не на обліку» теж містить «на облік».
+const isBooked = (acc, type) => {
+  const a = lower(acc).trim();
+  if (a.startsWith('не')) return false;
+  return a.startsWith('на облік') || a.startsWith('облікове') || lower(type).trim().startsWith('учт');
+};
 
 /** Скільки днів минуло від дати у форматі дд.мм.рррр */
 function daysSince(d) {
@@ -19,12 +28,23 @@ function daysSince(d) {
   return Math.floor((Date.now() - then) / 86400000);
 }
 
+/** Колонка «Оф облік» — окрема від типу, шукаємо за заголовком */
+function accountingCol(headers) {
+  return headers.findIndex((h) => {
+    const s = lower(h);
+    return s.includes('облік') && !s.includes('не облік');
+  });
+}
+
 async function itemsSummary() {
   const targets = SHEET_CONFIGS.filter((c) => c.kind === 'items');
   const perSheet = [];
   const byStatus = new Map();
   const lost = [];
   let total = 0;
+  let available = 0;
+  let issued = 0;
+  let booked = 0;
 
   await Promise.all(targets.map(async (cfg) => {
     let values;
@@ -36,13 +56,19 @@ async function itemsSummary() {
     const headers = values[0] || [];
     const cols = findColumns(headers);
     const idIdx = cols.id >= 0 && cols.id !== 0 ? cols.id : -1;
+    const accIdx = accountingCol(headers);
     const rows = values.slice(1).filter((r) => (r || []).join('').trim());
 
-    let issued = 0;
+    const s = { name: cfg.name, count: rows.length, available: 0, issued: 0, booked: 0 };
     rows.forEach((r, i) => {
       const status = cols.status >= 0 ? (r[cols.status] || '').toString().trim() : '';
+      const type = cols.type >= 0 ? (r[cols.type] || '').toString().trim() : '';
+      const acc = accIdx >= 0 ? (r[accIdx] || '').toString().trim() : '';
+
       if (status && !cfg.hideStatus) byStatus.set(status, (byStatus.get(status) || 0) + 1);
-      if (isIssued(status)) issued++;
+      if (isAvailable(status)) s.available++;
+      if (isIssued(status)) s.issued++;
+      if (isBooked(acc, type)) s.booked++;
       if (isLost(status)) {
         lost.push({
           sheet: cfg.name, row: i + 2,
@@ -52,13 +78,17 @@ async function itemsSummary() {
         });
       }
     });
-    perSheet.push({ name: cfg.name, count: rows.length, issued });
+
+    perSheet.push(s);
     total += rows.length;
+    available += s.available;
+    issued += s.issued;
+    booked += s.booked;
   }));
 
   perSheet.sort((a, b) => b.count - a.count);
   return {
-    total,
+    total, available, issued, booked,
     perSheet,
     byStatus: [...byStatus.entries()].sort((a, b) => b[1] - a[1]),
     lost,
