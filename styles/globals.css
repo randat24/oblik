@@ -165,6 +165,48 @@ input:focus, select:focus, textarea:focus {
 }
 .home-cols .section { margin-bottom: 0; }
 
+/* ---------- Сканер QR ---------- */
+.scan-open { gap: 6px; }
+.scan-btn { display: inline-flex; align-items: center; gap: 6px; }
+.scan-overlay { align-items: center; padding: 0; }
+.scan {
+  width: 520px; max-width: 100%; background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--r);
+  overflow: hidden; box-shadow: var(--shadow);
+}
+.scan-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-bottom: 1px solid var(--line);
+  font-size: .9rem; font-weight: 600;
+}
+.scan-x {
+  margin-left: auto; background: none; border: 0; cursor: pointer;
+  color: var(--muted); font-size: 1.1rem; line-height: 1; padding: 0 4px;
+}
+.scan-x:hover { color: var(--text); }
+.scan-view { position: relative; background: #000; aspect-ratio: 4 / 3; }
+.scan-view video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan-frame {
+  position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%);
+  width: 62%; aspect-ratio: 1; border-radius: 12px;
+  border: 2px solid var(--amber); box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .45);
+}
+.scan-err { padding: 18px; color: var(--text-dim); line-height: 1.55; }
+.scan-foot {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 14px; border-top: 1px solid var(--line);
+}
+.scan-hint { flex: 1 1 160px; font-size: .78rem; color: var(--muted); }
+
+@media (max-width: 560px) {
+  .scan { border-radius: 0; height: 100%; display: flex; flex-direction: column; }
+  .scan-view { flex: 1 1 auto; aspect-ratio: auto; }
+  .scan-open-t { display: none; }
+  /* підказка окремим рядком — інакше кнопки її обрізають */
+  .scan-hint { flex: 1 1 100%; }
+  .scan-foot .act-btn { flex: 1; }
+}
+
 /* ---------- Офлайн ---------- */
 .offline-bar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
