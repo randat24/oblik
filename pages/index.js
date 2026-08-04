@@ -399,7 +399,26 @@ function SearchView({ setState, onOpen }) {
   const [q, setQ] = useState('');
   const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [meta, setMeta] = useState(null);
+  const [act, setAct] = useState(null); // {kind, sheet, row}
   const reqId = useRef(0);
+  const toast = useToast();
+
+  // довідники для акта тягнемо лише тоді, коли справді натиснули «Прийняти»/«Видати»
+  const openAct = async (kind, r) => {
+    try {
+      const m = meta || (await api('/api/act'));
+      setMeta(m);
+      if (!m.sheets.includes(r.sheet)) {
+        setState(`акт недоступний для листа «${r.sheet}»`);
+        return;
+      }
+      setAct({ kind, sheet: r.sheet, row: r.row });
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  };
 
   useEffect(() => {
     const query = q.trim();
@@ -427,7 +446,7 @@ function SearchView({ setState, onOpen }) {
       }
     }, 350);
     return () => clearTimeout(t);
-  }, [q, setState]);
+  }, [q, tick, setState]);
 
   const groups = res
     ? [
@@ -484,11 +503,32 @@ function SearchView({ setState, onOpen }) {
                 <button className="act-btn act-qr" onClick={() => onOpen({ kind: 'items', name: r.sheet, row: r.row })}>
                   Відкрити лист
                 </button>
+                {!r.noIssue && (
+                  <button className="act-btn" onClick={() => openAct('issue', r)}>Видати</button>
+                )}
+                <button className="act-btn act-accept" onClick={() => openAct('accept', r)}>Прийняти</button>
               </div>
             </div>
           ))}
         </div>
       ))}
+
+      {act && meta && (
+        <ActModal
+          kind={act.kind}
+          sheets={meta.sheets}
+          conditions={meta.conditions}
+          initialSheet={act.sheet}
+          bindRow={act.row}
+          onCancel={() => setAct(null)}
+          onSave={async (body) => {
+            const d = await api('/api/act', { method: 'POST', body: { ...body, kind: act.kind } });
+            setAct(null);
+            toast(`${act.kind === 'accept' ? 'Прийнято' : 'Видано'}: ${d.count} поз.`);
+            setTick((t) => t + 1);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -1588,10 +1628,54 @@ function ActsView({ setState }) {
 
 const emptyItem = () => ({ title: '', number: '', serial: '' });
 
-function ActModal({ kind, sheets, conditions, onCancel, onSave }) {
+/** Поле назви з підказками з обраного листа: вибрав річ — акт оновить її рядок */
+function ItemPicker({ value, catalog, onPick, onText }) {
+  const [open, setOpen] = useState(false);
+  const q = (value || '').trim().toLowerCase();
+  const hits = q
+    ? catalog
+        .filter((c) => [c.title, c.number, c.serial, c.who].join(' ').toLowerCase().includes(q))
+        .slice(0, 8)
+    : [];
+
+  return (
+    <div className="pick">
+      <input
+        type="text"
+        placeholder="Назва"
+        value={value}
+        autoComplete="off"
+        onChange={(e) => { onText(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && hits.length > 0 && (
+        <div className="pick-list">
+          {hits.map((h) => (
+            <div
+              className="pick-opt"
+              key={h.row}
+              // mousedown спрацьовує до blur, інакше список зникне раніше за клік
+              onMouseDown={(e) => { e.preventDefault(); onPick(h); setOpen(false); }}
+            >
+              <span className="pick-title">{h.title || '—'}</span>
+              {h.number && <span className="pick-tag">№{h.number}</span>}
+              {h.serial && <span className="pick-sn">{h.serial}</span>}
+              {h.status && <span className="pick-st" style={{ color: statusColor(h.status) }}>{h.status}</span>}
+              {h.who && <span className="pick-who">→ {h.who}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActModal({ kind, sheets, conditions, initialSheet, bindRow, onCancel, onSave }) {
   const accept = kind === 'accept';
-  const [sheet, setSheet] = useState(sheets[0] || '');
+  const [sheet, setSheet] = useState(initialSheet || sheets[0] || '');
   const [items, setItems] = useState([emptyItem()]);
+  const [catalog, setCatalog] = useState([]);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [condition, setCondition] = useState(accept ? conditions[1] : '');
@@ -1601,8 +1685,47 @@ function ActModal({ kind, sheets, conditions, onCancel, onSave }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
+  const shownSheet = useRef(sheet);
+  const bound = useRef(false);
+
+  // підказки беремо з того листа, який зараз обраний
+  useEffect(() => {
+    let alive = true;
+    setCatalog([]);
+    api('/api/act?sheet=' + encodeURIComponent(sheet))
+      .then((d) => { if (alive) setCatalog(d.catalog || []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [sheet]);
+
+  // рядок належить конкретному листу — при зміні категорії прив'язки скидаємо
+  useEffect(() => {
+    if (shownSheet.current === sheet) return;
+    shownSheet.current = sheet;
+    setItems((p) => p.map(({ row, ...rest }) => rest));
+  }, [sheet]);
+
+  // відкрили форму з пошуку — одразу підставляємо знайдену річ
+  useEffect(() => {
+    if (bound.current || !bindRow || !catalog.length) return;
+    const hit = catalog.find((c) => c.row === bindRow);
+    if (!hit) return;
+    bound.current = true;
+    setItems([{ title: hit.title, number: hit.number, serial: hit.serial, row: hit.row }]);
+  }, [catalog, bindRow]);
+
   const upItem = (i, k, v) => setItems((p) => p.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const pickItem = (i, h) =>
+    setItems((p) => p.map((x, j) =>
+      j === i ? { title: h.title, number: h.number, serial: h.serial, row: h.row } : x));
+  const unbind = (i) => setItems((p) => p.map((x, j) => {
+    if (j !== i) return x;
+    const { row, ...rest } = x;
+    return rest;
+  }));
+
   const filled = items.filter((it) => it.title.trim()).length;
+  const bindings = items.filter((it) => it.title.trim() && it.row).length;
 
   return (
     <Modal
@@ -1636,9 +1759,13 @@ function ActModal({ kind, sheets, conditions, onCancel, onSave }) {
       <div style={{ marginTop: 16 }}>
         <label>Що {accept ? 'приймаємо' : 'видаємо'}{filled ? ` — ${filled} поз.` : ''}</label>
         {items.map((it, i) => (
-          <div className="act-item" key={i}>
-            <input type="text" placeholder="Назва" value={it.title}
-              onChange={(e) => upItem(i, 'title', e.target.value)} />
+          <div className={'act-item' + (it.row ? ' act-item-bound' : '')} key={i}>
+            <ItemPicker
+              value={it.title}
+              catalog={catalog}
+              onText={(v) => upItem(i, 'title', v)}
+              onPick={(h) => pickItem(i, h)}
+            />
             <div className="act-item-sub">
               <input type="text" placeholder="№" value={it.number}
                 onChange={(e) => upItem(i, 'number', e.target.value)} />
@@ -1649,6 +1776,16 @@ function ActModal({ kind, sheets, conditions, onCancel, onSave }) {
                   onClick={() => setItems((p) => p.filter((_, j) => j !== i))}>✕</button>
               )}
             </div>
+            {it.row ? (
+              <div className="pick-bound">
+                оновимо ряд. {it.row}
+                <button type="button" onClick={() => unbind(i)} title="Записати як нову річ">
+                  зробити новою
+                </button>
+              </div>
+            ) : it.title.trim() ? (
+              <div className="pick-new">нова річ — додамо рядок</div>
+            ) : null}
           </div>
         ))}
         <button type="button" className="act-btn" style={{ width: '100%', marginTop: 6 }}
@@ -1683,7 +1820,11 @@ function ActModal({ kind, sheets, conditions, onCancel, onSave }) {
 
       <PhotoField value={photo} onChange={setPhoto} />
 
-      <div className="act-hint">Дата: {date}</div>
+      <div className="act-hint">
+        Дата: {date}
+        {catalog.length > 0 && ` · у листі «${sheet}»: ${catalog.length} поз.`}
+        {bindings > 0 && ` · оновимо наявних: ${bindings}`}
+      </div>
     </Modal>
   );
 }
