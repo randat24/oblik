@@ -379,12 +379,44 @@ function useNewRecordHotkey(open) {
 }
 
 /* ---------- Головна ---------- */
-export default function Home() {
+export const STOCK_SHEET_NAME = 'Майно Рибаківки';
+// стабільне посилання — інакше useEffect із цим значенням крутився б без кінця
+export const STOCK_VIEW = { kind: 'stock', name: STOCK_SHEET_NAME };
+
+/** Адреса, яку показуємо в рядку браузера для поточної вкладки */
+function urlFor(view) {
+  if (view.kind !== 'stock') return '/';
+  return '/rybakivka' + (view.id ? '?id=' + encodeURIComponent(view.id) : '');
+}
+
+export default function Home({ startView }) {
   const [authed, setAuthed] = useState(null);
   const [sheets, setSheets] = useState([]);
-  const [view, setView] = useState({ kind: 'search', name: null });
+  const [view, setView] = useState(startView || { kind: 'search', name: null });
   const [state, setState] = useState('');
   const { toasts, push, close } = useToasts();
+
+  // параметри адреси читаємо один раз до того, як почнемо її переписувати
+  const [params] = useState(() => {
+    if (typeof window === 'undefined') return {};
+    const p = new URLSearchParams(window.location.search);
+    return { box: p.get('box'), id: p.get('id') };
+  });
+
+  // /rybakivka?id=Р-004 — відкрити склад одразу на потрібній позиції
+  useEffect(() => {
+    if (startView?.kind !== 'stock' || !params.id) return;
+    setView({ ...startView, id: params.id });
+  }, [startView, params.id]);
+
+  // адреса має відповідати вкладці, щоб склад можна було надіслати посиланням
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = urlFor(view);
+    if (window.location.pathname + window.location.search !== url) {
+      window.history.replaceState({}, '', url);
+    }
+  }, [view]);
 
   useEffect(() => {
     api('/api/login')
@@ -401,13 +433,10 @@ export default function Home() {
 
   // QR-код веде на /?box=КОД — одразу відкриваємо склад і фільтруємо на потрібний ящик
   useEffect(() => {
-    if (typeof window === 'undefined' || !sheets.length) return;
-    const box = new URLSearchParams(window.location.search).get('box');
-    if (!box) return;
+    if (!sheets.length || !params.box) return;
     const wh = sheets.find((s) => s.kind === 'warehouse');
-    if (wh) setView({ kind: 'warehouse', name: wh.name, box });
-    window.history.replaceState({}, '', window.location.pathname);
-  }, [sheets]);
+    if (wh) setView({ kind: 'warehouse', name: wh.name, box: params.box });
+  }, [sheets, params.box]);
 
   if (authed === null) return <div className="loading">Завантаження…</div>;
   if (!authed) return <Login onOk={() => setAuthed(true)} />;
@@ -452,7 +481,14 @@ export default function Home() {
           <ItemsView key={view.name + ':' + (view.row || '')} name={view.name} setState={setState} focusRow={view.row} />
         )}
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
-        {view.kind === 'stock' && <StockView setState={setState} />}
+        {view.kind === 'stock' && (
+          <StockView
+            key={view.id || ''}
+            setState={setState}
+            focusId={view.id}
+            onClearFocus={() => setView(STOCK_VIEW)}
+          />
+        )}
         {view.kind === 'warehouse' && <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} />}
         {view.kind === 'log' && <LogView setState={setState} />}
       </div>
@@ -554,7 +590,11 @@ function SearchView({ setState, onOpen }) {
       <Totals
         parts={
           res
-            ? [['Знайдено', groups.reduce((a, g) => a + g.data.length, 0)], ['Актів', acts.length]]
+            ? [
+                ['Знайдено', groups.reduce((a, g) => a + g.data.length, 0)],
+                ['Склад Рибаківки', res.stock?.length || 0],
+                ['Актів', acts.length],
+              ]
             : [['Актів усього', allActs.length]]
         }
       />
@@ -562,7 +602,7 @@ function SearchView({ setState, onOpen }) {
       {q.trim().length > 0 && q.trim().length < 2 && (
         <div className="empty">Введіть щонайменше 2 символи</div>
       )}
-      {!busy && res && groups.length === 0 && acts.length === 0 && (
+      {!busy && res && groups.length === 0 && acts.length === 0 && !res.stock?.length && (
         <div className="empty">Нічого не знайдено</div>
       )}
 
@@ -611,6 +651,35 @@ function SearchView({ setState, onOpen }) {
           ))}
         </div>
       ))}
+
+      {res?.stock?.length > 0 && (
+        <div className="section">
+          <h3 className="primary">Склад Рибаківки<span className="count">{res.stock.length}</span></h3>
+          {res.stock.map((r) => (
+            <div className="result" key={r.row}>
+              <div className="result-head">
+                <span className="badge">{r.category || 'без категорії'}</span>
+                <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--amber)' }}>{r.id}</span>
+                <span style={{ fontWeight: 600 }}>{r.name}</span>
+                <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: '.8rem', fontWeight: 700, color: r.remainder > 0 ? 'var(--green)' : 'var(--red)' }}>
+                  залишок {r.remainder} {r.unit}
+                </span>
+              </div>
+              <div className="fields">
+                {r.description && <span><span className="k">Опис:</span> {r.description}{'  ·  '}</span>}
+                {r.place && <span><span className="k">Місце:</span> {r.place}{'  ·  '}</span>}
+                <span><span className="k">Прийнято:</span> {r.received}{'  ·  '}</span>
+                <span><span className="k">Списано:</span> {r.writtenOff}</span>
+              </div>
+              <div className="actions">
+                <button className="act-btn act-qr" onClick={() => onOpen({ ...STOCK_VIEW, id: r.id })}>
+                  Відкрити на складі
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {acts.length > 0 && (
         <div className="section">
@@ -1325,7 +1394,7 @@ function AddLedgerModal({ onCancel, onSave }) {
 }
 
 /* ---------- Великий склад (Рибаківка) ---------- */
-function StockView({ setState }) {
+function StockView({ setState, focusId, onClearFocus }) {
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState(null);
@@ -1368,6 +1437,7 @@ function StockView({ setState }) {
   };
 
   let list = data.items;
+  if (focusId) list = list.filter((it) => it.id === focusId);
   if (cat) list = list.filter((it) => it.category === cat);
   if (q.trim()) {
     const s = q.trim().toLowerCase();
@@ -1380,6 +1450,13 @@ function StockView({ setState }) {
 
   return (
     <>
+      {focusId && (
+        <div className="scan-banner">
+          <span>Показано позицію <b>{focusId}</b></span>
+          <button className="act-btn" onClick={onClearFocus}>Показати всі</button>
+        </div>
+      )}
+
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Пошук: назва, опис, категорія, місце..." />
         <div className="spacer" />
