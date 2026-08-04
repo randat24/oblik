@@ -170,6 +170,351 @@ function Login({ onOk, callsigns = [] }) {
   );
 }
 
+/* ---------- Звірка ---------- */
+const RESULT = { ok: 'Є', missing: 'Немає', diff: 'Розбіжність' };
+
+function AuditView({ setState }) {
+  const [data, setData] = useState(null);
+  const [q, setQ] = useState('');
+  const [onlyLeft, setOnlyLeft] = useState(true);
+  const [marks, setMarks] = useState({}); // ключ рядка → { result, fact }
+  const [starting, setStarting] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const toast = useToast();
+
+  // позначки летять пачками: на обході їх сотні, а квота на записи не безмежна
+  const queue = useRef([]);
+  const timer = useRef(null);
+
+  const load = useCallback(async () => {
+    setState('завантаження…');
+    try {
+      const d = await api('/api/audit');
+      setData(d);
+      const seen = {};
+      (d.lines || []).forEach((l) => {
+        seen[`${l.sheet}#${l.row}`] = { result: l.result, fact: l.fact };
+      });
+      setMarks(seen);
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  }, [setState]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const flush = useCallback(async () => {
+    const lines = queue.current;
+    if (!lines.length) return;
+    queue.current = [];
+    try {
+      await api('/api/audit', { method: 'POST', body: { action: 'tick', lines } });
+      setState('синхронізовано');
+    } catch (e) {
+      // не втрачаємо позначки: повертаємо в чергу й спробуємо ще раз
+      queue.current = [...lines, ...queue.current];
+      setState('не збережено — спробуємо ще раз');
+    }
+  }, [setState]);
+
+  // не лишаємо непослані позначки, коли вкладку закривають
+  useEffect(() => {
+    const onHide = () => flush();
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onHide);
+      flush();
+    };
+  }, [flush]);
+
+  if (!data) return <div className="loading">Завантаження…</div>;
+
+  const mark = (item, result, fact = '') => {
+    const key = `${item.sheet}#${item.row}`;
+    setMarks((p) => ({ ...p, [key]: { result, fact } }));
+    setState('запис…');
+    queue.current.push({
+      sheet: item.sheet, row: item.row, name: item.name, ident: item.ident,
+      expected: item.expected, fact, result,
+    });
+    clearTimeout(timer.current);
+    timer.current = setTimeout(flush, 1200);
+  };
+
+  /* --- немає відкритої звірки --- */
+  if (!data.open) {
+    return (
+      <>
+        <div className="toolbar">
+          <div className="spacer" />
+          <button className="btn btn-accept" onClick={() => setStarting(true)}>Почати звірку</button>
+        </div>
+
+        <div className="empty-note">
+          Звірка — це фіксація того, що річ бачили на власні очі. Обираєте обсяг,
+          обходите й позначаєте кожну позицію. Позначки зберігаються одразу, тож
+          телефон можна закрити й повернутися пізніше.
+        </div>
+
+        {data.audits.length === 0 ? (
+          <div className="empty">Звірок ще не було.</div>
+        ) : (
+          <div className="log-list">
+            {data.audits.slice().reverse().map((a) => (
+              <div className="log-row" key={a.id}>
+                <div className="log-when">
+                  <span>{a.date}</span>
+                  <span className="log-time">{a.time}</span>
+                </div>
+                <div className="log-what">
+                  <div className="log-head">
+                    <span className="id-badge">{a.id}</span>
+                    <span className="badge">{a.scope}</span>
+                    <span className={'log-action ' + (a.status === 'Завершено' ? 'log-add' : 'log-del')}>
+                      {a.status}
+                    </span>
+                    {a.who && <span className="log-by">{a.who}</span>}
+                  </div>
+                  <div className="audit-nums">
+                    <span>Очікувано: <b>{a.expected}</b></span>
+                    <span className="a-ok">Є: <b>{a.ok}</b></span>
+                    <span className="a-miss">Немає: <b>{a.missing}</b></span>
+                    {a.diff > 0 && <span className="a-diff">Розбіжності: <b>{a.diff}</b></span>}
+                  </div>
+                  {a.note && <div className="act-note">{a.note}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {starting && (
+          <StartAuditModal
+            scopes={data.scopes}
+            onCancel={() => setStarting(false)}
+            onSave={async (scope) => {
+              await api('/api/audit', { method: 'POST', body: { action: 'start', scope } });
+              setStarting(false);
+              toast('Звірку розпочато');
+              load();
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  /* --- обхід --- */
+  const expected = data.expected || [];
+  const done = expected.filter((it) => marks[`${it.sheet}#${it.row}`]).length;
+  const pct = expected.length ? Math.round((done / expected.length) * 100) : 0;
+
+  let list = expected;
+  if (onlyLeft) list = list.filter((it) => !marks[`${it.sheet}#${it.row}`]);
+  if (q.trim()) {
+    const s = q.trim().toLowerCase();
+    list = list.filter((it) => [it.name, it.ident, it.hint].join(' ').toLowerCase().includes(s));
+  }
+
+  const counts = {
+    ok: Object.values(marks).filter((m) => m.result === RESULT.ok).length,
+    missing: Object.values(marks).filter((m) => m.result === RESULT.missing).length,
+    diff: Object.values(marks).filter((m) => m.result === RESULT.diff).length,
+  };
+
+  return (
+    <>
+      <div className="audit-bar">
+        <div className="audit-bar-top">
+          <span className="id-badge">{data.open.id}</span>
+          <span className="badge">{data.open.scope}</span>
+          <span className="audit-progress">{done} з {expected.length}</span>
+          <button className="act-btn act-accept" onClick={() => setFinishing(true)}>Завершити</button>
+        </div>
+        <div className="audit-track"><div className="audit-fill" style={{ width: pct + '%' }} /></div>
+        <div className="audit-nums">
+          <span className="a-ok">Є: <b>{counts.ok}</b></span>
+          <span className="a-miss">Немає: <b>{counts.missing}</b></span>
+          {counts.diff > 0 && <span className="a-diff">Розбіжності: <b>{counts.diff}</b></span>}
+        </div>
+      </div>
+
+      <div className="toolbar">
+        <SearchBox value={q} onChange={setQ} placeholder="Знайти позицію: назва, номер, S/N..." />
+        <div className="spacer" />
+        <div className={'chip' + (onlyLeft ? ' on' : '')} onClick={() => setOnlyLeft(!onlyLeft)}>
+          {onlyLeft ? 'Тільки неперевірені' : 'Показувати всі'}
+        </div>
+      </div>
+
+      {list.length === 0 ? (
+        <div className="empty">
+          {done === expected.length
+            ? 'Усе перевірено. Натисніть «Завершити».'
+            : 'Нічого не знайдено'}
+        </div>
+      ) : (
+        <div className="audit-list">
+          {list.map((it) => {
+            const m = marks[`${it.sheet}#${it.row}`];
+            return (
+              <div className={'audit-item' + (m ? ' marked' : '')} key={it.sheet + it.row}>
+                <div className="audit-what">
+                  <div className="audit-name">{it.name || '—'}</div>
+                  <div className="audit-meta">
+                    {it.ident && <span className="audit-ident">{it.ident}</span>}
+                    {it.hint && <span>{it.hint}</span>}
+                    {it.kind === 'qty' && <span>має бути: <b>{it.expected}</b></span>}
+                  </div>
+                </div>
+                {it.kind === 'qty' ? (
+                  <div className="audit-qty">
+                    <input
+                      type="number" inputMode="decimal" step="any"
+                      placeholder="факт"
+                      defaultValue={m?.fact ?? ''}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v === '') return;
+                        mark(it, Number(v) === Number(it.expected) ? RESULT.ok : RESULT.diff, v);
+                      }}
+                    />
+                    <button className="act-btn act-del" onClick={() => mark(it, RESULT.missing, '0')}>
+                      Немає
+                    </button>
+                  </div>
+                ) : (
+                  <div className="audit-btns">
+                    <button
+                      className={'act-btn act-accept' + (m?.result === RESULT.ok ? ' on' : '')}
+                      onClick={() => mark(it, RESULT.ok)}
+                    >
+                      Є
+                    </button>
+                    <button
+                      className={'act-btn act-del' + (m?.result === RESULT.missing ? ' on' : '')}
+                      onClick={() => mark(it, RESULT.missing)}
+                    >
+                      Немає
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {finishing && (
+        <FinishAuditModal
+          counts={counts}
+          total={expected.length}
+          done={done}
+          onCancel={() => setFinishing(false)}
+          onSave={async ({ note, cancel }) => {
+            await flush();
+            const d = await api('/api/audit', {
+              method: 'POST',
+              body: { action: cancel ? 'cancel' : 'finish', note },
+            });
+            setFinishing(false);
+            toast(cancel ? 'Звірку скасовано' : `Звірку завершено: є ${d.summary.ok}, немає ${d.summary.missing}`);
+            load();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function StartAuditModal({ scopes, onCancel, onSave }) {
+  const [scope, setScope] = useState(scopes[0] || '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  return (
+    <Modal
+      title="Почати звірку"
+      saveLabel="Почати"
+      onCancel={onCancel}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        setBusy(true);
+        setErr('');
+        try {
+          await onSave(scope);
+        } catch (e) {
+          setErr(e.message || 'Не вдалося почати');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <div style={{ marginTop: 10 }}>
+        <label>Що перевіряємо</label>
+        <select value={scope} onChange={(e) => setScope(e.target.value)}>
+          {scopes.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+      <div className="act-hint">
+        Одночасно може тривати лише одна звірка — щоб дві людини не рахували
+        те саме й не перебивали одне одному результат.
+      </div>
+    </Modal>
+  );
+}
+
+function FinishAuditModal({ counts, total, done, onCancel, onSave }) {
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const left = total - done;
+
+  return (
+    <Modal
+      title="Завершити звірку"
+      saveLabel="Завершити"
+      onCancel={onCancel}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        setBusy(true);
+        setErr('');
+        try {
+          await onSave({ note });
+        } catch (e) {
+          setErr(e.message || 'Не вдалося завершити');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <div className="ledger-stats" style={{ marginBottom: 4 }}>
+        <span>Є: {counts.ok}</span>
+        <span>Немає: {counts.missing}</span>
+        <span>Розбіжності: {counts.diff}</span>
+      </div>
+      {left > 0 && (
+        <div className="err" style={{ marginTop: 10 }}>
+          Не перевірено ще {left} — вони не потраплять у підсумок як підтверджені.
+        </div>
+      )}
+      <div style={{ marginTop: 10 }}>
+        <label>Примітка до звірки</label>
+        <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
+          placeholder="що з'ясувалося, куди дивитись далі" />
+      </div>
+      <div className="act-hint">
+        Результат лишиться в листі «Звірки», а кожна позначка — у «Звірка позицій».
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Хто працює із застосунком ---------- */
 function PeopleView({ setState }) {
   const [data, setData] = useState(null);
@@ -818,6 +1163,7 @@ export default function Home({ startView }) {
       hint: 'лист',
       run: () => setView({ kind: s.kind, name: s.name }),
     })),
+    { label: 'Звірка', hint: 'екран', run: () => setView({ kind: 'audit', name: null }) },
     { label: 'Журнал змін', hint: 'екран', run: () => setView({ kind: 'log', name: null }) },
     // цей рядок не показується сам по собі — він стає «Шукати: …», коли є текст
     { query: true, label: 'Шукати', hint: 'пошук', run: (q) => setView({ kind: 'search', name: null, q }) },
@@ -878,6 +1224,12 @@ export default function Home({ startView }) {
           >
             Журнал
           </div>
+          <div
+            className={'tab' + (view.kind === 'audit' ? ' active' : '')}
+            onClick={() => setView({ kind: 'audit', name: null })}
+          >
+            Звірка
+          </div>
           {me.role === 'admin' && (
             <div
               className={'tab' + (view.kind === 'people' ? ' active' : '')}
@@ -914,6 +1266,7 @@ export default function Home({ startView }) {
           <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} onOpen={setView} />
         )}
         {view.kind === 'log' && <LogView key={view.q || ''} setState={setState} initialQuery={view.q} />}
+        {view.kind === 'audit' && <AuditView setState={setState} />}
         {view.kind === 'people' && me.role === 'admin' && <PeopleView setState={setState} />}
       </div>
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
