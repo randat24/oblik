@@ -667,8 +667,10 @@ export default function Home({ startView }) {
             onClearFocus={() => setView(STOCK_VIEW)}
           />
         )}
-        {view.kind === 'warehouse' && <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} />}
-        {view.kind === 'log' && <LogView setState={setState} />}
+        {view.kind === 'warehouse' && (
+          <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} onOpen={setView} />
+        )}
+        {view.kind === 'log' && <LogView key={view.q || ''} setState={setState} initialQuery={view.q} />}
       </div>
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       <ToastHost toasts={toasts} onClose={close} />
@@ -2120,7 +2122,7 @@ function AddStockModal({ data, onCancel, onSave }) {
 }
 
 /* ---------- Склад ---------- */
-function WarehouseView({ setState, focusCode }) {
+function WarehouseView({ setState, focusCode, onOpen }) {
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
   const [chip, setChip] = useState(null);
@@ -2128,6 +2130,7 @@ function WarehouseView({ setState, focusCode }) {
   const [photo, setPhoto] = useState(null);
   const [qr, setQr] = useState(null);
   const [highlight, setHighlight] = useState(focusCode || null);
+  const [mode, setMode] = useViewMode();
   const toast = useToast();
 
   useNewRecordHotkey(useCallback(() => setAdding(true), []));
@@ -2156,10 +2159,15 @@ function WarehouseView({ setState, focusCode }) {
 
   if (!data) return <div className="loading">Завантаження…</div>;
 
-  const save = async (row, field, value, prev) => {
+  const save = async (row, field, value, prev, code) => {
     setState('збереження…');
     try {
-      await api('/api/warehouse', { method: 'PATCH', body: { row, field, value, prev } });
+      const d = await api('/api/warehouse', { method: 'PATCH', body: { row, field, value, prev, code } });
+      // дата оновлення має змінитися одразу, не чекаючи перезавантаження листа
+      setData((p) => ({
+        ...p,
+        items: p.items.map((x) => (x.row === row ? { ...x, [field]: value, updated: d.updated || x.updated } : x)),
+      }));
       setState('синхронізовано');
       toast('Збережено');
     } catch (e) {
@@ -2200,6 +2208,7 @@ function WarehouseView({ setState, focusCode }) {
           </div>
         ))}
         <div className="spacer" />
+        <ViewToggle mode={mode} onChange={setMode} />
         <button className="btn" onClick={() => setAdding(true)}>+ Додати ящик</button>
       </div>
 
@@ -2210,6 +2219,31 @@ function WarehouseView({ setState, focusCode }) {
 
       {list.length === 0 ? (
         <div className="empty">Немає ящиків</div>
+      ) : mode === 'table' ? (
+        <DataTable
+          columns={[
+            { key: 'code', title: 'Код', cls: 'col-mono col-id', render: (it) => it.code },
+            { key: 'name', title: 'Назва', cls: 'col-name', render: (it) => it.name },
+            { key: 'contents', title: 'Вміст', render: (it) => it.contents || '—' },
+            { key: 'location', title: 'Розташування', render: (it) => it.location || '—' },
+            {
+              key: 'status', title: 'Статус', cls: 'col-status',
+              style: (it) => ({ color: statusColor(it.status) }),
+              render: (it) => it.status || '—',
+            },
+            { key: 'prio', title: 'Пріор.', cls: 'col-mono col-num', render: (it) => it.priority || '—' },
+            { key: 'created', title: 'Додано', cls: 'col-mono', render: (it) => it.created || '—' },
+            { key: 'updated', title: 'Оновлено', cls: 'col-mono', render: (it) => it.updated || '—' },
+            { key: 'notes', title: 'Примітки', render: (it) => it.notes || '—' },
+          ]}
+          rows={list.map((it) => ({ key: it.row, item: it }))}
+          onPick={(it) => {
+            setMode('cards');
+            setTimeout(() => {
+              document.getElementById('box-' + it.code)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 60);
+          }}
+        />
       ) : (
         <div className="grid">
           {list.map((it) => (
@@ -2218,13 +2252,13 @@ function WarehouseView({ setState, focusCode }) {
                 <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className="wh-code">{it.code}</span>
                   <input className="ghost big" type="text" defaultValue={it.name} placeholder="Назва"
-                    onBlur={(e) => e.target.value !== it.name && save(it.row, 'name', e.target.value, it.name)} />
+                    onBlur={(e) => e.target.value !== it.name && save(it.row, 'name', e.target.value, it.name, it.code)} />
                 </div>
                 <select
                   className="pill"
                   style={{ color: statusColor(it.status) }}
                   defaultValue={it.status}
-                  onChange={(e) => save(it.row, 'status', e.target.value, it.status)}
+                  onChange={(e) => save(it.row, 'status', e.target.value, it.status, it.code)}
                 >
                   {data.statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -2245,7 +2279,7 @@ function WarehouseView({ setState, focusCode }) {
                     <span className="drow-k">{label}</span>
                     <span className="drow-v">
                       <input className="ghost" type="text" defaultValue={it[field]} placeholder="—"
-                        onBlur={(e) => e.target.value !== it[field] && save(it.row, field, e.target.value, it[field])} />
+                        onBlur={(e) => e.target.value !== it[field] && save(it.row, field, e.target.value, it[field], it.code)} />
                     </span>
                   </div>
                 ))}
@@ -2253,7 +2287,7 @@ function WarehouseView({ setState, focusCode }) {
                   <span className="drow-k">Пріоритет</span>
                   <span className="drow-v">
                     <select className="ghost" defaultValue={it.priority}
-                      onChange={(e) => save(it.row, 'priority', e.target.value, it.priority)}
+                      onChange={(e) => save(it.row, 'priority', e.target.value, it.priority, it.code)}
                       title={data.priorities.find((p) => p.value === it.priority)?.label}>
                       {data.priorities.map((p) => (
                         <option key={p.value} value={p.value} title={p.label}>{p.value} — {p.label.split(' — ')[1] || p.label}</option>
@@ -2261,6 +2295,11 @@ function WarehouseView({ setState, focusCode }) {
                     </select>
                   </span>
                 </div>
+              </div>
+
+              <div className="wh-dates">
+                <span>Додано: <b>{it.created || '—'}</b></span>
+                <span>Оновлено: <b>{it.updated || '—'}</b></span>
               </div>
 
               <PhotoField
@@ -2272,12 +2311,15 @@ function WarehouseView({ setState, focusCode }) {
                     ...p,
                     items: p.items.map((x) => (x.row === it.row ? { ...x, photoUrl: url } : x)),
                   }));
-                  save(it.row, 'photoUrl', url, prev);
+                  save(it.row, 'photoUrl', url, prev, it.code);
                 }}
               />
 
               <div className="actions">
                 <button className="act-btn act-qr" onClick={() => setQr(it)}>QR</button>
+                <button className="act-btn" onClick={() => onOpen({ kind: 'log', name: null, q: it.code })}>
+                  Історія
+                </button>
                 <button className="act-btn act-del" onClick={async () => {
                   if (!confirm('Видалити ящик ' + it.code + '?')) return;
                   setState('видалення…');
@@ -2424,9 +2466,9 @@ function actionClass(a) {
   return 'log-edit';
 }
 
-function LogView({ setState }) {
+function LogView({ setState, initialQuery }) {
   const [entries, setEntries] = useState(null);
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(initialQuery || '');
   const [big, setBig] = useState(null);
 
   const load = useCallback(async () => {
