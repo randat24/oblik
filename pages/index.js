@@ -2514,15 +2514,15 @@ function LogView({ setState }) {
 }
 
 /* ---------- Форма приймання та видачі за актом ---------- */
-const emptyItem = () => ({ title: '', number: '', serial: '' });
+const emptyItem = () => ({ cells: {} });
 
 /** Поле назви з підказками з обраного листа: вибрав річ — акт оновить її рядок */
-function ItemPicker({ value, catalog, onPick, onText }) {
+function ItemPicker({ value, catalog, onPick, onText, placeholder = 'Назва' }) {
   const [open, setOpen] = useState(false);
   const q = (value || '').trim().toLowerCase();
   const hits = q
     ? catalog
-        .filter((c) => [c.title, c.number, c.serial, c.who].join(' ').toLowerCase().includes(q))
+        .filter((c) => [c.title, c.hint, c.who].join(' ').toLowerCase().includes(q))
         .slice(0, 8)
     : [];
 
@@ -2530,7 +2530,7 @@ function ItemPicker({ value, catalog, onPick, onText }) {
     <div className="pick">
       <input
         type="text"
-        placeholder="Назва"
+        placeholder={placeholder}
         value={value}
         autoComplete="off"
         onChange={(e) => { onText(e.target.value); setOpen(true); }}
@@ -2549,8 +2549,7 @@ function ItemPicker({ value, catalog, onPick, onText }) {
               onMouseDown={(e) => { e.preventDefault(); onPick(h); setOpen(false); }}
             >
               <span className="pick-title">{h.title || '—'}</span>
-              {h.number && <span className="pick-tag">№{h.number}</span>}
-              {h.serial && <span className="pick-sn">{h.serial}</span>}
+              {h.hint && <span className="pick-sn">{h.hint}</span>}
               {h.status && <span className="pick-st" style={{ color: statusColor(h.status) }}>{h.status}</span>}
               {h.who && <span className="pick-who">→ {h.who}</span>}
             </div>
@@ -2566,6 +2565,8 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, onCancel, o
   const [sheet, setSheet] = useState(initialSheet || sheets[0] || '');
   const [items, setItems] = useState([emptyItem()]);
   const [catalog, setCatalog] = useState([]);
+  // набір полів у кожного листа свій — беремо його з сервера разом із підказками
+  const [fields, setFields] = useState([]);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [condition, setCondition] = useState(accept ? conditions[1] : '');
@@ -2578,21 +2579,27 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, onCancel, o
   const shownSheet = useRef(sheet);
   const bound = useRef(false);
 
-  // підказки беремо з того листа, який зараз обраний
+  // поля й підказки беремо з того листа, який зараз обраний
   useEffect(() => {
     let alive = true;
     setCatalog([]);
+    setFields([]);
     api('/api/act?sheet=' + encodeURIComponent(sheet))
-      .then((d) => { if (alive) setCatalog(d.catalog || []); })
+      .then((d) => {
+        if (!alive) return;
+        setCatalog(d.catalog || []);
+        setFields(d.fields || []);
+      })
       .catch(() => {});
     return () => { alive = false; };
   }, [sheet]);
 
-  // рядок належить конкретному листу — при зміні категорії прив'язки скидаємо
+  // і рядок, і колонки належать конкретному листу — при зміні категорії
+  // прив'язки скидаємо, а введене чистимо, бо колонки вже інші
   useEffect(() => {
     if (shownSheet.current === sheet) return;
     shownSheet.current = sheet;
-    setItems((p) => p.map(({ row, ...rest }) => rest));
+    setItems([emptyItem()]);
   }, [sheet]);
 
   // відкрили форму з пошуку — одразу підставляємо знайдену річ
@@ -2601,21 +2608,26 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, onCancel, o
     const hit = catalog.find((c) => c.row === bindRow);
     if (!hit) return;
     bound.current = true;
-    setItems([{ title: hit.title, number: hit.number, serial: hit.serial, row: hit.row }]);
+    setItems([{ cells: { ...hit.cells }, row: hit.row }]);
   }, [catalog, bindRow]);
 
-  const upItem = (i, k, v) => setItems((p) => p.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const titleCol = fields[0]?.col ?? 0;
+  const subFields = fields.slice(1);
+  const cellOf = (it, col) => it.cells?.[col] || '';
+
+  const upCell = (i, col, v) =>
+    setItems((p) => p.map((x, j) => (j === i ? { ...x, cells: { ...x.cells, [col]: v } } : x)));
   const pickItem = (i, h) =>
-    setItems((p) => p.map((x, j) =>
-      j === i ? { title: h.title, number: h.number, serial: h.serial, row: h.row } : x));
+    setItems((p) => p.map((x, j) => (j === i ? { cells: { ...h.cells }, row: h.row } : x)));
   const unbind = (i) => setItems((p) => p.map((x, j) => {
     if (j !== i) return x;
     const { row, ...rest } = x;
     return rest;
   }));
 
-  const filled = items.filter((it) => it.title.trim()).length;
-  const bindings = items.filter((it) => it.title.trim() && it.row).length;
+  const named = (it) => cellOf(it, titleCol).trim();
+  const filled = items.filter(named).length;
+  const bindings = items.filter((it) => named(it) && it.row).length;
 
   return (
     <Modal
@@ -2651,16 +2663,19 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, onCancel, o
         {items.map((it, i) => (
           <div className={'act-item' + (it.row ? ' act-item-bound' : '')} key={i}>
             <ItemPicker
-              value={it.title}
+              value={cellOf(it, titleCol)}
               catalog={catalog}
-              onText={(v) => upItem(i, 'title', v)}
+              placeholder={fields[0]?.label || 'Назва'}
+              onText={(v) => upCell(i, titleCol, v)}
               onPick={(h) => pickItem(i, h)}
             />
             <div className="act-item-sub">
-              <input type="text" placeholder="№" value={it.number}
-                onChange={(e) => upItem(i, 'number', e.target.value)} />
-              <input type="text" placeholder="S/N" value={it.serial}
-                onChange={(e) => upItem(i, 'serial', e.target.value)} />
+              {subFields.map((f) => (
+                <input key={f.col} type={f.mask ? 'password' : 'text'}
+                  placeholder={f.label} title={f.label} autoComplete="off"
+                  value={cellOf(it, f.col)}
+                  onChange={(e) => upCell(i, f.col, e.target.value)} />
+              ))}
               {items.length > 1 && (
                 <button type="button" className="act-btn act-del"
                   onClick={() => setItems((p) => p.filter((_, j) => j !== i))}>✕</button>
@@ -2673,7 +2688,7 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, onCancel, o
                   зробити новою
                 </button>
               </div>
-            ) : it.title.trim() ? (
+            ) : named(it) ? (
               <div className="pick-new">нова річ — додамо рядок</div>
             ) : null}
           </div>
@@ -2712,6 +2727,7 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, onCancel, o
 
       <div className="act-hint">
         Дата: {date}
+        {fields.length > 0 && ` · поля листа: ${fields.map((f) => f.label).join(', ')}`}
         {catalog.length > 0 && ` · у листі «${sheet}»: ${catalog.length} поз.`}
         {bindings > 0 && ` · оновимо наявних: ${bindings}`}
       </div>

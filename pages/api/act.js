@@ -13,25 +13,54 @@ function itemCols(headers, cols) {
   return { id, sn, where, note };
 }
 
+/**
+ * Поля, які заповнює людина. Статус, отримувача, дату, місце й примітку
+ * проставляє сам акт, тож у формі їх немає — інакше введене одразу б затиралося.
+ */
+function fieldsOf(headers, cols, masked = new Set()) {
+  const ic = itemCols(headers, cols);
+  const skip = new Set([cols.status, cols.who, cols.date, ic.where, ic.note].filter((i) => i >= 0));
+  return headers
+    .map((h, i) => ({
+      col: i,
+      label: (h || '').toString().trim() || `Поле ${i + 1}`,
+      mask: masked.has(i) || undefined,
+    }))
+    .filter((f) => !skip.has(f.col));
+}
+
 /** Список речей листа — для підказок у формі акта */
-function catalogOf(values) {
+function catalogOf(values, cfg) {
   const headers = values[0] || [];
   const cols = findColumns(headers);
-  const ic = itemCols(headers, cols);
+  const masked = new Set(cfg?.maskPasswords ? cols.maskCols : []);
+  const fields = fieldsOf(headers, cols, masked);
+  const titleCol = fields[0]?.col ?? 0;
   const cell = (row, i) => (i >= 0 ? (row[i] || '').toString().trim() : '');
 
-  return values
+  const catalog = values
     .slice(1)
-    .map((row, i) => ({
-      row: i + 2,
-      title: cell(row, 0),
-      number: cell(row, ic.id),
-      serial: cell(row, ic.sn),
-      status: cols.status >= 0 ? cell(row, cols.status) : '',
-      who: cols.who >= 0 ? cell(row, cols.who) : '',
-      where: cell(row, ic.where),
-    }))
-    .filter((c) => c.title || c.number || c.serial);
+    .map((row, i) => {
+      const cells = {};
+      fields.forEach((f) => {
+        const v = cell(row, f.col);
+        if (v) cells[f.col] = v;
+      });
+      return {
+        row: i + 2,
+        title: cells[titleCol] || '',
+        // короткий опис решти полів — щоб у списку підказок було видно, що це саме та річ.
+        // паролі до підказки не потрапляють: вона світиться просто в списку
+        hint: fields.filter((f) => f.col !== titleCol && !f.mask && cells[f.col])
+          .slice(0, 3).map((f) => cells[f.col]).join(' · '),
+        status: cols.status >= 0 ? cell(row, cols.status) : '',
+        who: cols.who >= 0 ? cell(row, cols.who) : '',
+        cells,
+      };
+    })
+    .filter((c) => c.title || c.hint);
+
+  return { catalog, fields, titleCol };
 }
 
 /** Що дописуємо в «Примітки»: дата, стан і від кого / кому */
@@ -46,14 +75,15 @@ function rowForSheet(headers, cols, item, ctx) {
   const row = new Array(headers.length).fill('');
   const { kind, to, date } = ctx;
 
-  if (item.title) row[0] = item.title;
-  if (ic.id >= 0 && item.number) row[ic.id] = item.number;
-  if (ic.sn >= 0 && item.serial) row[ic.sn] = item.serial;
+  Object.entries(item.cells || {}).forEach(([k, v]) => {
+    const i = Number(k);
+    if (Number.isInteger(i) && i >= 0 && i < headers.length && v) row[i] = v;
+  });
 
   if (cols.status >= 0) row[cols.status] = kind === 'accept' ? 'КСП' : 'Видано';
   // приймаємо — річ лягає на КСП; видаємо — записуємо, кому саме
   if (cols.who >= 0) row[cols.who] = kind === 'accept' ? '' : to;
-  if (ic.where >= 0) row[ic.where] = kind === 'accept' ? 'КСП' : (item.where || '');
+  if (ic.where >= 0) row[ic.where] = kind === 'accept' ? 'КСП' : '';
   if (cols.date >= 0) row[cols.date] = date;
   if (ic.note >= 0) row[ic.note] = noteBits(ctx);
   return row;
@@ -66,11 +96,13 @@ function updatesForRow(headers, cols, item, ctx, current) {
   const ups = [];
   const at = (i) => (i >= 0 ? (current[i] || '').toString().trim() : '');
   const set = (i, value) => { if (i >= 0) ups.push({ col: i + 1, value }); };
-  // ідентифікатори не перезаписуємо — тільки дозаповнюємо порожні
+  // те, що вже записано в листі, не перезаписуємо — тільки дозаповнюємо порожнє
   const fill = (i, value) => { if (i >= 0 && value && !at(i)) ups.push({ col: i + 1, value }); };
 
-  fill(ic.id, item.number);
-  fill(ic.sn, item.serial);
+  Object.entries(item.cells || {}).forEach(([k, v]) => {
+    const i = Number(k);
+    if (Number.isInteger(i) && i >= 0) fill(i, v);
+  });
 
   if (cols.status >= 0) set(cols.status, kind === 'accept' ? 'КСП' : 'Видано');
   if (cols.who >= 0) set(cols.who, kind === 'accept' ? '' : to);
@@ -96,7 +128,7 @@ export default withAuth(async (req, res) => {
     if (sheet) {
       const cfg = SHEET_CONFIGS.find((c) => c.name === sheet && c.kind === 'items');
       if (!cfg) return res.status(404).json({ error: `Немає такої категорії: ${sheet}` });
-      return res.json({ sheet, catalog: catalogOf(await readSheet(sheet)) });
+      return res.json({ sheet, ...catalogOf(await readSheet(sheet), cfg) });
     }
     return res.json({
       acts: await readActs(),
@@ -112,8 +144,6 @@ export default withAuth(async (req, res) => {
   if (!ACT_KINDS[kind]) return res.status(400).json({ error: 'Невідома дія' });
   if (!from?.trim()) return res.status(400).json({ error: 'Вкажіть, хто віддав' });
   if (!to?.trim()) return res.status(400).json({ error: 'Вкажіть, хто прийняв' });
-  const list = (items || []).filter((it) => (it.title || '').trim());
-  if (!list.length) return res.status(400).json({ error: 'Додайте хоча б одну позицію' });
 
   const cfg = SHEET_CONFIGS.find((c) => c.name === sheet && c.kind === 'items');
   if (!cfg) return res.status(400).json({ error: `Немає такої категорії: ${sheet}` });
@@ -121,7 +151,14 @@ export default withAuth(async (req, res) => {
   const values = await readSheet(sheet);
   const headers = values[0] || [];
   const cols = findColumns(headers);
+  const titleCol = fieldsOf(headers, cols)[0]?.col ?? 0;
   const ctx = { kind, to, from, date, condition };
+
+  // назва — єдине обов'язкове поле; решта залежить від того, які колонки має лист
+  const list = (items || [])
+    .map((it) => ({ ...it, title: (it.cells?.[titleCol] || '').toString().trim() }))
+    .filter((it) => it.title);
+  if (!list.length) return res.status(400).json({ error: 'Додайте хоча б одну позицію' });
 
   // спершу позиції — акт має описувати те, що вже внесено
   let added = 0;
