@@ -16,6 +16,7 @@ async function searchStock(qText) {
     const fields = [
       ['номер', it.id], ['назва', it.name], ['опис', it.description],
       ['категорія', it.category], ['місце', it.place], ['примітки', it.notes],
+      ['облік', it.accounting],
     ];
     const hit = fields.find(([, v]) => (v || '').toString().toLowerCase().includes(qText));
     if (!hit) return;
@@ -29,6 +30,7 @@ async function searchStock(qText) {
       place: it.place,
       unit: it.unit,
       description: it.description,
+      accounting: it.accounting,
       received: it.received,
       writtenOff: it.writtenOff,
       remainder: it.remainder,

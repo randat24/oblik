@@ -1,7 +1,8 @@
 import { withAuth } from '../../lib/auth';
 import { writeCell, writeCells, appendRow, deleteRow, insertRowAt, todayStr } from '../../lib/sheets';
 import {
-  STOCK_SHEET, C, FIELD_LABELS, readStock, nextId, stockRow, appendMove,
+  STOCK_SHEET, C, FIELD_LABELS, ACCOUNTING_OPTIONS,
+  readStock, nextId, stockRow, appendMove,
 } from '../../lib/stock';
 import { logChange } from '../../lib/log';
 
@@ -12,7 +13,7 @@ const qtyOf = (v) => {
 
 function payload(stock) {
   const { items, moves, categories, units, places, people } = stock;
-  return { items, moves, categories, units, places, people };
+  return { items, moves, categories, units, places, people, accountingOptions: ACCOUNTING_OPTIONS };
 }
 
 export default withAuth(async (req, res) => {
@@ -79,7 +80,7 @@ export default withAuth(async (req, res) => {
     }
 
     // нова позиція
-    const { category, name, description, unit, place, notes, photo1, photo2, who } = req.body;
+    const { category, name, description, unit, place, notes, photo1, photo2, who, accounting } = req.body;
     if (!String(name || '').trim()) return res.status(400).json({ error: 'Вкажіть найменування' });
     const received = qtyOf(req.body.received) || 0;
     if (received < 0) return res.status(400).json({ error: 'Кількість не може бути від’ємною' });
@@ -88,7 +89,7 @@ export default withAuth(async (req, res) => {
     const id = nextId(stock.items);
     await appendRow(STOCK_SHEET, stockRow({
       id, category, name, description, unit, received, writtenOff: 0,
-      place, photo1, photo2, notes, date,
+      place, photo1, photo2, notes, date, accounting,
     }));
 
     if (received > 0) {
@@ -100,7 +101,7 @@ export default withAuth(async (req, res) => {
 
     await logChange({
       sheet: STOCK_SHEET, action: 'Додано позицію', field: name,
-      after: `${id}${category ? `, ${category}` : ''}, прийнято ${received} ${unit || 'шт.'}`.trim(),
+      after: `${id}${category ? `, ${category}` : ''}${accounting ? `, ${accounting}` : ''}, прийнято ${received} ${unit || 'шт.'}`.trim(),
       photo: photo1,
     });
 
