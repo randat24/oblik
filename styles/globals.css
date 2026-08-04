@@ -508,6 +508,9 @@ input:focus, select:focus, textarea:focus {
   background: var(--panel); border: 1px solid var(--line-soft);
   border-radius: var(--r); padding: 14px; position: relative;
   transition: border-color .15s;
+  /* без цього комірка сітки не звужується менше за свій вміст —
+     довга назва чи широкий статус розпирали б картку за край екрана */
+  min-width: 0;
 }
 .card:hover { border-color: var(--line); }
 .card.highlight {
@@ -932,11 +935,10 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
     flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
     margin: 0 -12px 12px; padding: 0 12px 4px;
   }
-  /* на вузькому екрані статус переїжджає під назву, а не тисне її */
-  .card-head { flex-wrap: wrap; }
-  /* залишок вузький — його переносити нікуди не треба */
-  .stock-card .card-head { flex-wrap: nowrap; }
-  .pill { max-width: 100%; }
+  /* статус лишається праворуч від назви — там його і шукаєш очима.
+     Раніше він переносився під назву і розтягувався на пів екрана. */
+  .card-head { flex-wrap: nowrap; }
+  .pill { max-width: 42%; flex: 0 1 auto; }
   .tabs::-webkit-scrollbar { display: none; }
   .toolbar { gap: 6px; }
   .search-wrap { flex: 1 1 100%; }
