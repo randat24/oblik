@@ -21,6 +21,7 @@ export default async function handler(req, res) {
       callsigns,
       callsign: who?.callsign || '',
       role: who?.role || 'admin',
+      expires: who?.expires || 0,
     });
   }
 
@@ -40,8 +41,8 @@ export default async function handler(req, res) {
     if (password !== process.env.APP_PASSWORD) {
       return res.status(401).json({ error: 'Невірний пароль' });
     }
-    setSessionCookie(res, { callsign: '', role: 'admin' });
-    return res.json({ ok: true, role: 'admin', callsign: '' });
+    const end = setSessionCookie(res, { callsign: '', role: 'admin' });
+    return res.json({ ok: true, role: 'admin', callsign: '', expires: end });
   }
 
   if (!callsign || !pin) return res.status(400).json({ error: 'Вкажіть позивний і PIN' });
@@ -49,6 +50,6 @@ export default async function handler(req, res) {
   const person = verifyPin(await readPeople(), callsign, pin);
   if (!person) return res.status(401).json({ error: 'Невірний позивний або PIN' });
 
-  setSessionCookie(res, { callsign: person.callsign, role: person.role });
-  return res.json({ ok: true, role: person.role, callsign: person.callsign });
+  const end = setSessionCookie(res, { callsign: person.callsign, role: person.role });
+  return res.json({ ok: true, role: person.role, callsign: person.callsign, expires: end });
 }
