@@ -1240,6 +1240,9 @@ function ItemsView({ name, setState, focusRow }) {
         <AddItemModal
           headers={headers}
           cols={cols}
+          idIdx={idIdx}
+          snIdx={snIdx}
+          suggestions={data.suggestions}
           statusOptions={statusOptions}
           typeOptions={typeOptions}
           hideStatus={hideStatus}
@@ -1257,6 +1260,8 @@ function ItemsView({ name, setState, focusRow }) {
         <IssueModal
           whoOptions={data.whoOptions}
           whereOptions={data.whereOptions}
+          whoLabel={cols.who >= 0 ? headers[cols.who] || 'Отримав' : ''}
+          whereLabel={cols.where > 0 ? headers[cols.where] || 'Де' : ''}
           onCancel={() => setIssuing(null)}
           onSave={async ({ who, where, date }) => {
             await api('/api/item', {
@@ -1273,11 +1278,44 @@ function ItemsView({ name, setState, focusRow }) {
   );
 }
 
-function AddItemModal({ headers, cols, statusOptions, typeOptions, hideStatus, onCancel, onSave }) {
+/**
+ * Порядок полів у формі має збігатися з тим, як картка читається згори вниз:
+ * спершу сама річ, потім її стан, потім кому й коли, і аж тоді решта.
+ */
+function formGroups({ headers, cols, idIdx, snIdx, hideStatus }) {
+  const used = new Set();
+  const take = (i) => {
+    if (i === undefined || i === null || i < 0 || i >= headers.length || used.has(i)) return null;
+    used.add(i);
+    return i;
+  };
+
+  const thing = [take(0), take(idIdx), take(snIdx)].filter((i) => i !== null);
+  const state = [hideStatus ? null : take(cols.status), take(cols.type)].filter((i) => i !== null);
+  const whom = [take(cols.who), take(cols.date), take(cols.where > 0 ? cols.where : -1)]
+    .filter((i) => i !== null);
+  if (hideStatus && cols.status >= 0) used.add(cols.status);
+  const rest = headers.map((_, i) => i).filter((i) => !used.has(i));
+
+  return [
+    { title: 'Річ', cols: thing },
+    { title: 'Стан', cols: state },
+    { title: 'Кому і коли', cols: whom },
+    { title: 'Решта', cols: rest },
+  ].filter((g) => g.cols.length);
+}
+
+function AddItemModal({
+  headers, cols, statusOptions, typeOptions, hideStatus,
+  idIdx, snIdx, suggestions = {}, onCancel, onSave,
+}) {
   // дату підставляємо сьогоднішню — її однаково майже завжди ставлять поточну
   const [vals, setVals] = useState(() => headers.map((_, i) => (i === cols.date ? todayStr() : '')));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+
+  const set = (i, v) => setVals((p) => p.map((x, j) => (j === i ? v : x)));
+  const groups = formGroups({ headers, cols, idIdx, snIdx, hideStatus });
 
   return (
     <Modal
@@ -1286,6 +1324,7 @@ function AddItemModal({ headers, cols, statusOptions, typeOptions, hideStatus, o
       busy={busy}
       error={err}
       onSave={async () => {
+        if (!vals[0]?.trim()) return setErr(`Вкажіть «${headers[0] || 'назву'}» — без цього запис не знайти`);
         setBusy(true);
         setErr('');
         try {
@@ -1297,36 +1336,45 @@ function AddItemModal({ headers, cols, statusOptions, typeOptions, hideStatus, o
         }
       }}
     >
-      {headers.map((h, i) => {
-        if (hideStatus && i === cols.status) return null;
-        return (
-        <div key={i} style={{ marginTop: 10 }}>
-          <label>{h || 'Поле ' + (i + 1)}</label>
-          {i === cols.status || i === cols.type ? (
-            <select value={vals[i]} onChange={(e) => setVals((v) => v.map((x, j) => (j === i ? e.target.value : x)))}>
-              <option value=""></option>
-              {(i === cols.status ? statusOptions : typeOptions).map((o) => (
-                <option key={o} value={o}>{o}</option>
-              ))}
-            </select>
-          ) : (
-            <input
-              type="text"
-              value={vals[i]}
-              onChange={(e) => setVals((v) => v.map((x, j) => (j === i ? e.target.value : x)))}
-            />
-          )}
+      {groups.map((g) => (
+        <div key={g.title} className="fgroup">
+          <div className="fgroup-t">{g.title}</div>
+          {g.cols.map((i) => (
+            <div key={i} style={{ marginTop: 10 }}>
+              <label>
+                {headers[i] || 'Поле ' + (i + 1)}
+                {i === 0 && <span className="req"> *</span>}
+              </label>
+              {i === cols.status || i === cols.type ? (
+                <select value={vals[i]} onChange={(e) => set(i, e.target.value)}>
+                  <option value="">—</option>
+                  {(i === cols.status ? statusOptions : typeOptions).map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              ) : suggestions[i]?.length ? (
+                <Combo value={vals[i]} options={suggestions[i]} onChange={(v) => set(i, v)} />
+              ) : (
+                <input
+                  type="text"
+                  value={vals[i]}
+                  autoFocus={i === 0}
+                  placeholder={i === cols.date ? 'дд.мм.рррр' : ''}
+                  onChange={(e) => set(i, e.target.value)}
+                />
+              )}
+            </div>
+          ))}
         </div>
-        );
-      })}
+      ))}
     </Modal>
   );
 }
 
-function IssueModal({ whoOptions = [], whereOptions = [], onCancel, onSave }) {
+function IssueModal({ whoOptions = [], whereOptions = [], whoLabel, whereLabel, onCancel, onSave }) {
   const [who, setWho] = useState('');
   const [where, setWhere] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayStr());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -1338,11 +1386,13 @@ function IssueModal({ whoOptions = [], whereOptions = [], onCancel, onSave }) {
       busy={busy}
       error={err}
       onSave={async () => {
-        if (!who && !where) return alert('Вкажіть хоча б позивний або місце');
+        if (!who.trim() && !where.trim()) {
+          return setErr(whereLabel ? 'Вкажіть позивний або місце' : 'Вкажіть, кому видаємо');
+        }
         setBusy(true);
         setErr('');
         try {
-          await onSave({ who, where, date: date.split('-').reverse().join('.') });
+          await onSave({ who: who.trim(), where: where.trim(), date });
         } catch (e) {
           setErr(e.message || 'Помилка збереження');
         } finally {
@@ -1350,19 +1400,23 @@ function IssueModal({ whoOptions = [], whereOptions = [], onCancel, onSave }) {
         }
       }}
     >
-      <div style={{ marginTop: 10 }}>
-        <label>Кому (позивний)</label>
-        <input type="text" list="whoList" value={who} onChange={(e) => setWho(e.target.value)} />
-        <datalist id="whoList">{whoOptions.map((w) => <option key={w} value={w} />)}</datalist>
-      </div>
-      <div style={{ marginTop: 10 }}>
-        <label>Куди (місце)</label>
-        <input type="text" list="whereList" value={where} onChange={(e) => setWhere(e.target.value)} />
-        <datalist id="whereList">{whereOptions.map((w) => <option key={w} value={w} />)}</datalist>
-      </div>
+      {whoLabel && (
+        <div style={{ marginTop: 10 }}>
+          <label>{whoLabel} — кому видаємо</label>
+          <Combo value={who} options={whoOptions} onChange={setWho} placeholder="позивний" autoFocus />
+        </div>
+      )}
+      {/* поле показуємо лише тоді, коли в листі справді є колонка місця —
+          інакше введене нікуди не запишеться */}
+      {whereLabel && (
+        <div style={{ marginTop: 10 }}>
+          <label>{whereLabel} — куди</label>
+          <Combo value={where} options={whereOptions} onChange={setWhere} placeholder="місце" />
+        </div>
+      )}
       <div style={{ marginTop: 10 }}>
         <label>Дата видачі</label>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <input type="text" value={date} onChange={(e) => setDate(e.target.value)} placeholder="дд.мм.рррр" />
       </div>
     </Modal>
   );

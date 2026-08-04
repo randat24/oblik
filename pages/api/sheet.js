@@ -55,6 +55,17 @@ export default withAuth(async (req, res) => {
   const whereOptions = distinctValues(dataRows, cols.where);
   const whoOptions = distinctValues(dataRows, cols.who);
 
+  // Колонки, де значення повторюються (підрозділ, місце, тип пристрою), — це
+  // насправді довідники. Підказуємо вже вжите, щоб не вигадувати написання щоразу.
+  const masked = new Set(cfg.maskPasswords ? cols.maskCols : []);
+  const suggestions = {};
+  headers.forEach((_, i) => {
+    if (i === 0 || masked.has(i) || i === cols.status || i === cols.type || i === cols.date) return;
+    const vals = distinctValues(dataRows, i);
+    const filled = dataRows.filter((r) => (r[i] || '').toString().trim()).length;
+    if (vals.length >= 1 && vals.length <= 40 && vals.length * 2 <= filled) suggestions[i] = vals;
+  });
+
   res.json({
     name,
     kind: cfg.kind,
@@ -68,5 +79,6 @@ export default withAuth(async (req, res) => {
     typeOptions,
     whereOptions,
     whoOptions,
+    suggestions,
   });
 });

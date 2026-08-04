@@ -126,6 +126,16 @@ input:focus, select:focus, textarea:focus {
 }
 .search-clear:hover { color: var(--text); background: var(--line); }
 
+/* Групи полів у формі — щоб було видно, що до чого належить */
+.fgroup { margin-top: 18px; }
+.fgroup:first-child { margin-top: 4px; }
+.fgroup-t {
+  font-family: var(--mono); font-size: .68rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--amber); opacity: .75;
+  padding-bottom: 6px; border-bottom: 1px solid var(--line-soft);
+}
+.req { color: var(--amber); }
+
 /* Коли ящик додали й коли востаннє чіпали */
 .wh-dates {
   display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px;
