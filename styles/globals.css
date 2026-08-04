@@ -126,6 +126,68 @@ input:focus, select:focus, textarea:focus {
 }
 .search-clear:hover { color: var(--text); background: var(--line); }
 
+/* ---------- Головна ---------- */
+.home-hi { color: var(--text-dim); margin-bottom: 14px; }
+.home-hi b { color: var(--amber); }
+.stats {
+  display: grid; gap: 8px; margin-bottom: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.stat {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 14px 16px;
+}
+.stat-v {
+  font-family: var(--mono); font-size: 1.9rem; font-weight: 700;
+  line-height: 1.1; color: var(--text);
+}
+.stat-l {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin-top: 4px;
+}
+.stat-s { font-size: .74rem; color: var(--muted); margin-top: 6px; opacity: .8; }
+.stat-ok .stat-v { color: var(--green); }
+
+.attn-list { display: flex; flex-direction: column; gap: 6px; }
+.attn {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--amber);
+  border-radius: var(--r-sm); padding: 10px 12px;
+}
+.attn-bad { border-left-color: var(--red); }
+.attn-text { flex: 1 1 200px; min-width: 0; }
+.attn .act-btn { flex: 0 0 auto; }
+
+.home-cols {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+.home-cols .section { margin-bottom: 0; }
+
+/* ---------- Офлайн ---------- */
+.offline-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px; margin-bottom: 12px;
+  border: 1px solid var(--red); background: var(--red-dim);
+  border-radius: var(--r-sm); font-size: .84rem;
+}
+.offline-bar.is-sync { border-color: var(--amber); background: var(--amber-dim); }
+.offline-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex: 0 0 auto;
+}
+.is-sync .offline-dot { background: var(--amber); animation: pulse 1.4s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+.offline-text { flex: 1 1 auto; min-width: 0; }
+.offline-count {
+  font-family: var(--mono); font-weight: 700; padding: 1px 8px;
+  border-radius: 20px; background: rgba(0,0,0,.3);
+}
+.offline-act {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; color: inherit; text-decoration: underline; flex: 0 0 auto;
+}
+
 /* ---------- Звірка ---------- */
 .audit-bar {
   position: sticky; top: 0; z-index: 5;

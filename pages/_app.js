@@ -1,7 +1,14 @@
 import Head from 'next/head';
+import { useEffect } from 'react';
 import '../styles/globals.css';
 
 export default function App({ Component, pageProps }) {
+  // без службового робітника сторінка в полі просто не відкриється
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }, []);
+
   return (
     <>
       <Head>
