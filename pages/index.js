@@ -226,6 +226,173 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
   );
 }
 
+/* ---------- Сканування QR камерою ---------- */
+const IconQr = ({ size = 15 }) => (
+  <svg className="ico" viewBox="0 0 16 16" width={size} height={size} fill="none"
+    stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+    <rect x="1.5" y="1.5" width="5" height="5" rx="1" />
+    <rect x="9.5" y="1.5" width="5" height="5" rx="1" />
+    <rect x="1.5" y="9.5" width="5" height="5" rx="1" />
+    <path d="M9.5 9.5h2v2h-2zM13 9.5h1.5M9.5 13H11v1.5M13.5 12.5v2" strokeLinecap="round" />
+  </svg>
+);
+
+/**
+ * Що саме відсканували. QR ящика — це посилання на застосунок,
+ * решта може бути серійником, номером або чим завгодно з коробки.
+ */
+function parseCode(raw) {
+  const text = (raw || '').toString().trim();
+  if (!text) return null;
+
+  let box = null;
+  let id = null;
+  try {
+    const u = new URL(text, 'https://oblik.local');
+    box = u.searchParams.get('box');
+    id = u.searchParams.get('id');
+  } catch {}
+  if (box) return { kind: 'box', value: box };
+  if (id) return { kind: 'stock', value: id };
+  if (/^[РPр]-?\d{1,5}$/i.test(text)) return { kind: 'stock', value: text.toUpperCase().replace(/^P/, 'Р') };
+  return { kind: 'text', value: text };
+}
+
+function QrScanner({ title = 'Наведіть на QR-код', hint, onCode, onClose }) {
+  const videoRef = useRef(null);
+  const [err, setErr] = useState('');
+  const [torch, setTorch] = useState(null); // null — ліхтарика немає
+  const stopRef = useRef(() => {});
+
+  useEffect(() => {
+    let alive = true;
+    let stream = null;
+    let raf = 0;
+    let timer = 0;
+
+    const stop = () => {
+      alive = false;
+      cancelAnimationFrame(raf);
+      clearInterval(timer);
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+    stopRef.current = stop;
+
+    (async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setErr('Браузер не дає доступу до камери. Скористайтесь камерою телефона — QR ящика відкриє потрібну картку сам.');
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        });
+      } catch (e) {
+        setErr(
+          e?.name === 'NotAllowedError'
+            ? 'Доступ до камери заборонено. Дозвольте його в налаштуваннях сайту й спробуйте знову.'
+            : 'Не вдалося увімкнути камеру: ' + (e?.message || '')
+        );
+        return;
+      }
+      if (!alive) { stream.getTracks().forEach((t) => t.stop()); return; }
+
+      const video = videoRef.current;
+      if (!video) return;
+      video.srcObject = stream;
+      video.setAttribute('playsinline', 'true');
+      await video.play().catch(() => {});
+
+      const track = stream.getVideoTracks()[0];
+      if (track?.getCapabilities?.().torch) setTorch(false);
+
+      const hit = (text) => {
+        if (!alive || !text) return;
+        stop();
+        onCode(text);
+      };
+
+      // на Android є вбудований розпізнавач — він швидший і не гріє телефон
+      if ('BarcodeDetector' in window) {
+        try {
+          const det = new window.BarcodeDetector({ formats: ['qr_code'] });
+          timer = setInterval(async () => {
+            if (!alive || video.readyState < 2) return;
+            try {
+              const codes = await det.detect(video);
+              if (codes?.length) hit(codes[0].rawValue);
+            } catch {}
+          }, 250);
+          return;
+        } catch {}
+      }
+
+      // запасний шлях — розбираємо кадри самі (потрібно для iPhone)
+      const { default: jsQR } = await import('jsqr');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const tick = () => {
+        if (!alive) return;
+        if (video.readyState >= 2) {
+          const w = 320;
+          const h = Math.round((video.videoHeight / video.videoWidth) * w) || 240;
+          canvas.width = w;
+          canvas.height = h;
+          ctx.drawImage(video, 0, 0, w, h);
+          const img = ctx.getImageData(0, 0, w, h);
+          const found = jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
+          if (found?.data) return hit(found.data);
+        }
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    })();
+
+    return () => stop();
+  }, [onCode]);
+
+  const toggleTorch = async () => {
+    const track = videoRef.current?.srcObject?.getVideoTracks?.()[0];
+    if (!track) return;
+    const next = !torch;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next }] });
+      setTorch(next);
+    } catch {}
+  };
+
+  return (
+    <div className="overlay scan-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="scan">
+        <div className="scan-head">
+          <span>{title}</span>
+          <button className="scan-x" onClick={onClose} aria-label="Закрити">✕</button>
+        </div>
+
+        {err ? (
+          <div className="scan-err">{err}</div>
+        ) : (
+          <div className="scan-view">
+            <video ref={videoRef} muted playsInline />
+            <div className="scan-frame" />
+          </div>
+        )}
+
+        <div className="scan-foot">
+          {hint && <span className="scan-hint">{hint}</span>}
+          {torch !== null && (
+            <button className="act-btn" onClick={toggleTorch}>
+              {torch ? 'Вимкнути ліхтарик' : 'Ліхтарик'}
+            </button>
+          )}
+          <button className="act-btn" onClick={onClose}>Скасувати</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Головна: що є, що робилось, на що глянути ---------- */
 function Stat({ label, value, sub, tone }) {
   return (
@@ -472,6 +639,7 @@ function AuditView({ setState }) {
   const [marks, setMarks] = useState({}); // ключ рядка → { result, fact }
   const [starting, setStarting] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [scan, setScan] = useState(false);
   const toast = useToast();
 
   // позначки летять пачками: на обході їх сотні, а квота на записи не безмежна
@@ -624,6 +792,9 @@ function AuditView({ setState }) {
           <span className="id-badge">{data.open.id}</span>
           <span className="badge">{data.open.scope}</span>
           <span className="audit-progress">{done} з {expected.length}</span>
+          <button className="act-btn scan-btn" onClick={() => setScan(true)} title="Сканувати QR">
+            <IconQr /> Сканувати
+          </button>
           <button className="act-btn act-accept" onClick={() => setFinishing(true)}>Завершити</button>
         </div>
         <div className="audit-track"><div className="audit-fill" style={{ width: pct + '%' }} /></div>
@@ -698,6 +869,30 @@ function AuditView({ setState }) {
             );
           })}
         </div>
+      )}
+
+      {scan && (
+        <QrScanner
+          title="Наведіть на QR або код речі"
+          hint="Знайдену позицію одразу позначимо «Є»"
+          onClose={() => setScan(false)}
+          onCode={(text) => {
+            setScan(false);
+            const c = parseCode(text);
+            const needle = (c?.value || '').toString().trim().toLowerCase();
+            if (!needle) return;
+            // шукаємо серед того, що входить у цю звірку
+            const hit = expected.find((it) =>
+              [it.ident, it.name].some((v) => (v || '').toString().toLowerCase().includes(needle))
+              || (it.ident || '').toString().toLowerCase().split(' · ').includes(needle));
+            if (!hit) {
+              toast(`«${c.value}» немає серед позицій цієї звірки`, { type: 'warn' });
+              return;
+            }
+            mark(hit, RESULT.ok);
+            toast(`Є: ${hit.name || hit.ident}`);
+          }}
+        />
       )}
 
       {finishing && (
@@ -1386,6 +1581,7 @@ export default function Home({ startView }) {
   const [view, setView] = useState(startView || { kind: 'home', name: null });
   const [state, setState] = useState('');
   const [palette, setPalette] = useState(false);
+  const [scan, setScan] = useState(false);
   const { toasts, push, close } = useToasts();
 
   // параметри адреси читаємо один раз до того, як почнемо її переписувати
@@ -1467,6 +1663,7 @@ export default function Home({ startView }) {
   }, [sheets, params.box]);
 
   const commands = [
+    { label: 'Сканувати QR', hint: 'дія', run: () => setPalette(false) || setScan(true) },
     { label: 'Головна', hint: 'екран', run: () => setView({ kind: 'home', name: null }) },
     { label: 'Пошук і акти', hint: 'екран', run: () => setView({ kind: 'search', name: null }) },
     { label: 'Прийняти майно', hint: 'дія', run: () => setView({ kind: 'search', name: null, act: 'accept' }) },
@@ -1504,6 +1701,9 @@ export default function Home({ startView }) {
             {state}
             {BUILD && <span className="build" title="Версія збірки">{BUILD}</span>}
           </div>
+          <button className="cmd-open scan-open" onClick={() => setScan(true)} title="Сканувати QR">
+            <IconQr /><span className="scan-open-t">Сканувати</span>
+          </button>
           <button className="cmd-open" onClick={() => setPalette(true)} title="Пошук та дії">
             Пошук та дії<kbd>⌘K</kbd>
           </button>
@@ -1607,6 +1807,20 @@ export default function Home({ startView }) {
         {view.kind === 'people' && me.role === 'admin' && <PeopleView setState={setState} />}
       </div>
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
+      {scan && (
+        <QrScanner
+          hint="QR ящика відкриє його картку, будь-який інший код — пошук"
+          onClose={() => setScan(false)}
+          onCode={(text) => {
+            setScan(false);
+            const c = parseCode(text);
+            if (!c) return;
+            if (c.kind === 'box') setView({ kind: 'warehouse', name: 'Склад', box: c.value });
+            else if (c.kind === 'stock') setView({ ...STOCK_VIEW, id: c.value });
+            else setView({ kind: 'search', name: null, q: c.value });
+          }}
+        />
+      )}
       <ToastHost toasts={toasts} onClose={close} />
     </ToastCtx.Provider>
   );
