@@ -1,25 +1,57 @@
 import {
   useState, useEffect, useCallback, useRef, useContext, createContext,
 } from 'react';
+import {
+  enqueue, cacheGet, cachePut, startOffline, flushQueue, onOfflineChange, getState, takeDropped,
+} from '../lib/offline';
 
 // Сесія добігає кінця сама, тож будь-який запит може повернути 401.
 // Тоді показуємо екран входу, а не незрозумілу помилку посеред роботи.
 let onUnauthed = null;
 
 const api = async (url, opts = {}) => {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  const method = (opts.method || 'GET').toUpperCase();
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      ...opts,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+  } catch (netErr) {
+    // Зв'язку немає. Запис не втрачаємо — він піде, щойно мережа зʼявиться.
+    if (method !== 'GET') {
+      enqueue({ url, method, body: opts.body, label: opts.label || '' });
+      const e = new Error('Немає звʼязку. Запис збережено — надішлемо, щойно зʼявиться мережа');
+      e.offline = true;
+      throw e;
+    }
+    const hit = cacheGet(url);
+    if (hit) {
+      const e = { ...hit.data };
+      Object.defineProperty(e, '__cachedAt', { value: hit.at, enumerable: false });
+      return e;
+    }
+    const e = new Error('Немає звʼязку, і збережених даних для цього екрана ще немає');
+    e.offline = true;
+    throw e;
+  }
+
   if (res.status === 401) {
     onUnauthed?.();
     throw new Error('Сесія завершилась — увійдіть знову');
   }
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Помилка');
+  if (method === 'GET') cachePut(url, data);
   return data;
 };
+
+/** Повідомлення про невдале збереження: офлайн — це не помилка, а відкладення */
+function saveFailed(toast, e, prefix = 'Не вдалося зберегти: ') {
+  if (e?.offline) toast(e.message, { type: 'warn' });
+  else toast(prefix + (e?.message || ''), { type: 'err' });
+}
 
 /** Час завершення сесії у звичному вигляді */
 function hhmm(ms) {
@@ -190,6 +222,242 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ---------- Головна: що є, що робилось, на що глянути ---------- */
+function Stat({ label, value, sub, tone }) {
+  return (
+    <div className={'stat' + (tone ? ' stat-' + tone : '')}>
+      <div className="stat-v">{value}</div>
+      <div className="stat-l">{label}</div>
+      {sub && <div className="stat-s">{sub}</div>}
+    </div>
+  );
+}
+
+function HomeView({ setState, onOpen, me }) {
+  const [d, setD] = useState(null);
+  const toast = useToast();
+
+  const load = useCallback(async () => {
+    setState('завантаження…');
+    try {
+      setD(await api('/api/dashboard'));
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+      if (e.offline) toast(e.message, { type: 'warn' });
+    }
+  }, [setState, toast]);
+
+  useEffect(() => { load(); }, [load]);
+  if (!d) return <div className="loading">Завантаження…</div>;
+
+  const attention = [];
+  if (d.audit.open) {
+    attention.push({
+      key: 'audit',
+      text: `Звірка ${d.audit.open.id} триває — ${d.audit.open.scope}`,
+      action: 'Продовжити',
+      run: () => onOpen({ kind: 'audit', name: null }),
+    });
+  }
+  if (d.items.lost.length) {
+    attention.push({
+      key: 'lost',
+      tone: 'bad',
+      text: `Втрачено: ${d.items.lost.length} — ${d.items.lost.slice(0, 3).map((x) => x.name).join(', ')}${d.items.lost.length > 3 ? '…' : ''}`,
+      action: 'Знайти',
+      run: () => onOpen({ kind: 'search', name: null, q: 'Втрачено' }),
+    });
+  }
+  if (d.stock.unmarked) {
+    attention.push({
+      key: 'unmarked',
+      text: `На складі Рибаківки ${d.stock.unmarked} поз. без позначки обліку`,
+      action: 'Відкрити',
+      run: () => onOpen(STOCK_VIEW),
+    });
+  }
+  if (d.stock.empty.length) {
+    attention.push({
+      key: 'empty',
+      text: `Нульовий залишок: ${d.stock.empty.map((x) => x.name).slice(0, 3).join(', ')}${d.stock.empty.length > 3 ? '…' : ''}`,
+      action: 'Відкрити',
+      run: () => onOpen(STOCK_VIEW),
+    });
+  }
+  if (d.warehouse.stale.length) {
+    attention.push({
+      key: 'stale',
+      text: `Ящиків не чіпали понад 90 днів: ${d.warehouse.stale.length}`,
+      action: 'Переглянути',
+      run: () => onOpen({ kind: 'warehouse', name: 'Склад' }),
+    });
+  }
+  if (!d.audit.open) {
+    attention.push({
+      key: 'newaudit',
+      text: d.audit.last
+        ? `Остання звірка — ${d.audit.last.date}, ${d.audit.last.scope}`
+        : 'Звірок ще не було',
+      action: 'Почати звірку',
+      run: () => onOpen({ kind: 'audit', name: null }),
+    });
+  }
+
+  return (
+    <>
+      <div className="home-hi">
+        {me ? <>Вітаю, <b>{me}</b>.</> : 'Вітаю.'} Ось що зараз на обліку.
+      </div>
+
+      <div className="stats">
+        <Stat label="Речей на обліку" value={d.items.total}
+          sub={d.items.perSheet.slice(0, 2).map((s) => `${s.name}: ${s.count}`).join(' · ')} />
+        <Stat label="Ящиків на складі" value={d.warehouse.total} />
+        <Stat label="Залишок Рибаківки" value={d.stock.remainder}
+          sub={`позицій: ${d.stock.positions}`} />
+        <Stat label="За документами" value={d.stock.booked} tone="ok"
+          sub={`поза обліком: ${d.stock.unbooked}`} />
+      </div>
+
+      {d.items.byStatus.length > 0 && (
+        <div className="section">
+          <h3 className="sec">За статусами</h3>
+          <div className="chips">
+            {d.items.byStatus.map(([s, n]) => (
+              <div className="chip" key={s} style={{ color: statusColor(s), borderColor: 'var(--line)' }}
+                onClick={() => onOpen({ kind: 'search', name: null, q: s })}>
+                {s} <b style={{ marginLeft: 4 }}>{n}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {attention.length > 0 && (
+        <div className="section">
+          <h3 className="primary">Потребує уваги<span className="count">{attention.length}</span></h3>
+          <div className="attn-list">
+            {attention.map((a) => (
+              <div className={'attn' + (a.tone === 'bad' ? ' attn-bad' : '')} key={a.key}>
+                <span className="attn-text">{a.text}</span>
+                <button className="act-btn" onClick={a.run}>{a.action}</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="home-cols">
+        <div className="section">
+          <h3 className="sec">Останні дії<span className="count">{d.log.length}</span></h3>
+          {d.log.length === 0 ? (
+            <div className="empty">Поки порожньо</div>
+          ) : (
+            <div className="log-list">
+              {d.log.map((e, i) => (
+                <div className="log-row" key={i}>
+                  <div className="log-when">
+                    <span>{e.date}</span>
+                    <span className="log-time">{e.time}</span>
+                  </div>
+                  <div className="log-what">
+                    <div className="log-head">
+                      <span className={'log-action ' + actionClass(e.action)}>{e.action}</span>
+                      <span className="badge">{e.sheet}</span>
+                      {e.field && <span className="log-field">{e.field}</span>}
+                      {e.by && <span className="log-by">{e.by}</span>}
+                    </div>
+                    {(e.before || e.after) && (
+                      <div className="log-diff">
+                        {e.before && <span className="log-before">{e.before}</span>}
+                        {e.before && e.after && <span className="log-arrow">→</span>}
+                        {e.after && <span className="log-after">{e.after}</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <button className="act-btn" style={{ marginTop: 8 }}
+            onClick={() => onOpen({ kind: 'log', name: null })}>
+            Весь журнал
+          </button>
+        </div>
+
+        <div className="section">
+          <h3 className="sec">Останні акти<span className="count">{d.acts.length}</span></h3>
+          {d.acts.length === 0 ? (
+            <div className="empty">Актів ще немає</div>
+          ) : (
+            <div className="log-list">
+              {d.acts.map((a, i) => <ActRow key={i} act={a} onPhoto={() => {}} />)}
+            </div>
+          )}
+          <button className="act-btn" style={{ marginTop: 8 }}
+            onClick={() => onOpen({ kind: 'search', name: null })}>
+            Пошук і акти
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ---------- Офлайн ---------- */
+function OfflineBar() {
+  const [st, setSt] = useState({ online: true, pending: 0, syncing: false });
+  const [bad, setBad] = useState([]);
+  const toast = useToast();
+
+  useEffect(() => {
+    setSt(getState());
+    const off = onOfflineChange((s) => {
+      setSt(s);
+      const d = takeDropped();
+      if (d.length) setBad((p) => [...p, ...d]);
+    });
+    const stop = startOffline();
+    return () => { off(); stop(); };
+  }, []);
+
+  // коли черга спорожніла після синхронізації — сказати про це вголос
+  const wasPending = useRef(0);
+  useEffect(() => {
+    if (wasPending.current > 0 && st.pending === 0 && st.online) {
+      toast(`Надіслано відкладені записи: ${wasPending.current}`);
+    }
+    wasPending.current = st.pending;
+  }, [st.pending, st.online, toast]);
+
+  if (st.online && !st.pending && !bad.length) return null;
+
+  return (
+    <div className={'offline-bar' + (st.online ? ' is-sync' : '')}>
+      <span className="offline-dot" />
+      <span className="offline-text">
+        {!st.online && 'Немає звʼязку — працюємо офлайн'}
+        {st.online && st.syncing && 'Надсилаємо відкладені записи…'}
+        {st.online && !st.syncing && st.pending > 0 && 'Є відкладені записи'}
+        {st.online && !st.pending && bad.length > 0 && 'Частину записів сервер не прийняв'}
+      </span>
+      {st.pending > 0 && <span className="offline-count">{st.pending}</span>}
+      {st.online && st.pending > 0 && !st.syncing && (
+        <button className="offline-act" onClick={() => flushQueue()}>Надіслати</button>
+      )}
+      {bad.length > 0 && (
+        <button className="offline-act" onClick={() => {
+          alert(bad.map((b) => `${b.method} ${b.url}\n${b.error}`).join('\n\n'));
+          setBad([]);
+        }}>
+          Показати {bad.length}
+        </button>
+      )}
     </div>
   );
 }
@@ -1115,7 +1383,7 @@ export default function Home({ startView }) {
   const [me, setMe] = useState({ callsign: '', role: 'admin', callsigns: [], expires: 0 });
   const [expired, setExpired] = useState(false);
   const [sheets, setSheets] = useState([]);
-  const [view, setView] = useState(startView || { kind: 'search', name: null });
+  const [view, setView] = useState(startView || { kind: 'home', name: null });
   const [state, setState] = useState('');
   const [palette, setPalette] = useState(false);
   const { toasts, push, close } = useToasts();
@@ -1199,6 +1467,7 @@ export default function Home({ startView }) {
   }, [sheets, params.box]);
 
   const commands = [
+    { label: 'Головна', hint: 'екран', run: () => setView({ kind: 'home', name: null }) },
     { label: 'Пошук і акти', hint: 'екран', run: () => setView({ kind: 'search', name: null }) },
     { label: 'Прийняти майно', hint: 'дія', run: () => setView({ kind: 'search', name: null, act: 'accept' }) },
     { label: 'Видати майно', hint: 'дія', run: () => setView({ kind: 'search', name: null, act: 'issue' }) },
@@ -1228,6 +1497,7 @@ export default function Home({ startView }) {
   return (
     <ToastCtx.Provider value={push}>
       <div className="wrap">
+        <OfflineBar />
         <header>
           <h1>Облік майна<span className="ver">{VERSION}</span></h1>
           <div className="state">
@@ -1261,6 +1531,12 @@ export default function Home({ startView }) {
         </header>
 
         <div className="tabs">
+          <div
+            className={'tab' + (view.kind === 'home' ? ' active' : '')}
+            onClick={() => setView({ kind: 'home', name: null })}
+          >
+            Головна
+          </div>
           <div
             className={'tab' + (view.kind === 'search' ? ' active' : '')}
             onClick={() => setView({ kind: 'search', name: null })}
@@ -1298,6 +1574,9 @@ export default function Home({ startView }) {
           )}
         </div>
 
+        {view.kind === 'home' && (
+          <HomeView setState={setState} onOpen={setView} me={me.callsign} />
+        )}
         {view.kind === 'search' && (
           <SearchView
             key={(view.q || '') + (view.act || '')}
@@ -1697,7 +1976,7 @@ function ItemsView({ name, setState, focusRow }) {
       toast('Збережено');
     } catch (e) {
       setState('помилка збереження');
-      toast('Не вдалося зберегти: ' + e.message, { type: 'err' });
+      saveFailed(toast, e);
     }
   };
 
@@ -1873,14 +2152,14 @@ function ItemsView({ name, setState, focusRow }) {
                               toast('Запис повернено');
                               load();
                             } catch (e) {
-                              toast('Не вдалося повернути: ' + e.message, { type: 'err' });
+                              saveFailed(toast, e, 'Не вдалося повернути: ');
                             }
                           },
                         },
                       });
                     } catch (e) {
                       setState('помилка: ' + e.message);
-                      toast('Не вдалося видалити: ' + e.message, { type: 'err' });
+                      saveFailed(toast, e, 'Не вдалося видалити: ');
                     }
                   }}
                 >
@@ -2116,7 +2395,7 @@ function LedgerView({ name, setState }) {
       toast('Збережено');
     } catch (e) {
       setState('помилка: ' + e.message);
-      toast('Не вдалося зберегти: ' + e.message, { type: 'err' });
+      saveFailed(toast, e);
     }
   };
 
@@ -2200,14 +2479,14 @@ function LedgerView({ name, setState }) {
                           setItems(r.items);
                           toast('Позицію повернено');
                         } catch (e) {
-                          toast('Не вдалося повернути: ' + e.message, { type: 'err' });
+                          saveFailed(toast, e, 'Не вдалося повернути: ');
                         }
                       },
                     },
                   });
                 } catch (e) {
                   setState('помилка: ' + e.message);
-                  toast('Не вдалося видалити: ' + e.message, { type: 'err' });
+                  saveFailed(toast, e, 'Не вдалося видалити: ');
                 }
               }}>Видалити</button>
             </div>
@@ -2373,7 +2652,7 @@ function StockView({ setState, focusId, onClearFocus }) {
       toast('Збережено');
     } catch (e) {
       setState('помилка збереження');
-      toast('Не вдалося зберегти: ' + e.message, { type: 'err' });
+      saveFailed(toast, e);
     }
   };
 
@@ -2606,14 +2885,14 @@ function StockView({ setState, focusId, onClearFocus }) {
                               }));
                               toast('Позицію повернено');
                             } catch (e) {
-                              toast('Не вдалося повернути: ' + e.message, { type: 'err' });
+                              saveFailed(toast, e, 'Не вдалося повернути: ');
                             }
                           },
                         },
                       });
                     } catch (e) {
                       setState('помилка: ' + e.message);
-                      toast('Не вдалося видалити: ' + e.message, { type: 'err' });
+                      saveFailed(toast, e, 'Не вдалося видалити: ');
                     }
                   }}>Видалити</button>
                 </div>
@@ -2893,7 +3172,7 @@ function WarehouseView({ setState, focusCode, onOpen }) {
       toast('Збережено');
     } catch (e) {
       setState('помилка збереження');
-      toast('Не вдалося зберегти: ' + e.message, { type: 'err' });
+      saveFailed(toast, e);
     }
   };
 
@@ -3061,14 +3340,14 @@ function WarehouseView({ setState, focusCode, onOpen }) {
                             setData((p) => ({ ...p, items: r.items }));
                             toast(`Ящик ${it.code} повернено`);
                           } catch (e) {
-                            toast('Не вдалося повернути: ' + e.message, { type: 'err' });
+                            saveFailed(toast, e, 'Не вдалося повернути: ');
                           }
                         },
                       },
                     });
                   } catch (e) {
                     setState('помилка: ' + e.message);
-                    toast('Не вдалося видалити: ' + e.message, { type: 'err' });
+                    saveFailed(toast, e, 'Не вдалося видалити: ');
                   }
                 }}>Видалити</button>
               </div>
