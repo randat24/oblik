@@ -384,6 +384,41 @@ label {
 .act-item-sub { display: flex; gap: 6px; margin-top: 6px; }
 .act-item-sub input { flex: 1; min-width: 0; }
 .act-item-sub .act-btn { flex: 0 0 auto; min-width: 0; padding: 8px 12px; }
+.act-item-bound { border-color: var(--blue); }
+.act-accept { color: var(--green); border-color: var(--green-dim); }
+.act-accept:hover { background: var(--green-dim); border-color: var(--green); }
+
+/* Підказки з листа: назва → існуючий рядок */
+.pick { position: relative; }
+.pick-list {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 120;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-sm); overflow: hidden auto; max-height: 244px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .55);
+}
+.pick-opt {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+  padding: 9px 10px; cursor: pointer; border-bottom: 1px solid var(--line-soft);
+  font-size: .84rem;
+}
+.pick-opt:last-child { border-bottom: 0; }
+.pick-opt:hover { background: var(--panel-2); }
+.pick-title { font-weight: 600; }
+.pick-tag { font-family: var(--mono); color: var(--amber); }
+.pick-sn { font-family: var(--mono); font-size: .76rem; color: var(--muted); }
+.pick-st { font-family: var(--mono); font-size: .74rem; font-weight: 700; }
+.pick-who { font-family: var(--mono); font-size: .76rem; color: var(--muted); }
+.pick-bound, .pick-new {
+  margin-top: 6px; font-family: var(--mono); font-size: .72rem;
+  display: flex; align-items: center; gap: 8px;
+}
+.pick-bound { color: var(--blue); }
+.pick-new { color: var(--muted); }
+.pick-bound button {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; color: var(--muted); text-decoration: underline;
+}
+.pick-bound button:hover { color: var(--fg); }
 .act-hint {
   margin-top: 12px; font-size: 0.78rem; color: var(--muted);
   font-family: var(--mono);
