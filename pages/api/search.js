@@ -1,9 +1,47 @@
 import { withAuth } from '../../lib/auth';
 import { SHEET_CONFIGS, readSheet, findColumns } from '../../lib/sheets';
+import { STOCK_SHEET, parseStockItems } from '../../lib/stock';
+
+/** Склад Рибаківки має власну структуру, тож шукаємо в ньому окремо */
+async function searchStock(qText) {
+  let values;
+  try {
+    values = await readSheet(STOCK_SHEET);
+  } catch {
+    // лист ще не створено — просто немає чого шукати
+    return [];
+  }
+  const out = [];
+  parseStockItems(values).forEach((it) => {
+    const fields = [
+      ['номер', it.id], ['назва', it.name], ['опис', it.description],
+      ['категорія', it.category], ['місце', it.place], ['примітки', it.notes],
+    ];
+    const hit = fields.find(([, v]) => (v || '').toString().toLowerCase().includes(qText));
+    if (!hit) return;
+    out.push({
+      kind: 'stock',
+      sheet: STOCK_SHEET,
+      row: it.row,
+      id: it.id,
+      name: it.name,
+      category: it.category,
+      place: it.place,
+      unit: it.unit,
+      description: it.description,
+      received: it.received,
+      writtenOff: it.writtenOff,
+      remainder: it.remainder,
+      matchedField: hit[0],
+      matchedValue: hit[1],
+    });
+  });
+  return out;
+}
 
 export default withAuth(async (req, res) => {
   const q = (req.query.q || '').toString().trim();
-  if (q.length < 2) return res.json({ serial: [], assigned: [], other: [] });
+  if (q.length < 2) return res.json({ serial: [], assigned: [], other: [], stock: [] });
 
   const qText = q.toLowerCase();
   const qNorm = q.replace(/[\s\-/\\:]/g, '').toLowerCase();
@@ -13,6 +51,8 @@ export default withAuth(async (req, res) => {
   const other = [];
 
   const targets = SHEET_CONFIGS.filter((c) => c.kind === 'items');
+
+  const stockHits = searchStock(qText);
 
   await Promise.all(
     targets.map(async (cfg) => {
@@ -86,5 +126,5 @@ export default withAuth(async (req, res) => {
     })
   );
 
-  res.json({ serial, assigned, other });
+  res.json({ serial, assigned, other, stock: await stockHits });
 });
