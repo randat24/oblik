@@ -126,6 +126,14 @@ input:focus, select:focus, textarea:focus {
 }
 .search-clear:hover { color: var(--text); background: var(--line); }
 
+/* Коли ящик додали й коли востаннє чіпали */
+.wh-dates {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px;
+  padding-top: 8px; border-top: 1px solid var(--line-soft);
+  font-family: var(--mono); font-size: .7rem; color: var(--muted);
+}
+.wh-dates b { color: var(--text-dim); font-weight: 600; }
+
 /* ---------- Перемикач «картки / таблиця» ---------- */
 .vtoggle {
   display: flex; flex: 0 0 auto; border: 1px solid var(--line);
