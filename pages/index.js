@@ -1597,7 +1597,7 @@ function LedgerView({ name, setState }) {
 
 function WriteoffModal({ item, onCancel, onSave }) {
   const [qty, setQty] = useState(1);
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayStr());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -1615,7 +1615,7 @@ function WriteoffModal({ item, onCancel, onSave }) {
         setBusy(true);
         setErr('');
         try {
-          await onSave({ qty: n, date: date.split('-').reverse().join('.') });
+          await onSave({ qty: n, date });
         } catch (e) {
           setErr(e.message || 'Помилка списання');
         } finally {
@@ -1633,8 +1633,8 @@ function WriteoffModal({ item, onCancel, onSave }) {
         <input type="number" min="1" max={item.remainder} value={qty} onChange={(e) => setQty(e.target.value)} autoFocus />
       </div>
       <div style={{ marginTop: 10 }}>
-        <label>Дата</label>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <label>Дата списання</label>
+        <input type="text" value={date} onChange={(e) => setDate(e.target.value)} placeholder="дд.мм.рррр" />
       </div>
     </Modal>
   );
