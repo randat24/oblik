@@ -179,6 +179,13 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* Хто зараз у системі */
+.who-till { color: var(--muted); }
+.login-note {
+  color: var(--text-dim); font-size: .82rem; line-height: 1.5;
+  padding: 10px 12px; margin-bottom: 16px;
+  border-left: 2px solid var(--amber); background: var(--panel-2);
+  border-radius: var(--r-sm);
+}
 .who {
   flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
   font-family: var(--mono); font-size: .74rem;

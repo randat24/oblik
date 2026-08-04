@@ -2,17 +2,32 @@ import {
   useState, useEffect, useCallback, useRef, useContext, createContext,
 } from 'react';
 
+// Сесія добігає кінця сама, тож будь-який запит може повернути 401.
+// Тоді показуємо екран входу, а не незрозумілу помилку посеред роботи.
+let onUnauthed = null;
+
 const api = async (url, opts = {}) => {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
-  if (res.status === 401) throw new Error('UNAUTHED');
+  if (res.status === 401) {
+    onUnauthed?.();
+    throw new Error('Сесія завершилась — увійдіть знову');
+  }
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Помилка');
   return data;
 };
+
+/** Час завершення сесії у звичному вигляді */
+function hhmm(ms) {
+  if (!ms) return '';
+  return new Intl.DateTimeFormat('uk-UA', {
+    timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(ms));
+}
 
 const VERSION = 'v2.0';
 // Vercel сам підставляє це під час збірки — видно, який код зараз живий
@@ -93,10 +108,12 @@ function useToasts() {
 }
 
 /* ---------- Логін ---------- */
-function Login({ onOk, callsigns = [] }) {
+function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
   // поки нікого не заведено, лишається тільки спільний пароль
   const [mode, setMode] = useState(callsigns.length ? 'pin' : 'pw');
-  const [callsign, setCallsign] = useState(callsigns[0] || '');
+  const [callsign, setCallsign] = useState(
+    callsigns.includes(lastCallsign) ? lastCallsign : callsigns[0] || ''
+  );
   const [pin, setPin] = useState('');
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
@@ -119,6 +136,13 @@ function Login({ onOk, callsigns = [] }) {
     <div className="login-wrap">
       <div className="login-box">
         <h1 style={{ fontSize: '1.1rem', marginBottom: 18 }}>Облік майна</h1>
+
+        {expired && (
+          <div className="login-note">
+            Сесія завершилась — так налаштовано: кожні 4 години о 00:00, 04:00,
+            08:00 і далі потрібно ввести PIN знову.
+          </div>
+        )}
 
         {mode === 'pin' ? (
           <>
@@ -1088,7 +1112,8 @@ function urlFor(view) {
 
 export default function Home({ startView }) {
   const [authed, setAuthed] = useState(null);
-  const [me, setMe] = useState({ callsign: '', role: 'admin', callsigns: [] });
+  const [me, setMe] = useState({ callsign: '', role: 'admin', callsigns: [], expires: 0 });
+  const [expired, setExpired] = useState(false);
   const [sheets, setSheets] = useState([]);
   const [view, setView] = useState(startView || { kind: 'search', name: null });
   const [state, setState] = useState('');
@@ -1132,13 +1157,32 @@ export default function Home({ startView }) {
   const loadMe = useCallback(() => {
     api('/api/login')
       .then((d) => {
-        setMe({ callsign: d.callsign || '', role: d.role || 'admin', callsigns: d.callsigns || [] });
+        setMe({
+          callsign: d.callsign || '', role: d.role || 'admin',
+          callsigns: d.callsigns || [], expires: d.expires || 0,
+        });
         setAuthed(d.authed || !d.required);
+        if (d.authed) setExpired(false);
       })
       .catch(() => setAuthed(false));
   }, []);
 
   useEffect(() => { loadMe(); }, [loadMe]);
+
+  // будь-який запит, що впав на 401, повертає на екран входу
+  useEffect(() => {
+    onUnauthed = () => { setExpired(true); setAuthed(false); };
+    return () => { onUnauthed = null; };
+  }, []);
+
+  // не чекаємо на перший невдалий запит: вийде саме о рівній годині
+  useEffect(() => {
+    if (!authed || !me.expires) return;
+    const left = me.expires - Date.now();
+    if (left <= 0) { setExpired(true); setAuthed(false); return; }
+    const t = setTimeout(() => { setExpired(true); setAuthed(false); }, left + 500);
+    return () => clearTimeout(t);
+  }, [authed, me.expires]);
 
   useEffect(() => {
     if (!authed) return;
@@ -1170,7 +1214,16 @@ export default function Home({ startView }) {
   ];
 
   if (authed === null) return <div className="loading">Завантаження…</div>;
-  if (!authed) return <Login callsigns={me.callsigns} onOk={loadMe} />;
+  if (!authed) {
+    return (
+      <Login
+        callsigns={me.callsigns}
+        expired={expired}
+        lastCallsign={me.callsign}
+        onOk={loadMe}
+      />
+    );
+  }
 
   return (
     <ToastCtx.Provider value={push}>
@@ -1188,6 +1241,11 @@ export default function Home({ startView }) {
             <span className="who-name" title={me.role === 'admin' ? 'Адміністратор' : 'Користувач'}>
               {me.callsign || 'спільний вхід'}
             </span>
+            {me.expires > 0 && (
+              <span className="who-till" title="Сесія діє до цієї години, далі — знову PIN">
+                до {hhmm(me.expires)}
+              </span>
+            )}
             <button
               className="who-out"
               title="Вийти"
