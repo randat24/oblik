@@ -240,6 +240,38 @@ function PhotoField({ value, onChange, showPreview = true, label = 'Фото' })
   );
 }
 
+/* ---------- Підсумковий рядок ---------- */
+/**
+ * Числа під фільтрами: скільки видно зараз і скільки всього.
+ * parts — [['Позицій', 12], ['Залишок', 40]]; порожні значення пропускаються.
+ */
+function Totals({ parts, of }) {
+  const shown = parts.filter(([, v]) => v !== null && v !== undefined && v !== '');
+  if (!shown.length) return null;
+  return (
+    <div className="totals">
+      {shown.map(([label, value], i) => (
+        <span key={label}>
+          {i > 0 && <span className="totals-sep">·</span>}
+          {label}: <b>{value}</b>
+        </span>
+      ))}
+      {of !== undefined && of !== null && <span className="totals-of">(з {of})</span>}
+    </div>
+  );
+}
+
+/** Скільки записів у кожному статусі — рахуємо лише те, що зараз показано */
+function countBy(list, pick) {
+  const map = new Map();
+  list.forEach((it) => {
+    const v = (pick(it) || '').toString().trim();
+    if (!v) return;
+    map.set(v, (map.get(v) || 0) + 1);
+  });
+  return [...map.entries()].sort((a, b) => b[1] - a[1]);
+}
+
 /* ---------- Поле «вибери наявне або впиши нове» ---------- */
 /** Показує вже вживані значення, але не заважає ввести своє — нове стає варіантом наступного разу */
 function Combo({ value, options = [], onChange, placeholder, className = '', autoFocus }) {
@@ -519,6 +551,14 @@ function SearchView({ setState, onOpen }) {
         <button className="btn" onClick={() => openAct('issue')}>Видати</button>
       </div>
 
+      <Totals
+        parts={
+          res
+            ? [['Знайдено', groups.reduce((a, g) => a + g.data.length, 0)], ['Актів', acts.length]]
+            : [['Актів усього', allActs.length]]
+        }
+      />
+
       {q.trim().length > 0 && q.trim().length < 2 && (
         <div className="empty">Введіть щонайменше 2 символи</div>
       )}
@@ -739,6 +779,16 @@ function ItemsView({ name, setState, focusRow }) {
         <div className="spacer" />
         <button className="btn" onClick={() => setAdding(true)}>+ Додати запис</button>
       </div>
+
+      <Totals
+        parts={[
+          ['Записів', list.length],
+          ...(hideStatus || cols.status < 0
+            ? []
+            : countBy(list, (it) => it.values[cols.status])),
+        ]}
+        of={list.length !== items.length ? items.length : undefined}
+      />
 
       {list.length === 0 ? (
         <div className="empty">Немає записів</div>
@@ -1047,6 +1097,7 @@ function LedgerView({ name, setState }) {
   const list = q.trim()
     ? items.filter((it) => it.name.toLowerCase().includes(q.trim().toLowerCase()))
     : items;
+  const sum = (pick) => list.reduce((a, it) => a + (Number(pick(it)) || 0), 0);
 
   const save = async (row, field, value) => {
     setState('збереження…');
@@ -1068,6 +1119,16 @@ function LedgerView({ name, setState }) {
         <div className="spacer" />
         <button className="btn" onClick={() => setAdding(true)}>+ Додати позицію</button>
       </div>
+
+      <Totals
+        parts={[
+          ['Позицій', list.length],
+          ['Отримано', sum((it) => it.received)],
+          ['Списано', sum((it) => it.writtenOff)],
+          ['Залишок', sum((it) => it.remainder)],
+        ]}
+        of={list.length !== items.length ? items.length : undefined}
+      />
 
       {list.length === 0 ? (
         <div className="empty">Немає позицій</div>
@@ -1315,10 +1376,7 @@ function StockView({ setState }) {
         .join(' ').toLowerCase().includes(s));
   }
 
-  const totals = list.reduce(
-    (a, it) => ({ items: a.items + 1, left: a.left + it.remainder }),
-    { items: 0, left: 0 }
-  );
+  const sum = (pick) => list.reduce((a, it) => a + (Number(pick(it)) || 0), 0);
 
   return (
     <>
@@ -1339,9 +1397,15 @@ function StockView({ setState }) {
         </div>
       )}
 
-      <div className="stock-totals">
-        Позицій: <b>{totals.items}</b> · Загальний залишок: <b>{totals.left}</b>
-      </div>
+      <Totals
+        parts={[
+          ['Позицій', list.length],
+          ['Прийнято', sum((it) => it.received)],
+          ['Списано', sum((it) => it.writtenOff)],
+          ['Залишок', sum((it) => it.remainder)],
+        ]}
+        of={list.length !== data.items.length ? data.items.length : undefined}
+      />
 
       {list.length === 0 ? (
         <div className="empty">
@@ -1780,6 +1844,11 @@ function WarehouseView({ setState, focusCode }) {
         <button className="btn" onClick={() => setAdding(true)}>+ Додати ящик</button>
       </div>
 
+      <Totals
+        parts={[['Ящиків', list.length], ...countBy(list, (it) => it.status)]}
+        of={list.length !== data.items.length ? data.items.length : undefined}
+      />
+
       {list.length === 0 ? (
         <div className="empty">Немає ящиків</div>
       ) : (
@@ -2028,6 +2097,11 @@ function LogView({ setState }) {
         <div className="spacer" />
         <button className="btn" onClick={load}>Оновити</button>
       </div>
+
+      <Totals
+        parts={[['Записів', list.length], ...countBy(list, (e) => e.action).slice(0, 4)]}
+        of={list.length !== entries.length ? entries.length : undefined}
+      />
 
       {list.length === 0 ? (
         <div className="empty">

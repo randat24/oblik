@@ -125,6 +125,16 @@ input:focus, select:focus, textarea:focus {
 }
 .search-clear:hover { color: var(--text); background: var(--line); }
 
+/* Підсумки під фільтрами — скільки зараз видно */
+.totals {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+  font-family: var(--mono); font-size: .76rem; color: var(--muted);
+  margin: -4px 0 12px;
+}
+.totals b { color: var(--text); font-weight: 700; }
+.totals-sep { color: var(--gray); margin-right: 4px; }
+.totals-of { color: var(--gray); }
+
 /* Фільтри-чипи */
 .chip {
   font-size: 0.78rem; padding: 7px 13px; border-radius: 20px; cursor: pointer;
@@ -423,10 +433,6 @@ label {
 
 /* ---------- Великий склад ---------- */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.stock-totals {
-  font-family: var(--mono); font-size: .76rem; color: var(--muted); margin-bottom: 10px;
-}
-.stock-totals b { color: var(--text); }
 .remainder-unit { font-size: .68rem; color: var(--muted); font-family: var(--mono); }
 .stock-ro { padding: 3px 6px; color: var(--text-dim); font-family: var(--mono); }
 .stock-photos { display: flex; gap: 6px; margin: 10px 0 4px; }
