@@ -126,6 +126,31 @@ input:focus, select:focus, textarea:focus {
 }
 .search-clear:hover { color: var(--text); background: var(--line); }
 
+/* Хто зараз у системі */
+.who {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: .74rem;
+}
+.who-name { color: var(--amber); font-weight: 700; }
+.who-out {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; color: var(--muted); text-decoration: underline;
+}
+.who-out:hover { color: var(--text); }
+.log-by { font-family: var(--mono); font-size: .72rem; color: var(--amber); }
+.card-off { opacity: .55; }
+.login-alt {
+  width: 100%; margin-top: 12px; background: none; border: 0; cursor: pointer;
+  color: var(--muted); font-size: .8rem; text-decoration: underline;
+}
+.login-alt:hover { color: var(--text); }
+.empty-note {
+  color: var(--muted); font-size: .82rem; line-height: 1.5;
+  padding: 10px 12px; margin-bottom: 12px;
+  border-left: 2px solid var(--line); background: var(--panel);
+  border-radius: var(--r-sm);
+}
+
 /* Групи полів у формі — щоб було видно, що до чого належить */
 .fgroup { margin-top: 18px; }
 .fgroup:first-child { margin-top: 4px; }

@@ -93,7 +93,11 @@ function useToasts() {
 }
 
 /* ---------- Логін ---------- */
-function Login({ onOk }) {
+function Login({ onOk, callsigns = [] }) {
+  // поки нікого не заведено, лишається тільки спільний пароль
+  const [mode, setMode] = useState(callsigns.length ? 'pin' : 'pw');
+  const [callsign, setCallsign] = useState(callsigns[0] || '');
+  const [pin, setPin] = useState('');
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -102,33 +106,241 @@ function Login({ onOk }) {
     setBusy(true);
     setErr('');
     try {
-      await api('/api/login', { method: 'POST', body: { password: pw } });
-      onOk();
+      const body = mode === 'pin' ? { callsign, pin } : { password: pw };
+      const d = await api('/api/login', { method: 'POST', body });
+      onOk(d);
     } catch (e) {
-      setErr('Невірний пароль');
+      setErr(e.message || 'Не вдалося увійти');
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   return (
     <div className="login-wrap">
       <div className="login-box">
         <h1 style={{ fontSize: '1.1rem', marginBottom: 18 }}>Облік майна</h1>
-        <label>Пароль</label>
-        <input
-          type="password"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
-          style={{ width: '100%' }}
-          autoFocus
-        />
+
+        {mode === 'pin' ? (
+          <>
+            <label>Позивний</label>
+            <select value={callsign} onChange={(e) => setCallsign(e.target.value)}>
+              {callsigns.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <div style={{ marginTop: 12 }}>
+              <label>PIN</label>
+              <input
+                type="password" inputMode="numeric" autoComplete="off"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && submit()}
+                style={{ width: '100%' }}
+                autoFocus
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <label>Спільний пароль</label>
+            <input
+              type="password"
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && submit()}
+              style={{ width: '100%' }}
+              autoFocus
+            />
+          </>
+        )}
+
         <button className="btn" style={{ width: '100%', marginTop: 16 }} onClick={submit} disabled={busy}>
           {busy ? '...' : 'Увійти'}
         </button>
         {err && <div className="err">{err}</div>}
+
+        {callsigns.length > 0 && (
+          <button
+            className="login-alt"
+            onClick={() => { setMode(mode === 'pin' ? 'pw' : 'pin'); setErr(''); }}
+          >
+            {mode === 'pin' ? 'Увійти спільним паролем' : 'Увійти за позивним'}
+          </button>
+        )}
       </div>
     </div>
+  );
+}
+
+/* ---------- Хто працює із застосунком ---------- */
+function PeopleView({ setState }) {
+  const [data, setData] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [pinFor, setPinFor] = useState(null);
+  const toast = useToast();
+
+  const load = useCallback(async () => {
+    setState('завантаження…');
+    try {
+      setData(await api('/api/people'));
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  }, [setState]);
+
+  useEffect(() => { load(); }, [load]);
+  if (!data) return <div className="loading">Завантаження…</div>;
+
+  const patch = async (row, body, okText) => {
+    try {
+      const d = await api('/api/people', { method: 'PATCH', body: { row, ...body } });
+      setData((p) => ({ ...p, people: d.people }));
+      toast(okText);
+    } catch (e) {
+      toast(e.message, { type: 'err' });
+    }
+  };
+
+  return (
+    <>
+      <div className="toolbar">
+        <div className="spacer" />
+        <button className="btn" onClick={() => setAdding(true)}>+ Додати людину</button>
+      </div>
+
+      <Totals parts={[
+        ['Людей', data.people.length],
+        ...countBy(data.people, (p) => (p.active ? 'активні' : 'вимкнені')),
+      ]} />
+
+      <div className="empty-note">
+        Кожен заходить своїм позивним і PIN — тоді в журналі видно, хто саме
+        вніс зміну. PIN зберігається як відбиток, тож із таблиці його не прочитати.
+      </div>
+
+      {data.people.length === 0 ? (
+        <div className="empty">Ще нікого не заведено. Натисніть «Додати людину».</div>
+      ) : (
+        <div className="grid">
+          {data.people.map((p) => (
+            <div className={'card' + (p.active ? '' : ' card-off')} key={p.row}>
+              <div className="card-head">
+                <div className="card-title">
+                  <div className="title-line">
+                    <span className="id-badge">{p.role === 'admin' ? 'адмін' : 'облік'}</span>
+                    <span className="big">{p.callsign}</span>
+                  </div>
+                </div>
+                <span className="pill" style={{ color: p.active ? 'var(--green)' : 'var(--gray)' }}>
+                  {p.active ? 'Активний' : 'Вимкнений'}
+                </span>
+              </div>
+              <div className="card-body">
+                <div className="drow">
+                  <span className="drow-k">PIN</span>
+                  <span className="drow-v stock-ro">{p.hasPin ? 'встановлено' : '— не заданий'}</span>
+                </div>
+                <div className="drow">
+                  <span className="drow-k">Додано</span>
+                  <span className="drow-v stock-ro">{p.added || '—'}</span>
+                </div>
+              </div>
+              <div className="actions">
+                <button className="act-btn" onClick={() => setPinFor(p)}>Змінити PIN</button>
+                <button className="act-btn" onClick={() => patch(p.row, { role: p.role === 'admin' ? 'user' : 'admin' },
+                  p.role === 'admin' ? 'Тепер користувач' : 'Тепер адміністратор')}>
+                  {p.role === 'admin' ? 'Зробити користувачем' : 'Зробити адміном'}
+                </button>
+                <button className={'act-btn ' + (p.active ? 'act-del' : 'act-accept')}
+                  onClick={() => patch(p.row, { active: !p.active }, p.active ? 'Доступ вимкнено' : 'Доступ увімкнено')}>
+                  {p.active ? 'Вимкнути' : 'Увімкнути'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {adding && (
+        <PersonModal
+          title="Нова людина"
+          onCancel={() => setAdding(false)}
+          onSave={async (body) => {
+            const d = await api('/api/people', { method: 'POST', body });
+            setData((p) => ({ ...p, people: d.people }));
+            setAdding(false);
+            toast(`Додано ${body.callsign}`);
+          }}
+        />
+      )}
+
+      {pinFor && (
+        <PersonModal
+          title={'Новий PIN: ' + pinFor.callsign}
+          fixedCallsign={pinFor.callsign}
+          onCancel={() => setPinFor(null)}
+          onSave={async ({ pin }) => {
+            await patch(pinFor.row, { pin }, 'PIN змінено');
+            setPinFor(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function PersonModal({ title, fixedCallsign, onCancel, onSave }) {
+  const [callsign, setCallsign] = useState(fixedCallsign || '');
+  const [pin, setPin] = useState('');
+  const [role, setRole] = useState('user');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  return (
+    <Modal
+      title={title}
+      saveLabel="Зберегти"
+      onCancel={onCancel}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        if (!callsign.trim()) return setErr('Вкажіть позивний');
+        if (!/^\d{4,8}$/.test(pin)) return setErr('PIN — від 4 до 8 цифр');
+        setBusy(true);
+        setErr('');
+        try {
+          await onSave({ callsign: callsign.trim(), pin, role });
+        } catch (e) {
+          setErr(e.message || 'Не вдалося зберегти');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {!fixedCallsign && (
+        <>
+          <div style={{ marginTop: 10 }}>
+            <label>Позивний</label>
+            <input type="text" value={callsign} onChange={(e) => setCallsign(e.target.value)} autoFocus />
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <label>Права</label>
+            <select value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="user">Користувач — веде облік</option>
+              <option value="admin">Адміністратор — ще й заводить людей</option>
+            </select>
+          </div>
+        </>
+      )}
+      <div style={{ marginTop: 10 }}>
+        <label>PIN (4–8 цифр)</label>
+        <input type="password" inputMode="numeric" autoComplete="off"
+          value={pin} onChange={(e) => setPin(e.target.value)} autoFocus={!!fixedCallsign} />
+      </div>
+      <div className="act-hint">
+        PIN не зберігається — у таблиці лежить лише його відбиток. Якщо людина
+        забуде PIN, задайте новий.
+      </div>
+    </Modal>
   );
 }
 
@@ -531,6 +743,7 @@ function urlFor(view) {
 
 export default function Home({ startView }) {
   const [authed, setAuthed] = useState(null);
+  const [me, setMe] = useState({ callsign: '', role: 'admin', callsigns: [] });
   const [sheets, setSheets] = useState([]);
   const [view, setView] = useState(startView || { kind: 'search', name: null });
   const [state, setState] = useState('');
@@ -571,11 +784,16 @@ export default function Home({ startView }) {
     }
   }, [view]);
 
-  useEffect(() => {
+  const loadMe = useCallback(() => {
     api('/api/login')
-      .then((d) => setAuthed(d.authed || !d.required))
+      .then((d) => {
+        setMe({ callsign: d.callsign || '', role: d.role || 'admin', callsigns: d.callsigns || [] });
+        setAuthed(d.authed || !d.required);
+      })
       .catch(() => setAuthed(false));
   }, []);
+
+  useEffect(() => { loadMe(); }, [loadMe]);
 
   useEffect(() => {
     if (!authed) return;
@@ -606,7 +824,7 @@ export default function Home({ startView }) {
   ];
 
   if (authed === null) return <div className="loading">Завантаження…</div>;
-  if (!authed) return <Login onOk={() => setAuthed(true)} />;
+  if (!authed) return <Login callsigns={me.callsigns} onOk={loadMe} />;
 
   return (
     <ToastCtx.Provider value={push}>
@@ -620,6 +838,22 @@ export default function Home({ startView }) {
           <button className="cmd-open" onClick={() => setPalette(true)} title="Пошук та дії">
             Пошук та дії<kbd>⌘K</kbd>
           </button>
+          <div className="who">
+            <span className="who-name" title={me.role === 'admin' ? 'Адміністратор' : 'Користувач'}>
+              {me.callsign || 'спільний вхід'}
+            </span>
+            <button
+              className="who-out"
+              title="Вийти"
+              onClick={async () => {
+                await api('/api/login', { method: 'DELETE' });
+                setAuthed(false);
+                loadMe();
+              }}
+            >
+              вийти
+            </button>
+          </div>
         </header>
 
         <div className="tabs">
@@ -644,6 +878,14 @@ export default function Home({ startView }) {
           >
             Журнал
           </div>
+          {me.role === 'admin' && (
+            <div
+              className={'tab' + (view.kind === 'people' ? ' active' : '')}
+              onClick={() => setView({ kind: 'people', name: null })}
+            >
+              Люди
+            </div>
+          )}
         </div>
 
         {view.kind === 'search' && (
@@ -651,6 +893,7 @@ export default function Home({ startView }) {
             key={(view.q || '') + (view.act || '')}
             setState={setState}
             onOpen={setView}
+            me={me.callsign}
             initialQuery={view.q}
             autoAct={view.act}
           />
@@ -671,6 +914,7 @@ export default function Home({ startView }) {
           <WarehouseView key={view.box || ''} setState={setState} focusCode={view.box} onOpen={setView} />
         )}
         {view.kind === 'log' && <LogView key={view.q || ''} setState={setState} initialQuery={view.q} />}
+        {view.kind === 'people' && me.role === 'admin' && <PeopleView setState={setState} />}
       </div>
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       <ToastHost toasts={toasts} onClose={close} />
@@ -679,7 +923,7 @@ export default function Home({ startView }) {
 }
 
 /* ---------- Пошук і акти на одній вкладці ---------- */
-function SearchView({ setState, onOpen, initialQuery, autoAct }) {
+function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
   const [q, setQ] = useState(initialQuery || '');
   const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -916,6 +1160,7 @@ function SearchView({ setState, onOpen, initialQuery, autoAct }) {
           conditions={meta.conditions}
           initialSheet={act.sheet}
           bindRow={act.row}
+          me={me}
           onCancel={() => setAct(null)}
           onSave={async (body) => {
             const d = await api('/api/act', { method: 'POST', body: { ...body, kind: act.kind } });
@@ -2552,7 +2797,7 @@ function LogView({ setState, initialQuery }) {
 
   const list = q.trim()
     ? entries.filter((e) =>
-        [e.date, e.sheet, e.action, e.field, e.before, e.after].join(' ').toLowerCase()
+        [e.date, e.sheet, e.action, e.field, e.before, e.after, e.by].join(' ').toLowerCase()
           .includes(q.trim().toLowerCase()))
     : entries;
 
@@ -2589,6 +2834,7 @@ function LogView({ setState, initialQuery }) {
                   <span className="badge">{e.sheet}</span>
                   {e.target && <span className="log-target">ряд. {e.target}</span>}
                   {e.field && <span className="log-field">{e.field}</span>}
+                  {e.by && <span className="log-by" title="Хто вніс зміну">{e.by}</span>}
                 </div>
                 {(e.before || e.after) && (
                   <div className="log-diff">
@@ -2667,15 +2913,16 @@ function ItemPicker({ value, catalog, onPick, onText, placeholder = 'Назва'
   );
 }
 
-function ActModal({ kind, sheets, conditions, initialSheet, bindRow, onCancel, onSave }) {
+function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', onCancel, onSave }) {
   const accept = kind === 'accept';
   const [sheet, setSheet] = useState(initialSheet || sheets[0] || '');
   const [items, setItems] = useState([emptyItem()]);
   const [catalog, setCatalog] = useState([]);
   // набір полів у кожного листа свій — беремо його з сервера разом із підказками
   const [fields, setFields] = useState([]);
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  // приймає або віддає той, хто зараз у системі — підставляємо, але лишаємо змінним
+  const [from, setFrom] = useState(accept ? '' : me);
+  const [to, setTo] = useState(accept ? me : '');
   const [condition, setCondition] = useState(accept ? conditions[1] : '');
   const [note, setNote] = useState('');
   const [photo, setPhoto] = useState('');
