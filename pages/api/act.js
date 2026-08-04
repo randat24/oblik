@@ -19,7 +19,10 @@ function itemCols(headers, cols) {
  */
 function fieldsOf(headers, cols, masked = new Set()) {
   const ic = itemCols(headers, cols);
-  const skip = new Set([cols.status, cols.who, cols.date, ic.where, ic.note].filter((i) => i >= 0));
+  // «Здав» теж не показуємо: те саме питання вже стоїть нижче як «Хто віддав»
+  const skip = new Set(
+    [cols.status, cols.who, cols.date, cols.returned, ic.where, ic.note].filter((i) => i >= 0)
+  );
   return headers
     .map((h, i) => ({
       col: i,
@@ -63,6 +66,17 @@ function catalogOf(values, cfg) {
   return { catalog, fields, titleCol };
 }
 
+/**
+ * Що покласти в колонку «Здав». У різних листах вона означає різне:
+ * десь це людина, десь дата повернення — дивимося на заголовок.
+ */
+function returnedValue(headers, cols, { kind, from, date }) {
+  if (cols.returned < 0) return null;
+  if (kind !== 'accept') return ''; // річ пішла — попереднє «здав» уже не про неї
+  const h = (headers[cols.returned] || '').toString().toLowerCase();
+  return /дата|коли/.test(h) ? date : from;
+}
+
 /** Що дописуємо в «Примітки»: дата, стан і від кого / кому */
 function noteBits({ kind, from, to, condition, date }) {
   const who = kind === 'accept' ? (from ? `від ${from}` : '') : (to ? `видано ${to}` : '');
@@ -85,6 +99,8 @@ function rowForSheet(headers, cols, item, ctx) {
   if (cols.who >= 0) row[cols.who] = kind === 'accept' ? '' : to;
   if (ic.where >= 0) row[ic.where] = kind === 'accept' ? 'КСП' : '';
   if (cols.date >= 0) row[cols.date] = date;
+  const ret = returnedValue(headers, cols, ctx);
+  if (ret !== null) row[cols.returned] = ret;
   if (ic.note >= 0) row[ic.note] = noteBits(ctx);
   return row;
 }
@@ -108,6 +124,8 @@ function updatesForRow(headers, cols, item, ctx, current) {
   if (cols.who >= 0) set(cols.who, kind === 'accept' ? '' : to);
   if (ic.where >= 0 && kind === 'accept') set(ic.where, 'КСП');
   if (cols.date >= 0) set(cols.date, date);
+  const ret = returnedValue(headers, cols, ctx);
+  if (ret !== null) set(cols.returned, ret);
 
   if (ic.note >= 0) {
     const bits = noteBits(ctx);
