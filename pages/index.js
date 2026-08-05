@@ -1568,6 +1568,141 @@ function DataTable({ columns, rows, onPick, pickLabel = 'Картка' }) {
   );
 }
 
+/* ---------- Вміст ящиків ---------- */
+
+const BOX_ACTIONS = {
+  take: { label: 'Взяти', title: 'Взяти з ящика', cls: 'act-btn' },
+  give: { label: 'Повернути', title: 'Повернути в ящик', cls: 'act-btn act-accept' },
+  add: { label: 'Додати', title: 'Додати в ящик', cls: 'act-btn act-accept' },
+  writeOff: { label: 'Списати', title: 'Списати з ящика', cls: 'act-btn act-del' },
+  replace: { label: 'Заміна', title: 'Відмітити заміну', cls: 'act-btn' },
+};
+
+/** Скільки лежить на місці — головне число, яке треба бачити з першого погляду */
+function BoxLeft({ line }) {
+  const color = line.left > 0 ? 'var(--green)' : 'var(--red)';
+  return (
+    <span className="box-left" style={{ color }}>
+      {line.left}<span className="box-of"> з {line.total}</span>
+      {line.unit ? ' ' + line.unit : ''}
+      {line.taken > 0 && <span className="box-taken">на руках {line.taken}</span>}
+    </span>
+  );
+}
+
+/** Взяти / повернути / додати / списати — одна форма на всі дії */
+function BoxMoveModal({ line, kind, people = [], onClose, onDone }) {
+  const [qty, setQty] = useState('1');
+  const [to, setTo] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const cfg = BOX_ACTIONS[kind] || BOX_ACTIONS.take;
+
+  const save = async () => {
+    setBusy(true);
+    setErr('');
+    try {
+      const d = await api('/api/boxes', {
+        method: 'POST',
+        body: { action: 'move', row: line.row, kind, qty: Number(qty) || 1, to, note },
+      });
+      onDone(d);
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={`${cfg.title}: ${line.name}`}
+      onCancel={onClose}
+      onSave={save}
+      saveLabel={cfg.label}
+      busy={busy}
+      error={err}
+    >
+      <div className="box-modal-head">
+        <span className="badge">{line.box}</span>
+        <BoxLeft line={line} />
+      </div>
+      <label>Кількість</label>
+      <input
+        type="number"
+        min="1"
+        step="1"
+        value={qty}
+        autoFocus
+        onChange={(e) => setQty(e.target.value)}
+      />
+      {(kind === 'take' || kind === 'replace') && (
+        <>
+          <label>Кому / куди</label>
+          <Combo value={to} options={people} onChange={setTo} placeholder="позивний або місце" />
+        </>
+      )}
+      <label>Примітка</label>
+      <input type="text" value={note} placeholder="за потреби" onChange={(e) => setNote(e.target.value)} />
+    </Modal>
+  );
+}
+
+/** Нова позиція в ящику */
+function BoxLineModal({ box, units = [], names = [], accountingOptions = [], onClose, onDone }) {
+  const [name, setName] = useState('');
+  const [total, setTotal] = useState('1');
+  const [unit, setUnit] = useState('шт.');
+  const [accounting, setAccounting] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const save = async () => {
+    if (!name.trim()) { setErr('Вкажіть назву'); return; }
+    setBusy(true);
+    setErr('');
+    try {
+      const d = await api('/api/boxes', {
+        method: 'POST',
+        body: { box, name: name.trim(), total: Number(total) || 1, unit, accounting, note },
+      });
+      onDone(d);
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={`Що покласти в ящик ${box}`} onCancel={onClose} onSave={save} saveLabel="Додати" busy={busy} error={err}>
+      <label>Назва</label>
+      <Combo value={name} options={names} onChange={setName} placeholder="ПНВ, підсумок, акумулятор…" autoFocus />
+      <div className="box-form-row">
+        <div>
+          <label>Скільки</label>
+          <input type="number" min="1" step="1" value={total} onChange={(e) => setTotal(e.target.value)} />
+        </div>
+        <div>
+          <label>Од.</label>
+          <Combo value={unit} options={units} onChange={setUnit} placeholder="шт." />
+        </div>
+      </div>
+      <label>Облік</label>
+      <select value={accounting} onChange={(e) => setAccounting(e.target.value)}>
+        <option value="">не вказано</option>
+        {accountingOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+      <label>Примітка</label>
+      <input type="text" value={note} placeholder="стан, комплектність…" onChange={(e) => setNote(e.target.value)} />
+    </Modal>
+  );
+}
+
 /* ---------- Підсумковий рядок ---------- */
 /**
  * Числа під фільтрами: скільки видно зараз і скільки всього.
@@ -1992,8 +2127,21 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
   const [meta, setMeta] = useState(null); // акти + категорії + стани
   const [act, setAct] = useState(null); // {kind, sheet?, row?}
   const [photo, setPhoto] = useState(null);
+  const [boxMove, setBoxMove] = useState(null); // {line, kind}
+  const [boxPeople, setBoxPeople] = useState([]);
   const reqId = useRef(0);
   const toast = useToast();
+
+  // Підказки «кому» для ящиків потрібні лише коли відкривають форму —
+  // тягнемо їх один раз і не раніше
+  const openBoxMove = async (line, kind) => {
+    setBoxMove({ line, kind });
+    if (boxPeople.length) return;
+    try {
+      const d = await api('/api/boxes');
+      setBoxPeople(d.people || []);
+    } catch { /* підказки не критичні */ }
+  };
 
   const loadMeta = useCallback(async () => {
     try {
@@ -2076,7 +2224,8 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
   // а от у яких листах знайшлося — саме те, що потрібно бачити одразу
   const hits = groups.flatMap((g) => g.data);
   const stockHits = res?.stock?.length || 0;
-  const found = hits.length + stockHits + acts.length;
+  const boxHits = res?.boxes?.length || 0;
+  const found = hits.length + stockHits + boxHits + acts.length;
   let totalsParts = [];
   if (res) {
     // «нічого не знайдено» вже написано нижче — дублювати нулем не треба
@@ -2085,6 +2234,7 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
         ['Знайдено', found],
         ...countBy(hits, (r) => r.sheet),
         ...(stockHits ? [['Склад Рибаківки', stockHits]] : []),
+        ...(boxHits ? [['У ящиках', boxHits]] : []),
         ...(acts.length ? [['Акти', acts.length]] : []),
       ];
     }
@@ -2107,7 +2257,7 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
       {q.trim().length > 0 && q.trim().length < 2 && (
         <div className="empty">Введіть щонайменше 2 символи</div>
       )}
-      {!busy && res && groups.length === 0 && acts.length === 0 && !res.stock?.length && (
+      {!busy && res && groups.length === 0 && acts.length === 0 && !res.stock?.length && !res.boxes?.length && (
         <div className="empty">Нічого не знайдено</div>
       )}
 
@@ -2156,6 +2306,45 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
           ))}
         </div>
       ))}
+
+      {res?.boxes?.length > 0 && (
+        <div className="section">
+          <h3 className="primary">У ящиках<span className="count">{res.boxes.length}</span></h3>
+          {res.boxes.map((r) => (
+            <div className="result" key={'b' + r.row}>
+              <div className="result-head">
+                <span className="badge">ящик {r.box}</span>
+                <span style={{ fontWeight: 600 }}>{r.name}</span>
+                {r.accounting && (
+                  <span style={{
+                    fontFamily: 'var(--mono)', fontSize: '.74rem', fontWeight: 700,
+                    color: r.accounting === 'Облікове' ? 'var(--green)' : 'var(--gray)',
+                  }}>
+                    {r.accounting}
+                  </span>
+                )}
+                <span style={{ marginLeft: 'auto' }}><BoxLeft line={r} /></span>
+              </div>
+              <div className="fields">
+                {r.boxName && <span><span className="k">Ящик:</span> {r.boxName}{'  ·  '}</span>}
+                {r.location && <span><span className="k">Де:</span> {r.location}{'  ·  '}</span>}
+                {r.note && <span><span className="k">Примітка:</span> {r.note}</span>}
+              </div>
+              <div className="actions">
+                <button className="act-btn act-qr" onClick={() => onOpen({ kind: 'warehouse', name: 'Склад', box: r.box })}>
+                  Відкрити ящик
+                </button>
+                <button className="act-btn" disabled={r.left <= 0} onClick={() => openBoxMove(r, 'take')}>
+                  Взяти
+                </button>
+                <button className="act-btn act-accept" disabled={r.taken <= 0} onClick={() => openBoxMove(r, 'give')}>
+                  Повернути
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {res?.stock?.length > 0 && (
         <div className="section">
@@ -2213,6 +2402,19 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
       )}
 
       {photo && <PhotoLightbox act={photo} onClose={() => setPhoto(null)} />}
+
+      {boxMove && (
+        <BoxMoveModal
+          line={boxMove.line}
+          kind={boxMove.kind}
+          people={boxPeople}
+          onClose={() => setBoxMove(null)}
+          onDone={() => {
+            toast(boxMove.kind === 'take' ? 'Взято з ящика' : 'Повернуто в ящик');
+            setTick((t) => t + 1);
+          }}
+        />
+      )}
 
       {act && meta && (
         <ActModal
@@ -3530,14 +3732,81 @@ function AddStockModal({ data, onCancel, onSave }) {
   );
 }
 
+/** Список того, що лежить у ящику: скільки на місці, скільки на руках */
+function BoxContents({ box, lines, loading, onAdd, onMove, onImport, onDelete, onEdit }) {
+  const total = lines.reduce((a, l) => a + l.total, 0);
+  const left = lines.reduce((a, l) => a + l.left, 0);
+  const taken = lines.reduce((a, l) => a + l.taken, 0);
+
+  return (
+    <div className="box-con">
+      <div className="box-con-head">
+        <span className="box-con-t">Вміст</span>
+        {lines.length > 0 && (
+          <span className="box-con-sum">
+            позицій: <b>{lines.length}</b> · на місці: <b>{left}</b> з <b>{total}</b>
+            {taken > 0 && <> · на руках: <b className="box-con-out">{taken}</b></>}
+          </span>
+        )}
+        <button className="box-con-add" onClick={onAdd} title="Покласти в ящик">+ позиція</button>
+      </div>
+
+      {loading && <div className="box-con-empty">завантаження…</div>}
+
+      {!loading && lines.length === 0 && (
+        <div className="box-con-empty">
+          {box.contents?.trim() ? (
+            <>
+              <div className="box-con-old">{box.contents}</div>
+              <button className="act-btn" onClick={onImport}>
+                Розібрати на позиції
+              </button>
+            </>
+          ) : (
+            'Порожньо. Натисніть «+ позиція», щоб описати, що всередині.'
+          )}
+        </div>
+      )}
+
+      {lines.map((l) => (
+        <div className={'box-line' + (l.left <= 0 ? ' is-out' : '')} key={l.row}>
+          <input
+            className="ghost box-line-n"
+            type="text"
+            defaultValue={l.name}
+            onBlur={(e) => onEdit(l, 'name', e.target.value, l.name)}
+          />
+          <BoxLeft line={l} />
+          <div className="box-line-b">
+            <button className="box-b" disabled={l.left <= 0} title="Взяти" onClick={() => onMove(l, 'take')}>−</button>
+            <button className="box-b" disabled={l.taken <= 0} title="Повернути" onClick={() => onMove(l, 'give')}>+</button>
+            <button className="box-b box-b-x" title="Прибрати з ящика" onClick={() => onDelete(l)}>×</button>
+          </div>
+          {(l.accounting || l.note) && (
+            <div className="box-line-m">
+              {l.accounting && (
+                <span className={'tag ' + (l.accounting === 'Облікове' ? 'tag-acc' : 'tag-type')}>{l.accounting}</span>
+              )}
+              {l.note && <span className="box-line-note">{l.note}</span>}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ---------- Склад ---------- */
 function WarehouseView({ setState, focusCode, onOpen }) {
   const [data, setData] = useState(null);
+  const [boxes, setBoxes] = useState(null); // вміст ящиків окремими позиціями
   const [q, setQ] = useState('');
   const [chip, setChip] = useState(null);
   const [adding, setAdding] = useState(false);
   const [photo, setPhoto] = useState(null);
   const [qr, setQr] = useState(null);
+  const [addLine, setAddLine] = useState(null); // код ящика, куди кладемо
+  const [boxMove, setBoxMove] = useState(null); // {line, kind}
   const [highlight, setHighlight] = useState(focusCode || null);
   const [mode, setMode] = useViewMode();
   const toast = useToast();
@@ -3555,7 +3824,17 @@ function WarehouseView({ setState, focusCode, onOpen }) {
     }
   }, [setState]);
 
+  const loadBoxes = useCallback(async () => {
+    try {
+      setBoxes(await api('/api/boxes'));
+    } catch (e) {
+      // вміст — доповнення до картки: без нього склад має лишатись робочим
+      setBoxes({ lines: [], units: [], names: [], people: [], accountingOptions: [] });
+    }
+  }, []);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadBoxes(); }, [loadBoxes]);
 
   useEffect(() => {
     if (!data || !focusCode) return;
@@ -3585,6 +3864,69 @@ function WarehouseView({ setState, focusCode, onOpen }) {
     }
   };
 
+  /** Одне поле позиції — назва, кількість, облік */
+  const saveLine = async (line, field, value, prev) => {
+    if (value === prev) return;
+    setState('збереження…');
+    try {
+      await api('/api/boxes', { method: 'PATCH', body: { row: line.row, field, value, prev } });
+      setBoxes((p) => ({
+        ...p,
+        lines: p.lines.map((l) => (l.row === line.row
+          ? { ...l, [field]: field === 'total' ? Number(value) || 0 : value,
+              left: field === 'total' ? (Number(value) || 0) - l.taken : l.left }
+          : l)),
+      }));
+      setState('синхронізовано');
+      toast('Збережено');
+    } catch (e) {
+      setState('помилка збереження');
+      saveFailed(toast, e);
+    }
+  };
+
+  const delLine = async (line) => {
+    if (!confirm(`Прибрати «${line.name}» з ящика ${line.box}?`)) return;
+    setState('видалення…');
+    try {
+      const d = await api('/api/boxes', { method: 'DELETE', body: { row: line.row } });
+      setBoxes((p) => ({ ...p, lines: d.lines }));
+      setState('синхронізовано');
+      toast(`Прибрано «${line.name}»`, { type: 'warn' });
+    } catch (e) {
+      setState('помилка видалення');
+      saveFailed(toast, e);
+    }
+  };
+
+  /** Старий текстовий вміст → позиції. Показуємо, що вийшло, і питаємо. */
+  const importContents = async (box) => {
+    if (!box.contents?.trim()) return;
+    setState('розбір вмісту…');
+    try {
+      const { parsed } = await api('/api/boxes', {
+        method: 'POST', body: { action: 'preview', text: box.contents },
+      });
+      setState('синхронізовано');
+      if (!parsed.length) {
+        toast('З цього тексту не вийшло виділити позиції', { type: 'warn' });
+        return;
+      }
+      const preview = parsed.map((x) => `• ${x.name} — ${x.total} ${x.unit}`).join('\n');
+      if (!confirm(`Створити ${parsed.length} позицій у ящику ${box.code}?\n\n${preview}`)) return;
+      setState('створення…');
+      const d = await api('/api/boxes', {
+        method: 'POST', body: { action: 'import', box: box.code, text: box.contents },
+      });
+      setBoxes((p) => ({ ...p, lines: d.lines }));
+      setState('синхронізовано');
+      toast(`Створено позицій: ${d.added}`);
+    } catch (e) {
+      setState('помилка розбору');
+      saveFailed(toast, e);
+    }
+  };
+
   let list = [...data.items].sort((a, b) => {
     const na = parseInt(String(a.code).replace(/\D/g, ''), 10);
     const nb = parseInt(String(b.code).replace(/\D/g, ''), 10);
@@ -3594,10 +3936,23 @@ function WarehouseView({ setState, focusCode, onOpen }) {
   if (chip) list = list.filter((it) => it.priority === chip);
   if (q.trim()) {
     const s = q.trim().toLowerCase();
+    // назви позицій усередині ящика теж шукаємо: «ПНВ» має знайти ящик,
+    // у якому вони лежать, а не лише той, у чиїй назві є це слово
+    const byLine = new Set(
+      (boxes?.lines || [])
+        .filter((l) => [l.name, l.note, l.accounting].join(' ').toLowerCase().includes(s))
+        .map((l) => l.box)
+    );
     list = list.filter((it) =>
+      byLine.has(it.code) ||
       [it.code, it.name, it.contents, it.location].join(' ').toLowerCase().includes(s)
     );
   }
+
+  // числа підсумку рахуємо лише по тих ящиках, що зараз на екрані
+  const shownCodes = new Set(list.map((it) => it.code));
+  const shownLines = (boxes?.lines || []).filter((l) => shownCodes.has(l.box));
+  const outCount = shownLines.reduce((a, l) => a + l.taken, 0);
 
   return (
     <>
@@ -3622,7 +3977,15 @@ function WarehouseView({ setState, focusCode, onOpen }) {
       </div>
 
       <Totals
-        parts={[['Ящиків', list.length], ...countBy(list, (it) => it.status)]}
+        parts={[
+          ['Ящиків', list.length],
+          ...(shownLines.length ? [
+            ['Позицій', shownLines.length],
+            ['На місці', shownLines.reduce((a, l) => a + l.left, 0)],
+            ...(outCount ? [['На руках', outCount]] : []),
+          ] : []),
+          ...countBy(list, (it) => it.status),
+        ]}
         of={list.length !== data.items.length ? data.items.length : undefined}
       />
 
@@ -3680,9 +4043,20 @@ function WarehouseView({ setState, focusCode, onOpen }) {
                 <div className="wh-photo-ph">немає фото</div>
               )}
 
+              <BoxContents
+                box={it}
+                lines={(boxes?.lines || []).filter((l) => l.box === it.code)}
+                loading={!boxes}
+                onAdd={() => setAddLine(it.code)}
+                onMove={(line, kind) => setBoxMove({ line, kind })}
+                onImport={() => importContents(it)}
+                onDelete={(line) => delLine(line)}
+                onEdit={(line, field, value, prev) => saveLine(line, field, value, prev)}
+              />
+
               <div className="card-body">
                 {[
-                  ['Вміст', 'contents'], ['Розташування', 'location'], ['Примітки', 'notes'],
+                  ['Розташування', 'location'], ['Примітки', 'notes'],
                 ].map(([label, field]) => (
                   <div className="drow" key={field}>
                     <span className="drow-k">{label}</span>
@@ -3786,6 +4160,33 @@ function WarehouseView({ setState, focusCode, onOpen }) {
             setData((p) => ({ ...p, items: d.items }));
             setAdding(false);
             toast(`Ящик ${d.code} додано`);
+          }}
+        />
+      )}
+
+      {addLine && boxes && (
+        <BoxLineModal
+          box={addLine}
+          units={boxes.units}
+          names={boxes.names}
+          accountingOptions={boxes.accountingOptions || []}
+          onClose={() => setAddLine(null)}
+          onDone={(d) => {
+            setBoxes((p) => ({ ...p, lines: d.lines }));
+            toast(`Покладено в ящик ${addLine}`);
+          }}
+        />
+      )}
+
+      {boxMove && (
+        <BoxMoveModal
+          line={boxMove.line}
+          kind={boxMove.kind}
+          people={boxes?.people || []}
+          onClose={() => setBoxMove(null)}
+          onDone={(d) => {
+            setBoxes((p) => ({ ...p, lines: d.lines }));
+            toast(boxMove.kind === 'take' ? 'Взято з ящика' : 'Повернуто в ящик');
           }}
         />
       )}

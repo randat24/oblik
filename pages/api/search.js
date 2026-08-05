@@ -1,6 +1,7 @@
 import { withAuth } from '../../lib/auth';
 import { SHEET_CONFIGS, readSheet, findColumns } from '../../lib/sheets';
 import { STOCK_SHEET, parseStockItems } from '../../lib/stock';
+import { LINES_SHEET, parseLines } from '../../lib/boxes';
 
 /** Склад Рибаківки має власну структуру, тож шукаємо в ньому окремо */
 async function searchStock(qText) {
@@ -41,9 +42,63 @@ async function searchStock(qText) {
   return out;
 }
 
+/**
+ * Вміст ящиків складу. Шукаємо і за назвою речі, і за кодом ящика —
+ * «ПНВ» має знаходити ящик, у якому вони лежать, а «012» — усе, що в ньому.
+ */
+async function searchBoxes(qText) {
+  let lineValues;
+  let boxValues;
+  try {
+    [lineValues, boxValues] = await Promise.all([
+      readSheet(LINES_SHEET),
+      readSheet('Склад').catch(() => []),
+    ]);
+  } catch {
+    // лист ще не створено — немає чого шукати
+    return [];
+  }
+
+  // код ящика → його назва й розташування, щоб у результаті було видно, куди йти
+  const boxes = new Map();
+  (boxValues || []).slice(1).forEach((r) => {
+    const code = (r?.[0] || '').toString().trim();
+    if (code) boxes.set(code, { name: (r[2] || '').toString(), location: (r[4] || '').toString() });
+  });
+
+  const out = [];
+  parseLines(lineValues).forEach((l) => {
+    const fields = [
+      ['назва', l.name], ['ящик', l.box], ['примітка', l.note], ['облік', l.accounting],
+    ];
+    const hit = fields.find(([, v]) => (v || '').toString().toLowerCase().includes(qText));
+    if (!hit) return;
+    const b = boxes.get(l.box) || {};
+    out.push({
+      kind: 'box',
+      row: l.row,
+      box: l.box,
+      boxName: b.name || '',
+      location: b.location || '',
+      name: l.name,
+      total: l.total,
+      taken: l.taken,
+      left: l.left,
+      unit: l.unit,
+      accounting: l.accounting,
+      note: l.note,
+      matchedField: hit[0],
+      matchedValue: hit[1],
+    });
+  });
+  // спершу те, що є на місці — його можна взяти просто зараз
+  out.sort((a, b) => (b.left > 0) - (a.left > 0) || a.name.localeCompare(b.name, 'uk'));
+  return out;
+}
+
 export default withAuth(async (req, res) => {
   const q = (req.query.q || '').toString().trim();
-  if (q.length < 2) return res.json({ serial: [], assigned: [], other: [], stock: [] });
+  if (q.length < 2) return res.json({ serial: [], assigned: [], other: [], stock: [], boxes: [] });
 
   const qText = q.toLowerCase();
   const qNorm = q.replace(/[\s\-/\\:]/g, '').toLowerCase();
@@ -55,6 +110,7 @@ export default withAuth(async (req, res) => {
   const targets = SHEET_CONFIGS.filter((c) => c.kind === 'items');
 
   const stockHits = searchStock(qText);
+  const boxHits = searchBoxes(qText);
 
   await Promise.all(
     targets.map(async (cfg) => {
@@ -128,5 +184,5 @@ export default withAuth(async (req, res) => {
     })
   );
 
-  res.json({ serial, assigned, other, stock: await stockHits });
+  res.json({ serial, assigned, other, stock: await stockHits, boxes: await boxHits });
 });
