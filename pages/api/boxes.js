@@ -1,6 +1,7 @@
 import { withAuth, currentActor } from '../../lib/auth';
 import { writeCell, writeCells, appendRow, deleteRow, todayStr, readSheet } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
+import { appendAct, CONDITIONS } from '../../lib/acts';
 import {
   LINES_SHEET, C, FIELD_LABELS, ACTIONS, ACCOUNTING_OPTIONS,
   readLines, lineRow, appendMove, importContents, parseContents, parseLines,
@@ -55,6 +56,7 @@ export default withAuth(async (req, res) => {
       names: data.names,
       people: data.people,
       accountingOptions: ACCOUNTING_OPTIONS,
+      conditions: CONDITIONS,
     });
   }
 
@@ -83,9 +85,14 @@ export default withAuth(async (req, res) => {
 
     // Взяти / повернути / додати / списати
     if (action === 'move') {
-      const { row, kind, qty, to, note } = req.body;
+      const { row, kind, qty, to, note, condition, photo } = req.body;
       const line = await lineAt(num(row));
       if (!line) return res.status(404).json({ error: 'Позицію не знайдено' });
+
+      // видача без отримувача — це не видача, а зникла річ
+      if (kind === 'take' && !String(to || '').trim()) {
+        return res.status(400).json({ error: 'Вкажіть, кому видаєте' });
+      }
 
       const next = applyAction(line, kind, qty);
       if (next.error) return res.status(400).json({ error: next.error });
@@ -110,8 +117,32 @@ export default withAuth(async (req, res) => {
         after: `на місці ${next.total - next.taken}${to ? ` · ${to}` : ''}`,
       });
 
+      // Узяте з ящика — така сама видача, як із будь-якого листа, тож лягає
+      // в «Акти». Помилка тут не має скасовувати вже проведений рух.
+      let act = null;
+      if (kind === 'take' || kind === 'give') {
+        const actor = currentActor();
+        const title = `${line.name} — ${next.qty} ${line.unit || 'шт.'} (ящик ${line.box})`;
+        try {
+          await appendAct({
+            kind: kind === 'take' ? 'issue' : 'accept',
+            sheet: 'Склад',
+            items: [{ title }],
+            from: kind === 'take' ? actor : (to || ''),
+            to: kind === 'take' ? (to || '') : actor,
+            condition: condition || '',
+            photo: photo || '',
+            note: note || '',
+            date: today,
+          });
+          act = { kind: kind === 'take' ? 'issue' : 'accept', title };
+        } catch (e) {
+          act = { error: e.message };
+        }
+      }
+
       const data = await readLines();
-      return res.json({ lines: data.lines, moves: data.moves });
+      return res.json({ lines: data.lines, moves: data.moves, act });
     }
 
     // Нова позиція в ящику
