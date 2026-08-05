@@ -1570,6 +1570,14 @@ function DataTable({ columns, rows, onPick, pickLabel = 'Картка' }) {
 
 /* ---------- Вміст ящиків ---------- */
 
+/** Що написати після руху: акт важливіший за сам рух, тож згадуємо його */
+function boxAct(kind, d) {
+  const base = kind === 'take' ? 'Взято з ящика' : 'Повернуто в ящик';
+  if (!d?.act) return base;
+  if (d.act.error) return `${base}, але акт не записався: ${d.act.error}`;
+  return `${base} · акт ${kind === 'take' ? 'видачі' : 'приймання'} записано`;
+}
+
 const BOX_ACTIONS = {
   take: { label: 'Взяти', title: 'Взяти з ящика', cls: 'act-btn' },
   give: { label: 'Повернути', title: 'Повернути в ящик', cls: 'act-btn act-accept' },
@@ -1590,22 +1598,30 @@ function BoxLeft({ line }) {
   );
 }
 
-/** Взяти / повернути / додати / списати — одна форма на всі дії */
-function BoxMoveModal({ line, kind, people = [], onClose, onDone }) {
+/**
+ * Взяти / повернути / додати / списати — одна форма на всі дії.
+ * Взяття й повернення — це видача й приймання, тож вони ще й пишуть акт:
+ * звідси поля «кому», «стан» і фото.
+ */
+function BoxMoveModal({ line, kind, people = [], conditions = [], onClose, onDone }) {
   const [qty, setQty] = useState('1');
   const [to, setTo] = useState('');
   const [note, setNote] = useState('');
+  const [condition, setCondition] = useState('');
+  const [photo, setPhoto] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const cfg = BOX_ACTIONS[kind] || BOX_ACTIONS.take;
+  const isAct = kind === 'take' || kind === 'give';
 
   const save = async () => {
+    if (kind === 'take' && !to.trim()) { setErr('Вкажіть, кому видаєте'); return; }
     setBusy(true);
     setErr('');
     try {
       const d = await api('/api/boxes', {
         method: 'POST',
-        body: { action: 'move', row: line.row, kind, qty: Number(qty) || 1, to, note },
+        body: { action: 'move', row: line.row, kind, qty: Number(qty) || 1, to, note, condition, photo },
       });
       onDone(d);
       onClose();
@@ -1638,14 +1654,43 @@ function BoxMoveModal({ line, kind, people = [], onClose, onDone }) {
         autoFocus
         onChange={(e) => setQty(e.target.value)}
       />
-      {(kind === 'take' || kind === 'replace') && (
+      {kind === 'take' && (
+        <>
+          <label>Кому видаємо</label>
+          <Combo value={to} options={people} onChange={setTo} placeholder="позивний або підрозділ" />
+        </>
+      )}
+      {kind === 'give' && (
+        <>
+          <label>Хто повертає</label>
+          <Combo value={to} options={people} onChange={setTo} placeholder="позивний" />
+        </>
+      )}
+      {kind === 'replace' && (
         <>
           <label>Кому / куди</label>
           <Combo value={to} options={people} onChange={setTo} placeholder="позивний або місце" />
         </>
       )}
+      {isAct && conditions.length > 0 && (
+        <>
+          <label>Стан речі</label>
+          <select value={condition} onChange={(e) => setCondition(e.target.value)}>
+            <option value="">не вказано</option>
+            {conditions.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </>
+      )}
       <label>Примітка</label>
       <input type="text" value={note} placeholder="за потреби" onChange={(e) => setNote(e.target.value)} />
+      {isAct && (
+        <>
+          <PhotoField value={photo} onChange={setPhoto} showPreview={false} label="Фото до акта" />
+          <div className="box-act-hint">
+            Запишеться акт {kind === 'take' ? 'видачі' : 'приймання'} — знайдете його в пошуку та на головній.
+          </div>
+        </>
+      )}
     </Modal>
   );
 }
@@ -2129,6 +2174,7 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
   const [photo, setPhoto] = useState(null);
   const [boxMove, setBoxMove] = useState(null); // {line, kind}
   const [boxPeople, setBoxPeople] = useState([]);
+  const [boxConditions, setBoxConditions] = useState([]);
   const reqId = useRef(0);
   const toast = useToast();
 
@@ -2140,6 +2186,7 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
     try {
       const d = await api('/api/boxes');
       setBoxPeople(d.people || []);
+      setBoxConditions(d.conditions || []);
     } catch { /* підказки не критичні */ }
   };
 
@@ -2408,9 +2455,10 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
           line={boxMove.line}
           kind={boxMove.kind}
           people={boxPeople}
+          conditions={boxConditions}
           onClose={() => setBoxMove(null)}
-          onDone={() => {
-            toast(boxMove.kind === 'take' ? 'Взято з ящика' : 'Повернуто в ящик');
+          onDone={(d) => {
+            toast(boxAct(boxMove.kind, d));
             setTick((t) => t + 1);
           }}
         />
@@ -4183,10 +4231,11 @@ function WarehouseView({ setState, focusCode, onOpen }) {
           line={boxMove.line}
           kind={boxMove.kind}
           people={boxes?.people || []}
+          conditions={boxes?.conditions || []}
           onClose={() => setBoxMove(null)}
           onDone={(d) => {
             setBoxes((p) => ({ ...p, lines: d.lines }));
-            toast(boxMove.kind === 'take' ? 'Взято з ящика' : 'Повернуто в ящик');
+            toast(boxAct(boxMove.kind, d));
           }}
         />
       )}

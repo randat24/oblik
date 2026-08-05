@@ -1040,3 +1040,8 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   .box-b { width: 38px; height: 38px; font-size: 1.15rem; }
   .box-line-n { flex: 1 1 100%; }
 }
+.box-act-hint {
+  margin-top: 12px; font-size: .78rem; color: var(--text-dim); line-height: 1.5;
+  padding: 8px 10px; border-left: 2px solid var(--green); background: var(--panel-2);
+  border-radius: var(--r-sm);
+}
