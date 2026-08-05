@@ -13,6 +13,8 @@ import {
   WAREHOUSE_STATUS_OPTIONS,
 } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
+import { readAudits, STATUS as AUDIT_STATUS } from '../../lib/audit';
+import { readLines } from '../../lib/boxes';
 
 const FIELD_LABELS = {
   code: 'Код', priority: 'Пріоритет', name: 'Назва', contents: 'Вміст',
@@ -113,13 +115,33 @@ function nextCode(items) {
   return candidate;
 }
 
+/** Коли склад звіряли востаннє */
+async function auditInfo() {
+  try {
+    const audits = await readAudits();
+    const mine = audits.filter((a) => a.scope === SHEET);
+    return {
+      open: mine.find((a) => a.status === AUDIT_STATUS.open) || null,
+      last: mine.filter((a) => a.status === AUDIT_STATUS.done).slice(-1)[0] || null,
+    };
+  } catch {
+    return { open: null, last: null };
+  }
+}
+
 export default withAuth(async (req, res) => {
   if (req.method === 'GET') {
-    const values = await backfillCreated(await withHeaders(await readSheet(SHEET)));
+    const [values, audit, moves] = await Promise.all([
+      backfillCreated(await withHeaders(await readSheet(SHEET))),
+      auditInfo(),
+      readLines().then((d) => d.moves).catch(() => []),
+    ]);
     return res.json({
       items: parseItems(values),
       priorities: WAREHOUSE_PRIORITIES,
       statusOptions: WAREHOUSE_STATUS_OPTIONS,
+      audit,
+      moves: moves.slice(-8).reverse(),
     });
   }
 
