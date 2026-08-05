@@ -2113,7 +2113,7 @@ export default function Home({ startView }) {
           />
         )}
         {view.kind === 'items' && (
-          <ItemsView key={view.name + ':' + (view.row || '')} name={view.name} setState={setState} focusRow={view.row} />
+          <ItemsView key={view.name + ':' + (view.row || '')} name={view.name} setState={setState} focusRow={view.row} onOpen={setView} />
         )}
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
         {view.kind === 'stock' && (
@@ -2582,9 +2582,12 @@ function scrollToRow(row) {
   }, 60);
 }
 
-function ItemsView({ name, setState, focusRow }) {
+function ItemsView({ name, setState, focusRow, onOpen }) {
   const [data, setData] = useState(null);
   const [chip, setChip] = useState(null);
+  const [who, setWho] = useState(null);
+  const [where, setWhere] = useState(null);
+  const [group, setGroup] = useState(null); // 'who' | 'where'
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
   const [issuing, setIssuing] = useState(null);
@@ -2639,12 +2642,211 @@ function ItemsView({ name, setState, focusRow }) {
     }
   };
 
+  /** Картка запису — одна й та сама у звичайному списку і в групуванні */
+  const renderCard = (it) => (
+    <div className={'card' + (it.row === highlightRow ? ' highlight' : '')} key={it.row} id={'item-row-' + it.row}>
+      <div className="card-head">
+        <div className="card-title">
+          <div className="title-line">
+            {idIdx >= 0 ? (
+              <input
+                className="id-badge"
+                type="text"
+                defaultValue={it.values[idIdx]}
+                title={headers[idIdx] || 'Номер'}
+                size={Math.max(2, String(it.values[idIdx] || '').length)}
+                onBlur={(e) => e.target.value !== it.values[idIdx] && save(it.row, idIdx, e.target.value, it.values[idIdx])}
+              />
+            ) : (
+              <span className="id-badge" title={'Рядок у таблиці: ' + it.row}>{it.row}</span>
+            )}
+            <input
+              className="ghost big"
+              type="text"
+              defaultValue={it.values[0]}
+              placeholder={headers[0] || 'Назва'}
+              onBlur={(e) => e.target.value !== it.values[0] && save(it.row, 0, e.target.value, it.values[0])}
+            />
+          </div>
+          {snIdx >= 0 && (
+            <input
+              className="ghost mono card-sn"
+              type="text"
+              defaultValue={it.values[snIdx]}
+              placeholder={headers[snIdx] || 'S/N'}
+              onBlur={(e) => e.target.value !== it.values[snIdx] && save(it.row, snIdx, e.target.value, it.values[snIdx])}
+            />
+          )}
+        </div>
+        {!hideStatus && cols.status >= 0 && (
+          <select
+            className="pill"
+            style={{ color: statusColor(it.values[cols.status]) }}
+            defaultValue={it.values[cols.status]}
+            onChange={(e) => save(it.row, cols.status, e.target.value, it.values[cols.status])}
+          >
+            {!statusOptions.includes(it.values[cols.status]) && it.values[cols.status] && (
+              <option value={it.values[cols.status]}>{it.values[cols.status]}</option>
+            )}
+            {statusOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        )}
+      </div>
+
+      {headTags(it.values, cols, accIdx).length > 0 && (
+        <div className="card-tags">
+          {headTags(it.values, cols, accIdx).map((t) => (
+            <span className={'tag ' + t.cls} key={t.v}>{t.v}</span>
+          ))}
+        </div>
+      )}
+
+      <div className="card-body">
+        {bodyCols(headers, cols, snIdx, idIdx, tagCols).map((ci) => (
+          <div className="drow" key={ci}>
+            <span className="drow-k">{headers[ci] || 'Поле ' + (ci + 1)}</span>
+            <span className="drow-v">
+              {ci === cols.type ? (
+                <select
+                  className="ghost"
+                  defaultValue={it.values[ci]}
+                  onChange={(e) => save(it.row, ci, e.target.value, it.values[ci])}
+                >
+                  <option value=""></option>
+                  {!typeOptions.includes(it.values[ci]) && it.values[ci] && (
+                    <option value={it.values[ci]}>{it.values[ci]}</option>
+                  )}
+                  {typeOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              ) : (
+                <input
+                  className="ghost"
+                  type={maskCols?.includes(ci) ? 'password' : 'text'}
+                  defaultValue={it.values[ci]}
+                  placeholder="—"
+                  onBlur={(e) => e.target.value !== it.values[ci] && save(it.row, ci, e.target.value, it.values[ci])}
+                />
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="actions">
+        {!noIssue && (
+          <>
+            <button className="act-btn act-issue" onClick={() => setIssuing(it)}>Видати</button>
+            <button
+              className="act-btn act-return"
+              onClick={async () => {
+                if (!confirm('Прийняти на КСП? Отримувача буде очищено.')) return;
+                setState('збереження…');
+                try {
+                  await api('/api/item', { method: 'POST', body: { sheet: name, action: 'return', row: it.row } });
+                  toast('Прийнято на КСП');
+                  load();
+                } catch (e) {
+                  setState('помилка: ' + e.message);
+                  toast('Не вдалося прийняти: ' + e.message, { type: 'err' });
+                }
+              }}
+            >
+              Прийняти
+            </button>
+          </>
+        )}
+        <button
+          className="act-btn act-del"
+          onClick={async () => {
+            if (!confirm(`Видалити запис (рядок ${it.row})?`)) return;
+            setState('видалення…');
+            try {
+              const d = await api('/api/item', { method: 'DELETE', body: { sheet: name, row: it.row } });
+              load();
+              toast(`Видалено рядок ${it.row}`, {
+                type: 'warn',
+                action: {
+                  label: 'Повернути',
+                  run: async () => {
+                    try {
+                      await api('/api/item', {
+                        method: 'POST',
+                        body: { sheet: name, action: 'restore', row: it.row, values: d.deleted },
+                      });
+                      toast('Запис повернено');
+                      load();
+                    } catch (e) {
+                      saveFailed(toast, e, 'Не вдалося повернути: ');
+                    }
+                  },
+                },
+              });
+            } catch (e) {
+              setState('помилка: ' + e.message);
+              saveFailed(toast, e, 'Не вдалося видалити: ');
+            }
+          }}
+        >
+          Видалити
+        </button>
+      </div>
+    </div>
+  );
+
+  const cell = (it, i) => (i >= 0 ? (it.values[i] || '').toString().trim() : '');
+  const whoIdx = cols.who >= 0 ? cols.who : -1;
+  const whereIdx = cols.where > 0 ? cols.where : -1;
+
   let list = items;
   if (chip !== null && cols.status >= 0) list = list.filter((it) => it.values[cols.status] === chip);
+  if (who) list = list.filter((it) => cell(it, whoIdx) === who);
+  if (where) list = list.filter((it) => cell(it, whereIdx) === where);
   if (q.trim()) {
     const s = q.trim().toLowerCase();
     list = list.filter((it) => it.values.join(' ').toLowerCase().includes(s));
   }
+
+  // «в наявності» — те, що лежить у нас: КСП або склад
+  const has = (v) => {
+    const t = (v || '').toString().toLowerCase();
+    return t.includes('ксп') || t.includes('склад');
+  };
+  const statusOf = (it) => cell(it, cols.status);
+  const booked = list.filter((it) => {
+    const a = (accIdx >= 0 ? cell(it, accIdx) : '').toLowerCase();
+    if (a.startsWith('не')) return false;
+    return a.startsWith('на облік') || a.startsWith('облікове')
+      || cell(it, cols.type).toLowerCase().startsWith('учт');
+  }).length;
+
+  const cuts = [];
+  if (whoIdx >= 0) {
+    cuts.push({
+      title: 'У кого на руках',
+      rows: cutBy(list, (it) => cell(it, whoIdx)),
+      active: who,
+      onPick: setWho,
+    });
+  }
+  if (whereIdx >= 0) {
+    cuts.push({
+      title: 'Де лежить',
+      rows: cutBy(list, (it) => cell(it, whereIdx)),
+      active: where,
+      onPick: setWhere,
+    });
+  }
+
+  // втрачене й списане варто бачити окремо, а не шукати очима серед решти
+  const lost = list.filter((it) => {
+    const t = statusOf(it).toLowerCase();
+    return t.includes('втрач') || t.includes('утер');
+  });
+
+  const groups = group === 'who' || group === 'where'
+    ? groupRows(list, (it) => cell(it, group === 'who' ? whoIdx : whereIdx),
+        group === 'who' ? 'Ні в кого' : 'Без місця')
+    : null;
 
   return (
     <>
@@ -2656,15 +2858,58 @@ function ItemsView({ name, setState, focusRow }) {
           </div>
         ))}
         <div className="spacer" />
+        {whoIdx >= 0 && (
+          <button className={'btn btn-group' + (group === 'who' ? ' on' : '')}
+            onClick={() => setGroup(group === 'who' ? null : 'who')}>
+            За людиною
+          </button>
+        )}
+        {whereIdx >= 0 && (
+          <button className={'btn btn-group' + (group === 'where' ? ' on' : '')}
+            onClick={() => setGroup(group === 'where' ? null : 'where')}>
+            За місцем
+          </button>
+        )}
         <ViewToggle mode={mode} onChange={setMode} />
         <button className="btn" onClick={() => setAdding(true)}>+ Додати запис</button>
       </div>
 
+      {!focusRow && (
+        <PageDash
+          stats={[
+            { label: 'Записів', value: list.length, sub: list.length !== items.length ? `з ${items.length}` : null },
+            ...(hideStatus || cols.status < 0 ? [] : [
+              { label: 'В наявності', value: list.filter((it) => has(statusOf(it))).length, tone: 'ok', sub: 'КСП або склад' },
+              { label: 'Видано', value: list.filter((it) => statusOf(it).toLowerCase().includes('видан')).length },
+            ]),
+            ...(accIdx >= 0 || cols.type >= 0
+              ? [{ label: 'За документами', value: booked, sub: 'числиться в паперах' }]
+              : []),
+          ]}
+          cuts={cuts}
+          audit={data.audit}
+          scope={name}
+          attn={lost.length ? [{
+            bad: true,
+            text: <>Втрачено або списано: <b>{lost.length}</b>{' '}
+              <span className="sd-empty">{lost.slice(0, 4).map((it) => cell(it, idIdx >= 0 ? idIdx : 0) || it.values[0]).join(', ')}{lost.length > 4 ? '…' : ''}</span></>,
+            action: { label: 'Показати', run: () => setChip(cell(lost[0], cols.status)) },
+          }] : []}
+          onOpen={onOpen}
+        />
+      )}
+
+      {(who || where) && (
+        <div className="scan-banner">
+          <span>Показано лише <b>{who || where}</b></span>
+          <button className="act-btn" onClick={() => { setWho(null); setWhere(null); }}>Показати всіх</button>
+        </div>
+      )}
+
       <Totals
         parts={[
-          ['Записів', list.length],
           ...(hideStatus || cols.status < 0
-            ? []
+            ? [['Записів', list.length]]
             : countBy(list, (it) => it.values[cols.status])),
         ]}
         of={list.length !== items.length ? items.length : undefined}
@@ -2684,157 +2929,21 @@ function ItemsView({ name, setState, focusRow }) {
           rows={list.map((it) => ({ key: it.row, item: it }))}
           onPick={(it) => { setMode('cards'); setHighlightRow(it.row); scrollToRow(it.row); }}
         />
+      ) : groups ? (
+        groups.map((g) => (
+          <div className="sd-group" key={g.key}>
+            <div className="sd-group-h">
+              <span className="sd-group-n">{g.key}</span>
+              <span className="sd-group-s">записів: <b>{g.rows.length}</b></span>
+            </div>
+            <div className="grid">
+              {g.rows.map((it) => renderCard(it))}
+            </div>
+          </div>
+        ))
       ) : (
         <div className="grid">
-          {list.map((it) => (
-            <div className={'card' + (it.row === highlightRow ? ' highlight' : '')} key={it.row} id={'item-row-' + it.row}>
-              <div className="card-head">
-                <div className="card-title">
-                  <div className="title-line">
-                    {idIdx >= 0 ? (
-                      <input
-                        className="id-badge"
-                        type="text"
-                        defaultValue={it.values[idIdx]}
-                        title={headers[idIdx] || 'Номер'}
-                        size={Math.max(2, String(it.values[idIdx] || '').length)}
-                        onBlur={(e) => e.target.value !== it.values[idIdx] && save(it.row, idIdx, e.target.value, it.values[idIdx])}
-                      />
-                    ) : (
-                      <span className="id-badge" title={'Рядок у таблиці: ' + it.row}>{it.row}</span>
-                    )}
-                    <input
-                      className="ghost big"
-                      type="text"
-                      defaultValue={it.values[0]}
-                      placeholder={headers[0] || 'Назва'}
-                      onBlur={(e) => e.target.value !== it.values[0] && save(it.row, 0, e.target.value, it.values[0])}
-                    />
-                  </div>
-                  {snIdx >= 0 && (
-                    <input
-                      className="ghost mono card-sn"
-                      type="text"
-                      defaultValue={it.values[snIdx]}
-                      placeholder={headers[snIdx] || 'S/N'}
-                      onBlur={(e) => e.target.value !== it.values[snIdx] && save(it.row, snIdx, e.target.value, it.values[snIdx])}
-                    />
-                  )}
-                </div>
-                {!hideStatus && cols.status >= 0 && (
-                  <select
-                    className="pill"
-                    style={{ color: statusColor(it.values[cols.status]) }}
-                    defaultValue={it.values[cols.status]}
-                    onChange={(e) => save(it.row, cols.status, e.target.value, it.values[cols.status])}
-                  >
-                    {!statusOptions.includes(it.values[cols.status]) && it.values[cols.status] && (
-                      <option value={it.values[cols.status]}>{it.values[cols.status]}</option>
-                    )}
-                    {statusOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                )}
-              </div>
-
-              {headTags(it.values, cols, accIdx).length > 0 && (
-                <div className="card-tags">
-                  {headTags(it.values, cols, accIdx).map((t) => (
-                    <span className={'tag ' + t.cls} key={t.v}>{t.v}</span>
-                  ))}
-                </div>
-              )}
-
-              <div className="card-body">
-                {bodyCols(headers, cols, snIdx, idIdx, tagCols).map((ci) => (
-                  <div className="drow" key={ci}>
-                    <span className="drow-k">{headers[ci] || 'Поле ' + (ci + 1)}</span>
-                    <span className="drow-v">
-                      {ci === cols.type ? (
-                        <select
-                          className="ghost"
-                          defaultValue={it.values[ci]}
-                          onChange={(e) => save(it.row, ci, e.target.value, it.values[ci])}
-                        >
-                          <option value=""></option>
-                          {!typeOptions.includes(it.values[ci]) && it.values[ci] && (
-                            <option value={it.values[ci]}>{it.values[ci]}</option>
-                          )}
-                          {typeOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-                        </select>
-                      ) : (
-                        <input
-                          className="ghost"
-                          type={maskCols?.includes(ci) ? 'password' : 'text'}
-                          defaultValue={it.values[ci]}
-                          placeholder="—"
-                          onBlur={(e) => e.target.value !== it.values[ci] && save(it.row, ci, e.target.value, it.values[ci])}
-                        />
-                      )}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="actions">
-                {!noIssue && (
-                  <>
-                    <button className="act-btn act-issue" onClick={() => setIssuing(it)}>Видати</button>
-                    <button
-                      className="act-btn act-return"
-                      onClick={async () => {
-                        if (!confirm('Прийняти на КСП? Отримувача буде очищено.')) return;
-                        setState('збереження…');
-                        try {
-                          await api('/api/item', { method: 'POST', body: { sheet: name, action: 'return', row: it.row } });
-                          toast('Прийнято на КСП');
-                          load();
-                        } catch (e) {
-                          setState('помилка: ' + e.message);
-                          toast('Не вдалося прийняти: ' + e.message, { type: 'err' });
-                        }
-                      }}
-                    >
-                      Прийняти
-                    </button>
-                  </>
-                )}
-                <button
-                  className="act-btn act-del"
-                  onClick={async () => {
-                    if (!confirm(`Видалити запис (рядок ${it.row})?`)) return;
-                    setState('видалення…');
-                    try {
-                      const d = await api('/api/item', { method: 'DELETE', body: { sheet: name, row: it.row } });
-                      load();
-                      toast(`Видалено рядок ${it.row}`, {
-                        type: 'warn',
-                        action: {
-                          label: 'Повернути',
-                          run: async () => {
-                            try {
-                              await api('/api/item', {
-                                method: 'POST',
-                                body: { sheet: name, action: 'restore', row: it.row, values: d.deleted },
-                              });
-                              toast('Запис повернено');
-                              load();
-                            } catch (e) {
-                              saveFailed(toast, e, 'Не вдалося повернути: ');
-                            }
-                          },
-                        },
-                      });
-                    } catch (e) {
-                      setState('помилка: ' + e.message);
-                      saveFailed(toast, e, 'Не вдалося видалити: ');
-                    }
-                  }}
-                >
-                  Видалити
-                </button>
-              </div>
-            </div>
-          ))}
+          {list.map((it) => renderCard(it))}
         </div>
       )}
 
@@ -3279,6 +3388,130 @@ function AddLedgerModal({ onCancel, onSave }) {
 }
 
 /* ---------- Великий склад (Рибаківка) ---------- */
+/* ---------- Шапка-дашборд для будь-якої сторінки ---------- */
+
+/**
+ * Верх сторінки: числа, два розрізи «у кого» / «де» і стан звірки.
+ * Розрізи клікабельні — це швидший спосіб відфільтрувати, ніж пошук.
+ */
+function PageDash({ stats, cuts = [], audit, attn = [], moves = [], scope, onOpen }) {
+  const shown = cuts.filter((c) => c.rows.length > 0);
+
+  return (
+    <div className="sd">
+      {stats.length > 0 && (
+        <div className="stats">
+          {stats.map((st) => (
+            <Stat key={st.label} value={st.value} label={st.label} sub={st.sub} tone={st.tone} />
+          ))}
+        </div>
+      )}
+
+      <div className="sd-cols">
+        {shown.map((c) => (
+          <div className="section" key={c.title}>
+            <h3 className="primary">{c.title}<span className="count">{c.rows.length}</span></h3>
+            <div className="sd-places">
+              {c.rows.map((r) => (
+                <button
+                  key={r.key}
+                  className={'sd-place' + (c.active === r.key ? ' on' : '')}
+                  onClick={() => c.onPick(c.active === r.key ? null : r.key)}
+                >
+                  <span className="sd-place-n">{r.key}</span>
+                  <span className="sd-place-v">{r.value}</span>
+                  {r.sub && <span className="sd-place-c">{r.sub}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <div className="section">
+          <h3 className="sec">Звірка</h3>
+          <div className="sd-audit">
+            {audit?.open ? (
+              <div className="attn">
+                <span className="attn-text">
+                  Звірка <b>{audit.open.id}</b> триває — почав {audit.open.who || '—'} {audit.open.date}
+                </span>
+                <button className="act-btn act-accept" onClick={() => onOpen({ kind: 'audit', name: null })}>
+                  Продовжити
+                </button>
+              </div>
+            ) : (
+              <div className="attn">
+                <span className="attn-text">
+                  {audit?.last
+                    ? <>Востаннє звіряли <b>{audit.last.date}</b> — підтверджено {audit.last.ok}, не знайдено {audit.last.missing}</>
+                    : <>{scope ? <>«{scope}» ще жодного разу не звіряли</> : <>Звірки ще не було</>}</>}
+                </span>
+                <button className="act-btn" onClick={() => onOpen({ kind: 'audit', name: null })}>
+                  Звірити
+                </button>
+              </div>
+            )}
+            {attn.map((a, i) => (
+              <div className={'attn ' + (a.bad ? 'attn-bad' : '')} key={i}>
+                <span className="attn-text">{a.text}</span>
+                {a.action && (
+                  <button className="act-btn" onClick={a.action.run}>{a.action.label}</button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {moves.length > 0 && (
+            <div className="sd-moves">
+              <div className="sd-moves-t">Останні рухи</div>
+              {moves.map((m, i) => (
+                <div className="sd-move" key={i}>
+                  <span className="sd-move-d">{m.date}</span>
+                  <span className={'sd-move-a ' + (m.out ? 'is-out' : 'is-in')}>{m.action}</span>
+                  <span className="sd-move-n">{m.name}</span>
+                  {m.qty !== undefined && <span className="sd-move-q">{m.qty}</span>}
+                  {m.who && <span className="sd-move-w">{m.who}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Рядки, згруповані за значенням — порожні значення в окрему групу в кінці */
+function groupRows(items, pick, emptyLabel = 'Без значення') {
+  const map = new Map();
+  items.forEach((it) => {
+    const key = (pick(it) || '').toString().trim() || emptyLabel;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(it);
+  });
+  return [...map.entries()]
+    .map(([key, rows]) => ({ key, rows }))
+    .sort((a, b) => {
+      if (a.key === emptyLabel) return 1;
+      if (b.key === emptyLabel) return -1;
+      return b.rows.length - a.rows.length || a.key.localeCompare(b.key, 'uk');
+    });
+}
+
+/** Розріз «скільки чого за значенням колонки», найбільші зверху */
+function cutBy(items, pick, { limit = 10 } = {}) {
+  const map = new Map();
+  items.forEach((it) => {
+    const v = (pick(it) || '').toString().trim();
+    if (!v) return;
+    map.set(v, (map.get(v) || 0) + 1);
+  });
+  return [...map.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'uk'))
+    .slice(0, limit)
+    .map(([key, value]) => ({ key, value }));
+}
+
 /* ---------- Дашборд складу Рибаківки ---------- */
 
 /**
@@ -4171,6 +4404,7 @@ function WarehouseView({ setState, focusCode, onOpen }) {
   const [adding, setAdding] = useState(false);
   const [photo, setPhoto] = useState(null);
   const [qr, setQr] = useState(null);
+  const [loc, setLoc] = useState(null);          // фільтр за розташуванням
   const [addLine, setAddLine] = useState(null); // код ящика, куди кладемо
   const [boxMove, setBoxMove] = useState(null); // {line, kind}
   const [highlight, setHighlight] = useState(focusCode || null);
@@ -4300,6 +4534,7 @@ function WarehouseView({ setState, focusCode, onOpen }) {
   });
   if (highlight) list = list.filter((it) => it.code === highlight);
   if (chip) list = list.filter((it) => it.priority === chip);
+  if (loc) list = list.filter((it) => (it.location || '').trim() === loc);
   if (q.trim()) {
     const s = q.trim().toLowerCase();
     // назви позицій усередині ящика теж шукаємо: «ПНВ» має знайти ящик,
@@ -4319,6 +4554,17 @@ function WarehouseView({ setState, focusCode, onOpen }) {
   const shownCodes = new Set(list.map((it) => it.code));
   const shownLines = (boxes?.lines || []).filter((l) => shownCodes.has(l.box));
   const outCount = shownLines.reduce((a, l) => a + l.taken, 0);
+
+  // ящик, який давно не відкривали, — перший кандидат на несподіванку
+  const daysSince = (d) => {
+    const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec((d || '').toString().trim());
+    if (!m) return null;
+    return Math.floor((Date.now() - Date.UTC(+m[3], +m[2] - 1, +m[1])) / 86400000);
+  };
+  const stale = list.filter((it) => {
+    const d = daysSince(it.updated) ?? daysSince(it.checkedDate);
+    return d !== null && d >= 90;
+  });
 
   return (
     <>
@@ -4342,16 +4588,43 @@ function WarehouseView({ setState, focusCode, onOpen }) {
         <button className="btn" onClick={() => setAdding(true)}>+ Додати ящик</button>
       </div>
 
+      {!focusCode && (
+        <PageDash
+          stats={[
+            { label: 'Ящиків', value: list.length, sub: list.length !== data.items.length ? `з ${data.items.length}` : null },
+            { label: 'Позицій усередині', value: shownLines.length },
+            { label: 'На місці', value: shownLines.reduce((a, l) => a + l.left, 0), tone: 'ok' },
+            { label: 'На руках', value: outCount, sub: outCount ? 'треба повернути' : null },
+          ]}
+          cuts={[{
+            title: 'Де стоять ящики',
+            rows: cutBy(list, (it) => it.location),
+            active: loc,
+            onPick: setLoc,
+          }]}
+          audit={data.audit}
+          scope="Склад"
+          attn={stale.length ? [{
+            bad: true,
+            text: <>Давно не перевіряли: <b>{stale.length}</b> <span className="sd-empty">{stale.slice(0, 4).map((x) => x.code).join(', ')}{stale.length > 4 ? '…' : ''}</span></>,
+          }] : []}
+          moves={(data.moves || []).map((m) => ({
+            date: m.date, action: m.action, name: `${m.name} (${m.box})`,
+            qty: m.qty, who: m.to || m.who, out: m.action === 'Взяв' || m.action === 'Списав',
+          }))}
+          onOpen={onOpen}
+        />
+      )}
+
+      {loc && (
+        <div className="scan-banner">
+          <span>Показано лише <b>{loc}</b></span>
+          <button className="act-btn" onClick={() => setLoc(null)}>Показати всі</button>
+        </div>
+      )}
+
       <Totals
-        parts={[
-          ['Ящиків', list.length],
-          ...(shownLines.length ? [
-            ['Позицій', shownLines.length],
-            ['На місці', shownLines.reduce((a, l) => a + l.left, 0)],
-            ...(outCount ? [['На руках', outCount]] : []),
-          ] : []),
-          ...countBy(list, (it) => it.status),
-        ]}
+        parts={countBy(list, (it) => it.status)}
         of={list.length !== data.items.length ? data.items.length : undefined}
       />
 

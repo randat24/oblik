@@ -1,4 +1,5 @@
 import { withAuth } from '../../lib/auth';
+import { readAudits, STATUS as AUDIT_STATUS } from '../../lib/audit';
 import {
   SHEET_CONFIGS,
   DEFAULT_STATUS_OPTIONS,
@@ -8,6 +9,20 @@ import {
   distinctValues,
   mergeWithDefaults,
 } from '../../lib/sheets';
+
+/** Коли цей лист звіряли востаннє — щоб було видно на самій сторінці */
+async function auditInfo(name) {
+  try {
+    const audits = await readAudits();
+    const mine = audits.filter((a) => a.scope === name);
+    return {
+      open: mine.find((a) => a.status === AUDIT_STATUS.open) || null,
+      last: mine.filter((a) => a.status === AUDIT_STATUS.done).slice(-1)[0] || null,
+    };
+  } catch {
+    return { open: null, last: null };
+  }
+}
 
 export default withAuth(async (req, res) => {
   const { name } = req.query;
@@ -80,5 +95,6 @@ export default withAuth(async (req, res) => {
     whereOptions,
     whoOptions,
     suggestions,
+    audit: await auditInfo(name),
   });
 });
