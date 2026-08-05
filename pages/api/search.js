@@ -59,12 +59,18 @@ async function searchBoxes(qText) {
     return [];
   }
 
-  // код ящика → його назва й розташування, щоб у результаті було видно, куди йти
+  // код контейнера → його назва й розташування, щоб у результаті було видно,
+  // куди йти. Контейнером може бути і ящик складу, і комплект на Рибаківці.
   const boxes = new Map();
   (boxValues || []).slice(1).forEach((r) => {
     const code = (r?.[0] || '').toString().trim();
-    if (code) boxes.set(code, { name: (r[2] || '').toString(), location: (r[4] || '').toString() });
+    if (code) boxes.set(code, { name: (r[2] || '').toString(), location: (r[4] || '').toString(), kind: 'ящик' });
   });
+  try {
+    parseStockItems(await readSheet(STOCK_SHEET)).forEach((it) => {
+      if (it.id) boxes.set(it.id, { name: it.name, location: it.place, kind: 'комплект' });
+    });
+  } catch { /* Рибаківки може ще не бути */ }
 
   const out = [];
   parseLines(lineValues).forEach((l) => {
@@ -78,6 +84,7 @@ async function searchBoxes(qText) {
       kind: 'box',
       row: l.row,
       box: l.box,
+      boxKind: b.kind || 'ящик',
       boxName: b.name || '',
       location: b.location || '',
       name: l.name,

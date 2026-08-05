@@ -1045,3 +1045,87 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   padding: 8px 10px; border-left: 2px solid var(--green); background: var(--panel-2);
   border-radius: var(--r-sm);
 }
+
+/* ---------- Дашборд складу Рибаківки ---------- */
+.sd { margin-bottom: 16px; }
+.sd-cols {
+  display: grid; gap: 14px; margin-bottom: 4px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+.sd-cols .section { margin-bottom: 0; }
+
+/* Де що лежить: ящик — залишок — скільки позицій */
+.sd-places { display: flex; flex-direction: column; gap: 4px; }
+.sd-place {
+  display: flex; align-items: baseline; gap: 10px; text-align: left;
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm); padding: 9px 12px;
+  color: var(--text); font: inherit; cursor: pointer;
+}
+.sd-place:hover { border-color: var(--amber); }
+.sd-place.on { border-color: var(--amber); background: var(--panel-2); }
+.sd-place-n { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.sd-place-v {
+  flex: 0 0 auto; font-family: var(--mono); font-weight: 700; color: var(--green);
+}
+.sd-place-c {
+  flex: 0 0 auto; font-family: var(--mono); font-size: .72rem; color: var(--muted);
+  min-width: 62px; text-align: right;
+}
+
+.sd-audit { display: flex; flex-direction: column; gap: 6px; }
+.sd-empty { color: var(--muted); font-size: .8rem; }
+
+.sd-moves { margin-top: 12px; }
+.sd-moves-t {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin-bottom: 6px;
+}
+.sd-move {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 5px 0; border-bottom: 1px solid var(--line-soft); font-size: .8rem;
+}
+.sd-move:last-child { border-bottom: 0; }
+.sd-move-d { font-family: var(--mono); font-size: .72rem; color: var(--muted); flex: 0 0 auto; }
+.sd-move-a {
+  font-family: var(--mono); font-size: .68rem; font-weight: 700; flex: 0 0 auto;
+  padding: 1px 7px; border-radius: 20px; border: 1px solid currentColor;
+}
+.sd-move-a.is-in { color: var(--green); }
+.sd-move-a.is-out { color: var(--red); }
+.sd-move-n { flex: 1 1 120px; min-width: 0; overflow-wrap: anywhere; }
+.sd-move-q { font-family: var(--mono); font-weight: 700; flex: 0 0 auto; }
+.sd-move-w { font-family: var(--mono); font-size: .72rem; color: var(--muted); flex: 0 0 auto; }
+
+/* Групування карток за ящиками */
+.sd-group { margin-bottom: 18px; }
+.sd-group-h {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 7px; margin-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.sd-group-n { font-weight: 600; letter-spacing: .01em; }
+.sd-group-s { font-size: .78rem; color: var(--muted); }
+.sd-group-s b { color: var(--text); font-family: var(--mono); }
+
+.btn-group.on { border-color: var(--amber); color: var(--amber); background: var(--panel-2); }
+
+/* Комплектність позиції на Рибаківці */
+.kit-off {
+  display: block; width: 100%; margin-top: 10px;
+  background: none; border: 1px dashed var(--line); border-radius: var(--r-sm);
+  color: var(--muted); font: inherit; font-size: .78rem; padding: 7px 10px; cursor: pointer;
+}
+.kit-off:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
+.kit-off:disabled { opacity: .5; cursor: default; }
+.kit-sum {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; margin-top: 10px;
+  background: var(--panel-2); border: 1px solid var(--line-soft); border-left: 3px solid var(--amber);
+  border-radius: var(--r-sm); color: var(--text); font: inherit; padding: 8px 11px; cursor: pointer;
+  text-align: left;
+}
+.kit-sum.is-full { border-left-color: var(--green); }
+.kit-sum-t { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.kit-sum-v { font-family: var(--mono); font-weight: 700; }
+.kit-sum-s { font-size: .76rem; color: var(--amber); }
+.kit-sum.is-full .kit-sum-s { color: var(--green); }
+.kit-sum-x { margin-left: auto; font-size: .6rem; color: var(--muted); }
