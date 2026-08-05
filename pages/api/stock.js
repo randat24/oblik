@@ -5,6 +5,7 @@ import {
   readStock, nextId, stockRow, appendMove,
 } from '../../lib/stock';
 import { logChange } from '../../lib/log';
+import { readAudits, STATUS } from '../../lib/audit';
 
 const qtyOf = (v) => {
   const n = Number(String(v ?? '').replace(',', '.').trim());
@@ -16,9 +17,24 @@ function payload(stock) {
   return { items, moves, categories, units, places, people, accountingOptions: ACCOUNTING_OPTIONS };
 }
 
+/** Коли склад звіряли востаннє — це має бути видно на самій сторінці */
+async function auditInfo() {
+  try {
+    const audits = await readAudits();
+    const mine = audits.filter((a) => a.scope === STOCK_SHEET);
+    return {
+      open: mine.find((a) => a.status === STATUS.open) || null,
+      last: mine.filter((a) => a.status === STATUS.done).slice(-1)[0] || null,
+    };
+  } catch {
+    return { open: null, last: null };
+  }
+}
+
 export default withAuth(async (req, res) => {
   if (req.method === 'GET') {
-    return res.json(payload(await readStock()));
+    const [stock, audit] = await Promise.all([readStock(), auditInfo()]);
+    return res.json({ ...payload(stock), audit });
   }
 
   if (req.method === 'POST') {

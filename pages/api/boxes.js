@@ -7,6 +7,9 @@ import {
   readLines, lineRow, appendMove, importContents, parseContents, parseLines,
 } from '../../lib/boxes';
 
+// Звідки контейнер: підпис для назви позиції в акті
+const SOURCES = { 'Склад': 'ящик', 'Майно Рибаківки': 'комплект' };
+
 const num = (v) => {
   const n = Number(String(v ?? '').replace(',', '.').trim());
   return Number.isFinite(n) ? n : 0;
@@ -86,6 +89,9 @@ export default withAuth(async (req, res) => {
     // Взяти / повернути / додати / списати
     if (action === 'move') {
       const { row, kind, qty, to, note, condition, photo } = req.body;
+      // контейнер може бути і ящиком складу, і комплектом на Рибаківці —
+      // від цього залежить, у який лист лягає акт
+      const src = SOURCES[req.body.sheet] ? req.body.sheet : 'Склад';
       const line = await lineAt(num(row));
       if (!line) return res.status(404).json({ error: 'Позицію не знайдено' });
 
@@ -122,11 +128,11 @@ export default withAuth(async (req, res) => {
       let act = null;
       if (kind === 'take' || kind === 'give') {
         const actor = currentActor();
-        const title = `${line.name} — ${next.qty} ${line.unit || 'шт.'} (ящик ${line.box})`;
+        const title = `${line.name} — ${next.qty} ${line.unit || 'шт.'} (${SOURCES[src] || 'ящик'} ${line.box})`;
         try {
           await appendAct({
             kind: kind === 'take' ? 'issue' : 'accept',
-            sheet: 'Склад',
+            sheet: src,
             items: [{ title }],
             from: kind === 'take' ? actor : (to || ''),
             to: kind === 'take' ? (to || '') : actor,
