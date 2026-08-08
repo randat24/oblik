@@ -13,8 +13,15 @@ import { saveDay, todayKyiv } from '../../lib/health';
  * Number('') дає 0, і поле, якого в запиті не було, затирало б збережене.
  */
 const num = (v) => {
-  if (v === undefined || v === null || String(v).trim() === '') return null;
-  const n = Number(String(v).replace(',', '.').trim());
+  if (v === undefined || v === null) return null;
+  // «Команди» можуть віддати число текстом і з роздільниками: «7 470»,
+  // «7,470», «7 470,5». Прибираємо пробіли, а кому тлумачимо за контекстом:
+  // разом із крапкою вона розділяє тисячі, сама по собі — дробову частину.
+  let t = String(v).replace(/[\s\u00a0\u202f]/g, '').trim();
+  if (t === '') return null;
+  if (t.includes(',') && t.includes('.')) t = t.replace(/,/g, '');
+  else t = t.replace(',', '.');
+  const n = Number(t);
   return Number.isFinite(n) ? n : null;
 };
 
