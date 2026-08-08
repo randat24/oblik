@@ -62,6 +62,50 @@ function navyFat({ sex, height, waist, neck, hips }) {
   return v >= 3 && v <= 70 ? v : null;
 }
 
+// Скільки тіло витрачає у спокої — формула Міффліна-Сан Жеора
+function bmr({ sex, weight, height, age }) {
+  const w = num(weight), h = num(height), a = num(age);
+  if (!(w > 0 && h > 0 && a > 0)) return null;
+  return 10 * w + 6.25 * h - 5 * a + (sex === 'f' ? -161 : 5);
+}
+
+const ACTIVITY = [
+  { key: '1.2', label: 'Сидяча робота, без тренувань' },
+  { key: '1.375', label: 'Легка активність, 1–3 рази на тиждень' },
+  { key: '1.55', label: 'Помірна, 3–5 разів на тиждень' },
+  { key: '1.725', label: 'Висока, 6–7 разів на тиждень' },
+  { key: '1.9', label: 'Дуже висока, важка фізична праця' },
+];
+
+const AIMS = [
+  { key: '-20', label: 'Схуднення', note: 'мінус 20% від витрат' },
+  { key: '-10', label: 'Повільне схуднення', note: 'мінус 10%' },
+  { key: '0', label: 'Утримання ваги', note: 'скільки витрачаєте' },
+  { key: '10', label: 'Набір маси', note: 'плюс 10%' },
+];
+
+/**
+ * Норма калорій і БЖВ. Білок рахуємо на кілограм ваги, жир — теж,
+ * решту добираємо вуглеводами: так пропорція лишається розумною
+ * і на дефіциті, і на наборі.
+ */
+function calcNorm({ sex, weight, height, age, activity, aim }) {
+  const base = bmr({ sex, weight, height, age });
+  if (base === null) return null;
+  const tdee = base * (num(activity) || 1.375);
+  const kcal = tdee * (1 + (num(aim) || 0) / 100);
+  const w = num(weight);
+  const protein = Math.round(w * 1.8);
+  const fat = Math.round(w * 0.9);
+  const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
+  return {
+    bmr: Math.round(base),
+    tdee: Math.round(tdee),
+    kcal: Math.round(kcal),
+    protein, fat, carbs,
+  };
+}
+
 function bmi(weight, height) {
   const w = num(weight), h = num(height) / 100;
   return w > 0 && h > 0 ? w / (h * h) : null;
@@ -392,6 +436,7 @@ function DayTab({ data, date, setDate, reload, setBusy }) {
         <FoodModal
           date={date}
           known={data.food}
+          products={data.products || []}
           onClose={() => setFood(null)}
           onDone={reload}
         />
@@ -400,7 +445,122 @@ function DayTab({ data, date, setDate, reload, setBusy }) {
   );
 }
 
-function FoodModal({ date, known, onClose, onDone }) {
+/* ---------- Штрихкод ---------- */
+
+/**
+ * Сканер штрихкодів. У Chrome на Android є вбудований BarcodeDetector —
+ * ним і користуємось. У Safari його немає, тож там лишається ввести цифри
+ * під штрихкодом руками: це довше, але працює завжди.
+ */
+function BarcodeScanner({ onFound, onClose }) {
+  const videoRef = useRef(null);
+  const [err, setErr] = useState('');
+  const [manual, setManual] = useState('');
+  const [supported, setSupported] = useState(true);
+
+  useEffect(() => {
+    let stop = false;
+    let stream = null;
+    let timer = null;
+
+    (async () => {
+      if (typeof window === 'undefined' || !('BarcodeDetector' in window)) {
+        setSupported(false);
+        return;
+      }
+      let detector;
+      try {
+        detector = new window.BarcodeDetector({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'],
+        });
+      } catch {
+        setSupported(false);
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+        });
+      } catch {
+        setErr('Немає доступу до камери');
+        return;
+      }
+      if (stop) { stream.getTracks().forEach((t) => t.stop()); return; }
+      const v = videoRef.current;
+      if (!v) return;
+      v.srcObject = stream;
+      await v.play().catch(() => {});
+
+      const tick = async () => {
+        if (stop) return;
+        try {
+          const found = await detector.detect(v);
+          if (found.length) {
+            const code = (found[0].rawValue || '').replace(/\D/g, '');
+            if (code.length >= 6) { onFound(code); return; }
+          }
+        } catch { /* кадр не розпізнався — не біда, беремо наступний */ }
+        timer = setTimeout(tick, 220);
+      };
+      tick();
+    })();
+
+    return () => {
+      stop = true;
+      if (timer) clearTimeout(timer);
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+    };
+  }, [onFound]);
+
+  return (
+    <div className="h-overlay" onClick={(e) => e.target.classList.contains('h-overlay') && onClose()}>
+      <div className="h-scan">
+        <div className="h-cmp-head">
+          <span>Штрихкод</span>
+          <button className="h-cmp-x" onClick={onClose}>×</button>
+        </div>
+
+        {supported && !err && (
+          <div className="h-scan-view">
+            <video ref={videoRef} playsInline muted />
+            <div className="h-scan-frame" />
+          </div>
+        )}
+
+        <div className="h-scan-foot">
+          {err && <div className="h-err">{err}</div>}
+          {!supported && (
+            <div className="h-hint">
+              Цей браузер не вміє читати штрихкод камерою — на iPhone так і є.
+              Введіть цифри з-під смужок, результат буде той самий.
+            </div>
+          )}
+          <label>Ввести код руками</label>
+          <div className="h-scan-manual">
+            <input
+              type="tel"
+              inputMode="numeric"
+              value={manual}
+              autoFocus={!supported}
+              placeholder="4820000000000"
+              onChange={(e) => setManual(e.target.value.replace(/\D/g, ''))}
+              onKeyDown={(e) => e.key === 'Enter' && manual.length >= 6 && onFound(manual)}
+            />
+            <button
+              className="h-btn h-btn-p"
+              disabled={manual.length < 6}
+              onClick={() => onFound(manual)}
+            >
+              Знайти
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FoodModal({ date, known, products = [], onClose, onDone }) {
   const [meal, setMeal] = useState(MEALS[0]);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
@@ -410,6 +570,49 @@ function FoodModal({ date, known, onClose, onDone }) {
   const [carbs, setCarbs] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  // коли страва прийшла з бази чи каталогу — рахуємо від грамів, а не вручну
+  const [per100, setPer100] = useState(null);
+  const [grams, setGrams] = useState('100');
+  const [scan, setScan] = useState(false);
+  const [found, setFound] = useState('');
+  const [newCode, setNewCode] = useState('');
+  const [np, setNp] = useState({});
+
+  // грами змінились — перераховуємо все, що знаємо на 100 г
+  useEffect(() => {
+    if (!per100) return;
+    const k = num(grams) / 100;
+    setKcal(String(n1(per100.kcal * k)));
+    setProtein(String(n1(per100.protein * k)));
+    setFat(String(n1(per100.fat * k)));
+    setCarbs(String(n1(per100.carbs * k)));
+    setAmount(`${n1(num(grams))} г`);
+  }, [per100, grams]);
+
+  const takeProduct = (p, note) => {
+    setPer100({ kcal: p.kcal, protein: p.protein, fat: p.fat, carbs: p.carbs });
+    setName([p.name, p.brand].filter(Boolean).join(' · ') || p.name || 'Без назви');
+    setGrams(String(p.serving > 0 ? p.serving : 100));
+    setFound(note || '');
+    setErr('');
+  };
+
+  const byCode = async (code) => {
+    setScan(false);
+    setBusy(true); setErr(''); setFound('');
+    try {
+      const r = await api('/api/health', { method: 'POST', body: { action: 'barcode', code } });
+      if (r.error) {
+        setErr(r.error);
+        // не знайшли — пропонуємо завести самому, наступного разу підставиться
+        if (r.code) setNewCode(r.code);
+        return;
+      }
+      takeProduct(r.product, r.from === 'база' ? 'з вашої бази' : 'з каталогу Open Food Facts');
+    } catch (e) {
+      setErr(e.message);
+    } finally { setBusy(false); }
+  };
 
   // те, що вже їв раніше, підставляємо одним дотиком
   const q = name.trim().toLowerCase();
@@ -421,10 +624,16 @@ function FoodModal({ date, known, onClose, onDone }) {
   });
 
   const use = (f) => {
+    setPer100(null); setFound('');
     setName(f.name); setAmount(f.amount);
     setKcal(String(f.kcal)); setProtein(String(f.protein));
     setFat(String(f.fat)); setCarbs(String(f.carbs));
   };
+
+  // продукти з власної бази — шукаються за назвою так само, як страви
+  const prodHits = q
+    ? products.filter((p) => (p.name + ' ' + p.brand).toLowerCase().includes(q)).slice(0, 5)
+    : [];
 
   const save = async () => {
     if (!name.trim()) { setErr('Вкажіть страву'); return; }
@@ -449,10 +658,67 @@ function FoodModal({ date, known, onClose, onDone }) {
           <button key={m} className={'h-pill' + (meal === m ? ' on' : '')} onClick={() => setMeal(m)}>{m}</button>
         ))}
       </div>
+      <div className="h-food-top">
+        <button className="h-btn h-btn-scan" onClick={() => setScan(true)} disabled={busy}>
+          Сканувати штрихкод
+        </button>
+      </div>
       <label>Страва</label>
-      <input type="text" value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="вівсянка, куряче філе…" />
-      {seen.length > 0 && (
+      <input
+        type="text"
+        value={name}
+        autoFocus
+        onChange={(e) => { setName(e.target.value); setPer100(null); setFound(''); }}
+        placeholder="вівсянка, куряче філе…"
+      />
+      {found && <div className="h-found">Знайдено {found}</div>}
+      {newCode && (
+        <div className="h-hint">
+          Штрихкод <b>{newCode}</b> застосунку невідомий. Заповніть значення
+          на 100 г нижче — і він запамʼятає цей продукт назавжди.
+          <div className="h-newprod">
+            <label>Ккал на 100 г</label>
+            <div className="h-row4">
+              <input type="number" inputMode="decimal" placeholder="ккал"
+                onChange={(e) => setNp((p) => ({ ...p, kcal: e.target.value }))} />
+              <input type="number" inputMode="decimal" placeholder="Б"
+                onChange={(e) => setNp((p) => ({ ...p, protein: e.target.value }))} />
+              <input type="number" inputMode="decimal" placeholder="Ж"
+                onChange={(e) => setNp((p) => ({ ...p, fat: e.target.value }))} />
+              <input type="number" inputMode="decimal" placeholder="В"
+                onChange={(e) => setNp((p) => ({ ...p, carbs: e.target.value }))} />
+            </div>
+            <button
+              className="h-btn h-btn-p"
+              style={{ marginTop: 10 }}
+              disabled={!name.trim() || !num(np.kcal)}
+              onClick={async () => {
+                const prod = {
+                  code: newCode, name: name.trim(), brand: '',
+                  kcal: num(np.kcal), protein: num(np.protein),
+                  fat: num(np.fat), carbs: num(np.carbs), serving: 0,
+                  source: 'вручну',
+                };
+                setBusy(true);
+                try {
+                  await api('/api/health', { method: 'POST', body: { action: 'product', product: prod } });
+                  takeProduct(prod, 'збережено у вашу базу');
+                  setNewCode(''); setErr('');
+                } catch (e) { setErr(e.message); } finally { setBusy(false); }
+              }}
+            >
+              Запамʼятати продукт
+            </button>
+          </div>
+        </div>
+      )}
+      {(seen.length > 0 || prodHits.length > 0) && (
         <div className="h-seen">
+          {prodHits.map((p) => (
+            <button key={'p' + p.row} className="h-seen-b is-prod" onClick={() => takeProduct(p, 'з вашої бази')}>
+              {p.name} <i>{Math.round(p.kcal)} ккал/100 г</i>
+            </button>
+          ))}
           {seen.slice(0, 6).map((f) => (
             <button key={f.row} className="h-seen-b" onClick={() => use(f)}>
               {f.name} <i>{Math.round(f.kcal)} ккал</i>
@@ -460,14 +726,34 @@ function FoodModal({ date, known, onClose, onDone }) {
           ))}
         </div>
       )}
-      <label>Кількість</label>
-      <input type="text" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="100 г, 1 порція…" />
+      {per100 ? (
+        <>
+          <label>Скільки зʼїли, г</label>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={grams}
+            onChange={(e) => setGrams(e.target.value)}
+          />
+          <div className="h-hint">
+            На 100 г: <b>{n1(per100.kcal)}</b> ккал · Б <b>{n1(per100.protein)}</b> ·
+            Ж <b>{n1(per100.fat)}</b> · В <b>{n1(per100.carbs)}</b>.
+            Числа нижче перераховуються самі.
+          </div>
+        </>
+      ) : (
+        <>
+          <label>Кількість</label>
+          <input type="text" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="100 г, 1 порція…" />
+        </>
+      )}
       <div className="h-row4">
         <div><label>Ккал</label><input type="number" inputMode="decimal" value={kcal} onChange={(e) => setKcal(e.target.value)} /></div>
         <div><label>Білки</label><input type="number" inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} /></div>
         <div><label>Жири</label><input type="number" inputMode="decimal" value={fat} onChange={(e) => setFat(e.target.value)} /></div>
         <div><label>Вугл.</label><input type="number" inputMode="decimal" value={carbs} onChange={(e) => setCarbs(e.target.value)} /></div>
       </div>
+      {scan && <BarcodeScanner onFound={byCode} onClose={() => setScan(false)} />}
     </Modal>
   );
 }
@@ -1009,6 +1295,26 @@ function GoalsTab({ data, reload, setBusy }) {
 
   const age = vals.birthYear ? new Date().getFullYear() - num(vals.birthYear) : null;
 
+  // остання зважена вага — з неї й рахуємо норму
+  const weighed = data.days.filter((d) => d.weight != null);
+  const weight = weighed.length ? weighed[weighed.length - 1].weight : null;
+  const norm = calcNorm({
+    sex: vals.sex, weight, height: vals.height, age,
+    activity: vals.activity || '1.375', aim: vals.aim || '-20',
+  });
+
+  const applyNorm = () => {
+    if (!norm) return;
+    setVals((p) => ({
+      ...p,
+      kcal: String(norm.kcal),
+      protein: String(norm.protein),
+      fat: String(norm.fat),
+      carbs: String(norm.carbs),
+    }));
+    setSaved(false);
+  };
+
   const save = async () => {
     setBusy(true); setErr(''); setSaved(false);
     try {
@@ -1047,6 +1353,41 @@ function GoalsTab({ data, reload, setBusy }) {
       </div>
       {age !== null && age > 0 && age < 120 && (
         <div className="h-hint">Вам {age} — рахується з року народження.</div>
+      )}
+
+      <div className="h-sec"><h3>Скільки вам треба</h3></div>
+      <label>Активність</label>
+      <select value={vals.activity || '1.375'} onChange={(e) => setVals((p) => ({ ...p, activity: e.target.value }))}>
+        {ACTIVITY.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}
+      </select>
+      <label>Мета</label>
+      <select value={vals.aim || '-20'} onChange={(e) => setVals((p) => ({ ...p, aim: e.target.value }))}>
+        {AIMS.map((a) => <option key={a.key} value={a.key}>{a.label} — {a.note}</option>)}
+      </select>
+
+      {norm ? (
+        <>
+          <div className="h-norm">
+            <div className="h-norm-v">{norm.kcal}<i> ккал</i></div>
+            <div className="h-norm-l">
+              у спокої {norm.bmr} · з активністю {norm.tdee}
+            </div>
+            <div className="h-norm-m">
+              Б {norm.protein} г · Ж {norm.fat} г · В {norm.carbs} г
+            </div>
+            <button className="h-btn h-btn-p" onClick={applyNorm}>Підставити в цілі</button>
+          </div>
+          <div className="h-hint">
+            Пораховано за формулою Міффліна-Сан Жеора з ваги <b>{n1(weight)} кг</b>,
+            зросту й віку. Це орієнтир: якщо за два-три тижні вага не рухається
+            так, як хочете, підправте число руками.
+          </div>
+        </>
+      ) : (
+        <div className="h-hint">
+          Щоб порахувати норму, потрібні стать, зріст, рік народження і хоча б
+          одне зважування.
+        </div>
       )}
 
       <div className="h-sec"><h3>Мої цілі</h3></div>
