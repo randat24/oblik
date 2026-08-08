@@ -83,11 +83,11 @@ function bmr({ sex, weight, height, age }) {
 }
 
 const ACTIVITY = [
-  { key: '1.2', label: 'Сидяча робота, без тренувань' },
-  { key: '1.375', label: 'Легка активність, 1–3 рази на тиждень' },
-  { key: '1.55', label: 'Помірна, 3–5 разів на тиждень' },
-  { key: '1.725', label: 'Висока, 6–7 разів на тиждень' },
-  { key: '1.9', label: 'Дуже висока, важка фізична праця' },
+  { key: '1.2', label: 'Сидяча робота, без тренувань', ex: 20 },
+  { key: '1.375', label: 'Легка активність, 1–3 рази на тиждень', ex: 30 },
+  { key: '1.55', label: 'Помірна, 3–5 разів на тиждень', ex: 45 },
+  { key: '1.725', label: 'Висока, 6–7 разів на тиждень', ex: 60 },
+  { key: '1.9', label: 'Дуже висока, важка фізична праця', ex: 75 },
 ];
 
 const AIMS = [
@@ -97,25 +97,38 @@ const AIMS = [
   { key: '10', label: 'Набір маси', note: 'плюс 10%' },
 ];
 
+// Скільки годин на день людина стоїть чи рухається — ціль кільця розминки.
+// Дванадцять: година активності на кожну годину неспання, як в Apple.
+const STAND_GOAL = 12;
+
 /**
  * Норма калорій і БЖВ. Білок рахуємо на кілограм ваги, жир — теж,
  * решту добираємо вуглеводами: так пропорція лишається розумною
  * і на дефіциті, і на наборі.
+ *
+ * Тут же — цілі трьох кілець. Ціль руху не вигадана: це різниця між
+ * витратами з активністю і витратами у спокої, тобто саме та енергія,
+ * яку треба спалити рухом. Хвилини тренувань беремо з рівня активності.
  */
 function calcNorm({ sex, weight, height, age, activity, aim }) {
   const base = bmr({ sex, weight, height, age });
   if (base === null) return null;
-  const tdee = base * (num(activity) || 1.375);
+  const act = num(activity) || 1.375;
+  const tdee = base * act;
   const kcal = tdee * (1 + (num(aim) || 0) / 100);
   const w = num(weight);
   const protein = Math.round(w * 1.8);
   const fat = Math.round(w * 0.9);
   const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
+  // округлюємо до десятків: ціль кільця — орієнтир, а не точне число
+  const move = Math.max(200, Math.round((tdee - base) / 10) * 10);
+  const exercise = (ACTIVITY.find((a) => a.key === String(activity))?.ex) || 30;
   return {
     bmr: Math.round(base),
     tdee: Math.round(tdee),
     kcal: Math.round(kcal),
     protein, fat, carbs,
+    move, exercise, stand: STAND_GOAL,
   };
 }
 
@@ -2558,7 +2571,17 @@ function GoalsTab({ data, reload, setBusy }) {
       protein: String(norm.protein),
       fat: String(norm.fat),
       carbs: String(norm.carbs),
+      // цілі кілець теж підставляємо: без них поля лишалися порожні,
+      // а кільця мовчки міряли себе за прихованими числами
+      burned: String(norm.move),
+      exercise: String(norm.exercise),
+      stand: String(norm.stand),
     };
+    // Воду й кроки формула не рахує — це звичка, а не обмін речовин.
+    // Тож лише підказуємо початкове число там, де ще порожньо, і не чіпаємо
+    // те, що ви вже поставили собі самі.
+    if (!next.water && weight) next.water = String(Math.round(weight * 30 / 50) * 50);
+    if (!next.steps) next.steps = '10000';
     setVals(next);
     await persist(next);
   };
@@ -2615,6 +2638,9 @@ function GoalsTab({ data, reload, setBusy }) {
             <div className="h-norm-m">
               Б {norm.protein} г · Ж {norm.fat} г · В {norm.carbs} г
             </div>
+            <div className="h-norm-m">
+              Кільця: рух {norm.move} ккал · тренування {norm.exercise} хв · розминка {norm.stand} год
+            </div>
             <button className="h-btn h-btn-p" onClick={applyNorm}>
               Підставити в цілі й зберегти
             </button>
@@ -2635,7 +2661,9 @@ function GoalsTab({ data, reload, setBusy }) {
 
       <div className="h-sec"><h3>Мої цілі</h3></div>
       <div className="h-note">
-        Ці числа задають норми на день і лінію цілі на графіку ваги.
+        Ці числа задають норми на день і лінію цілі на графіку ваги. Три цілі
+        руху, тренувань і розминки — це кільця на вкладці «День»: поки поле
+        порожнє, кільце міряє себе за типовим числом (600 ккал, 30 хв, 12 год).
       </div>
       <div className="h-row2">
         {GOAL_FIELDS.map((f) => (
