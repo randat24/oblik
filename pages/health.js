@@ -544,58 +544,92 @@ function BarcodeScanner({ onFound, onClose }) {
   const videoRef = useRef(null);
   const [err, setErr] = useState('');
   const [manual, setManual] = useState('');
-  const [supported, setSupported] = useState(true);
+  const [mode, setMode] = useState('start'); // start | camera | manual
 
   useEffect(() => {
     let stop = false;
     let stream = null;
     let timer = null;
+    let controls = null;
+
+    const found = (raw) => {
+      const code = String(raw || '').replace(/\D/g, '');
+      if (code.length >= 6 && !stop) { stop = true; onFound(code); }
+    };
 
     (async () => {
-      if (typeof window === 'undefined' || !('BarcodeDetector' in window)) {
-        setSupported(false);
-        return;
-      }
-      let detector;
-      try {
-        detector = new window.BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'],
-        });
-      } catch {
-        setSupported(false);
-        return;
-      }
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-        });
-      } catch {
-        setErr('Немає доступу до камери');
-        return;
-      }
-      if (stop) { stream.getTracks().forEach((t) => t.stop()); return; }
-      const v = videoRef.current;
-      if (!v) return;
-      v.srcObject = stream;
-      await v.play().catch(() => {});
+      const video = videoRef.current;
+      if (!video) return;
 
-      const tick = async () => {
-        if (stop) return;
+      // 1) вбудований у браузер розпізнавач — найшвидший, є в Chrome на Android
+      const native = typeof window !== 'undefined' && 'BarcodeDetector' in window;
+      if (native) {
+        let detector;
         try {
-          const found = await detector.detect(v);
-          if (found.length) {
-            const code = (found[0].rawValue || '').replace(/\D/g, '');
-            if (code.length >= 6) { onFound(code); return; }
+          detector = new window.BarcodeDetector({
+            formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'],
+          });
+        } catch { detector = null; }
+
+        if (detector) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          } catch {
+            setErr('Немає доступу до камери');
+            setMode('manual');
+            return;
           }
-        } catch { /* кадр не розпізнався — не біда, беремо наступний */ }
-        timer = setTimeout(tick, 220);
-      };
-      tick();
+          if (stop) { stream.getTracks().forEach((t) => t.stop()); return; }
+          video.srcObject = stream;
+          await video.play().catch(() => {});
+          setMode('camera');
+
+          const tick = async () => {
+            if (stop) return;
+            try {
+              const hits = await detector.detect(video);
+              if (hits.length) { found(hits[0].rawValue); return; }
+            } catch { /* кадр не розпізнався — беремо наступний */ }
+            timer = setTimeout(tick, 200);
+          };
+          tick();
+          return;
+        }
+      }
+
+      // 2) Safari на iPhone такого не має — вантажимо розпізнавач окремо.
+      // Саме тому імпорт динамічний: він потрібен лише тут і важить чимало.
+      try {
+        const [{ BrowserMultiFormatReader }, zx] = await Promise.all([
+          import('@zxing/browser'),
+          import('@zxing/library'),
+        ]);
+        if (stop) return;
+        const hints = new Map();
+        hints.set(zx.DecodeHintType.POSSIBLE_FORMATS, [
+          zx.BarcodeFormat.EAN_13, zx.BarcodeFormat.EAN_8,
+          zx.BarcodeFormat.UPC_A, zx.BarcodeFormat.UPC_E,
+          zx.BarcodeFormat.CODE_128,
+        ]);
+        hints.set(zx.DecodeHintType.TRY_HARDER, true);
+
+        const reader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 150 });
+        setMode('camera');
+        controls = await reader.decodeFromConstraints(
+          { video: { facingMode: 'environment' } },
+          video,
+          (result) => { if (result) found(result.getText()); }
+        );
+      } catch (e) {
+        setErr('Камера недоступна: ' + (e?.message || 'невідома причина'));
+        setMode('manual');
+      }
     })();
 
     return () => {
       stop = true;
       if (timer) clearTimeout(timer);
+      if (controls) { try { controls.stop(); } catch { /* вже зупинено */ } }
       if (stream) stream.getTracks().forEach((t) => t.stop());
     };
   }, [onFound]);
@@ -608,28 +642,24 @@ function BarcodeScanner({ onFound, onClose }) {
           <button className="h-cmp-x" onClick={onClose}>×</button>
         </div>
 
-        {supported && !err && (
-          <div className="h-scan-view">
-            <video ref={videoRef} playsInline muted />
-            <div className="h-scan-frame" />
-          </div>
-        )}
+        <div className="h-scan-view">
+          <video ref={videoRef} playsInline muted autoPlay />
+          <div className="h-scan-frame" />
+          {mode === 'start' && <div className="h-scan-wait">вмикаємо камеру…</div>}
+        </div>
 
         <div className="h-scan-foot">
           {err && <div className="h-err">{err}</div>}
-          {!supported && (
-            <div className="h-hint">
-              Цей браузер не вміє читати штрихкод камерою — на iPhone так і є.
-              Введіть цифри з-під смужок, результат буде той самий.
-            </div>
-          )}
-          <label>Ввести код руками</label>
+          <div className="h-hint">
+            Наведіть камеру на смужки. Тримайте штрихкод у рамці й трохи
+            віддаліть телефон, якщо не читається.
+          </div>
+          <label>Або ввести цифри руками</label>
           <div className="h-scan-manual">
             <input
               type="tel"
               inputMode="numeric"
               value={manual}
-              autoFocus={!supported}
               placeholder="4820000000000"
               onChange={(e) => setManual(e.target.value.replace(/\D/g, ''))}
               onKeyDown={(e) => e.key === 'Enter' && manual.length >= 6 && onFound(manual)}
