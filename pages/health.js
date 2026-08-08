@@ -437,6 +437,12 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
         {num(g.steps) > 0 && <Bar label="Кроки" value={day.steps} goal={num(g.steps)} unit="" tone="var(--blue)" />}
       </div>
 
+      <SuggestBlock
+        data={data}
+        day={day}
+        onPick={(x) => setFood({ date, prefill: x })}
+      />
+
       <div className="h-sec">
         <h3>Що зʼїв<span className="h-count">{meals.length}</span></h3>
         <div className="h-sec-a">
@@ -472,6 +478,7 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
           known={data.food}
           products={data.products || []}
           dishes={data.dishes || []}
+          prefill={food.prefill}
           onClose={() => setFood(null)}
           onDone={reload}
         />
@@ -604,7 +611,7 @@ function BarcodeScanner({ onFound, onClose }) {
   );
 }
 
-function FoodModal({ date, known, products = [], dishes = [], onClose, onDone }) {
+function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, onDone }) {
   const [meal, setMeal] = useState(MEALS[0]);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
@@ -643,6 +650,18 @@ function FoodModal({ date, known, products = [], dishes = [], onClose, onDone })
     setCarbs(String(n1(portionOf.carbs * k)));
     setAmount(k === 1 ? '1 порція' : `${n1(k)} порції`);
   }, [portionOf, portions]);
+
+  // натиснули підказку «чим добрати» — форма відкривається вже заповненою
+  useEffect(() => {
+    if (!prefill) return;
+    setName(prefill.label);
+    setAmount(prefill.unit === 'г' ? `${Math.round(prefill.k)} г` : `${n1(prefill.k)} ${prefill.unit}`);
+    setKcal(String(Math.round(prefill.got.kcal)));
+    setProtein(String(n1(prefill.got.protein)));
+    setFat(String(n1(prefill.got.fat)));
+    setCarbs(String(n1(prefill.got.carbs)));
+    setFound('з підказки «чим добрати»');
+  }, [prefill]);
 
   // грами змінились — перераховуємо все, що знаємо на 100 г
   useEffect(() => {
@@ -849,6 +868,188 @@ function FoodModal({ date, known, products = [], dishes = [], onClose, onDone })
       </div>
       {scan && <BarcodeScanner onFound={byCode} onClose={() => setScan(false)} />}
     </Modal>
+  );
+}
+
+/* ---------- Що доїсти ---------- */
+
+/**
+ * Підбирає, чим закрити залишок норми. Кандидати — тільки те, що ви самі
+ * колись їли або завели: продукти з бази, свої страви й недавні записи.
+ * Ніяких порад «взагалі» — лише ваша ж їжа в потрібній кількості.
+ */
+function suggestions({ left, products, dishes, food }) {
+  const need = {
+    kcal: Math.max(0, left.kcal),
+    protein: Math.max(0, left.protein),
+    fat: Math.max(0, left.fat),
+    carbs: Math.max(0, left.carbs),
+  };
+  if (need.kcal < 50) return [];
+
+  const cands = [];
+
+  // продукт із бази — крок 10 г
+  products.forEach((p) => {
+    if (!p.kcal) return;
+    cands.push({
+      label: [p.name, p.brand].filter(Boolean).join(' · '),
+      kind: 'продукт',
+      per: { kcal: p.kcal / 100, protein: p.protein / 100, fat: p.fat / 100, carbs: p.carbs / 100 },
+      min: 20, max: 400, step: 10, unit: 'г',
+    });
+  });
+
+  // своя страва — крок чверть порції
+  dishes.forEach((d) => {
+    if (!d.kcal) return;
+    cands.push({
+      label: d.name,
+      kind: 'страва',
+      per: { kcal: d.kcal, protein: d.protein, fat: d.fat, carbs: d.carbs },
+      min: 0.25, max: 3, step: 0.25, unit: 'порц.',
+    });
+  });
+
+  // те, що вже їли — беремо найсвіжіше і без повторів
+  const seen = new Set();
+  [...food].reverse().forEach((f) => {
+    if (!f.kcal || !f.name) return;
+    const key = f.name.toLowerCase().trim();
+    if (seen.has(key) || seen.size >= 25) return;
+    seen.add(key);
+    cands.push({
+      label: f.name,
+      kind: f.amount ? `як ${f.amount}` : 'як їли',
+      per: { kcal: f.kcal, protein: f.protein, fat: f.fat, carbs: f.carbs },
+      min: 0.5, max: 3, step: 0.5, unit: 'порц.',
+    });
+  });
+
+  const cover = (got, want) => (want > 0 ? Math.min(got, want) / want : 0);
+  const over = (got, want) => Math.max(0, got - want) / Math.max(want, 1);
+
+  const scored = [];
+  cands.forEach((c) => {
+    let best = null;
+    for (let k = c.min; k <= c.max + 1e-9; k += c.step) {
+      const got = {
+        kcal: c.per.kcal * k, protein: c.per.protein * k,
+        fat: c.per.fat * k, carbs: c.per.carbs * k,
+      };
+      // понад залишок калорій не пропонуємо взагалі
+      if (got.kcal > need.kcal * 1.05) break;
+      const score =
+        2 * cover(got.protein, need.protein) +
+        cover(got.carbs, need.carbs) +
+        cover(got.fat, need.fat) +
+        cover(got.kcal, need.kcal) -
+        1.5 * over(got.fat, need.fat) -
+        over(got.carbs, need.carbs) -
+        0.5 * over(got.protein, need.protein);
+      if (!best || score > best.score) best = { k, got, score };
+    }
+    if (best && best.score > 0.15 && best.got.kcal >= 40) {
+      scored.push({ ...c, ...best });
+    }
+  });
+
+  // одна назва — одна підказка, найкраща
+  const uniq = new Map();
+  scored.sort((a, b) => b.score - a.score).forEach((x) => {
+    const key = x.label.toLowerCase().trim();
+    if (!uniq.has(key)) uniq.set(key, x);
+  });
+  return [...uniq.values()].slice(0, 4);
+}
+
+/** Чого сьогодні бракує найбільше — це і є головна підказка */
+function tightest(left, goals) {
+  const rows = [
+    { key: 'protein', label: 'білка', left: left.protein, goal: num(goals.protein) },
+    { key: 'carbs', label: 'вуглеводів', left: left.carbs, goal: num(goals.carbs) },
+    { key: 'fat', label: 'жирів', left: left.fat, goal: num(goals.fat) },
+  ].filter((r) => r.goal > 0);
+  if (!rows.length) return null;
+  rows.sort((a, b) => (b.left / b.goal) - (a.left / a.goal));
+  return rows[0].left > 0 ? rows[0] : null;
+}
+
+function SuggestBlock({ data, day, onPick }) {
+  const g = data.goals || {};
+  const left = {
+    kcal: num(g.kcal) - day.kcal,
+    protein: num(g.protein) - day.protein,
+    fat: num(g.fat) - day.fat,
+    carbs: num(g.carbs) - day.carbs,
+  };
+
+  if (!num(g.kcal)) {
+    return (
+      <div className="h-hint">
+        Щоб застосунок підказував, чим добрати норму, задайте її на вкладці «Цілі».
+      </div>
+    );
+  }
+
+  if (left.kcal <= 0) {
+    return (
+      <div className="h-sug">
+        <div className="h-sug-h">Норму вибрано</div>
+        <div className="h-sug-n">
+          {left.kcal < -50
+            ? `Перебір на ${Math.abs(Math.round(left.kcal))} ккал — завтра буде рівніше.`
+            : 'Рівно в ціль.'}
+        </div>
+      </div>
+    );
+  }
+
+  const list = suggestions({
+    left, products: data.products || [], dishes: data.dishes || [], food: data.food || [],
+  });
+  const tight = tightest(left, g);
+
+  return (
+    <div className="h-sug">
+      <div className="h-sug-h">Чим добрати</div>
+      <div className="h-sug-left">
+        <span>ще <b>{Math.round(left.kcal)}</b> ккал</span>
+        {left.protein > 0 && <span>Б <b>{n1(left.protein)}</b> г</span>}
+        {left.fat > 0 && <span>Ж <b>{n1(left.fat)}</b> г</span>}
+        {left.carbs > 0 && <span>В <b>{n1(left.carbs)}</b> г</span>}
+      </div>
+      {tight && (
+        <div className="h-sug-n">
+          Найбільше бракує <b>{tight.label}</b> — на це й дивимось у першу чергу.
+        </div>
+      )}
+
+      {list.length === 0 ? (
+        <div className="h-sug-n">
+          Підказки беруться з ваших продуктів, страв і того, що ви вже їли.
+          Запишіть кілька — і тут зʼявиться, чим саме добрати норму.
+        </div>
+      ) : (
+        <div className="h-sug-list">
+          {list.map((x, i) => (
+            <button className="h-sug-i" key={i} onClick={() => onPick(x)}>
+              <span className="h-sug-t">
+                {x.label}
+                <i>{x.kind}</i>
+              </span>
+              <span className="h-sug-q">
+                {x.unit === 'г' ? `${Math.round(x.k)} г` : `${n1(x.k)} ${x.unit}`}
+              </span>
+              <span className="h-sug-k">
+                {Math.round(x.got.kcal)} ккал
+                <i>Б {n1(x.got.protein)} · Ж {n1(x.got.fat)} · В {n1(x.got.carbs)}</i>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

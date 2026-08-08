@@ -1626,3 +1626,42 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   background: var(--panel-3); border: 1px solid var(--line); border-radius: 20px;
   padding: 9px 16px; font-size: .84rem; box-shadow: var(--shadow); z-index: 300;
 }
+
+/* Чим добрати норму */
+.h-sug {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--amber); border-radius: var(--r);
+  padding: 14px 16px; margin-top: 14px;
+}
+.h-sug-h {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--amber); margin-bottom: 8px;
+}
+.h-sug-left {
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+  font-family: var(--mono); font-size: .8rem; color: var(--muted);
+}
+.h-sug-left b { color: var(--text); }
+.h-sug-n { font-size: .78rem; color: var(--text-dim); margin-top: 8px; line-height: 1.5; }
+.h-sug-n b { color: var(--text); }
+.h-sug-list { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; }
+.h-sug-i {
+  display: flex; align-items: center; gap: 10px; text-align: left; width: 100%;
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm); padding: 9px 12px; color: var(--text);
+  font: inherit; cursor: pointer;
+}
+.h-sug-i:hover { border-color: var(--amber); }
+.h-sug-t { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.h-sug-t i {
+  display: block; font-style: normal; font-size: .68rem; color: var(--muted); margin-top: 1px;
+}
+.h-sug-q {
+  flex: 0 0 auto; font-family: var(--mono); font-weight: 700; color: var(--amber);
+}
+.h-sug-k {
+  flex: 0 0 auto; text-align: right; font-family: var(--mono); font-size: .8rem; font-weight: 700;
+}
+.h-sug-k i {
+  display: block; font-style: normal; font-size: .66rem; font-weight: 400; color: var(--muted);
+}
