@@ -1519,3 +1519,21 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   font-family: var(--mono); font-size: .72rem; color: var(--muted);
 }
 .h-cmp-fig figcaption b { color: var(--text); }
+
+/* Пораховані величини й підказки */
+.h-hint {
+  margin-top: 10px; font-size: .78rem; line-height: 1.6; color: var(--text-dim);
+  padding: 9px 11px; border-left: 2px solid var(--line);
+  background: var(--panel-2); border-radius: var(--r-sm);
+}
+.h-hint b { color: var(--text); font-family: var(--mono); }
+.h-auto {
+  font-style: normal; font-size: .58rem; letter-spacing: .06em;
+  color: var(--green); border: 1px solid var(--green-dim);
+  padding: 0 5px; border-radius: 20px; margin-left: 6px;
+}
+.h-link {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; color: var(--amber); text-decoration: underline;
+}
+.h-mcell-s { font-size: .7rem; color: var(--text-dim); margin-top: 2px; }
