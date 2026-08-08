@@ -82,6 +82,21 @@ function summarize(lines) {
 export default withAuth(async (req, res) => {
   if (req.method === 'GET') {
     const audits = await readAudits();
+
+    // Розбір однієї звірки: не лише скільки, а що саме. Разом із позначками
+    // віддаємо поточний стан обсягу — щоб було видно, чи річ відтоді знайшлась
+    // і що про неї каже база (кому видана, де лежить).
+    const wanted = (req.query.id || '').toString().trim();
+    if (wanted) {
+      const audit = audits.find((a) => a.id === wanted);
+      if (!audit) return res.status(404).json({ error: 'Звірку не знайдено' });
+      const [expected, lines] = await Promise.all([
+        expectedFor(audit.scope),
+        readLines(audit.id),
+      ]);
+      return res.json({ audit, expected: expected || [], lines });
+    }
+
     const open = audits.find((a) => a.status === STATUS.open) || null;
     if (!open) return res.json({ open: null, audits, scopes: scopes() });
 
