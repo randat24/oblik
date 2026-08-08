@@ -1820,3 +1820,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   .h-board-rings { gap: 14px; padding: 16px; }
   .h-tile-v { font-size: 1.45rem; }
 }
+.h-scan-wait {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: .84rem; background: #000;
+}
