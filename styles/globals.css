@@ -1687,3 +1687,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-goal-s { font-size: .74rem; color: var(--muted); margin-top: 2px; }
 .h-goal-v { font-size: .84rem; margin-top: 6px; color: var(--text-dim); }
 .h-goal-v b { font-family: var(--mono); color: var(--text); }
+.h-dirty { font-size: .8rem; color: var(--amber); }
+.h-save { position: sticky; bottom: 0; background: var(--bg); padding-bottom: 8px; z-index: 5; }
+.h-sug-t i.is-basic { color: var(--blue); }
+.h-sug-ref { font-size: .74rem; opacity: .85; }

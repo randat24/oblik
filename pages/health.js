@@ -881,6 +881,48 @@ function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, 
   );
 }
 
+/*
+ * Невеликий довідник звичайних продуктів на 100 г. Потрібен, щоб підказки
+ * працювали з першого дня, поки власна база порожня. Числа орієнтовні —
+ * усереднені довідкові, а не з лабораторії; свої продукти завжди точніші
+ * й тому в підказках ідуть першими.
+ */
+const BASIC_FOODS = [
+  // білок
+  { name: 'Куряче філе, варене', kcal: 165, protein: 31, fat: 3.6, carbs: 0 },
+  { name: 'Індичка, філе', kcal: 135, protein: 29, fat: 1.7, carbs: 0 },
+  { name: 'Тріска / мінтай', kcal: 78, protein: 17.8, fat: 0.7, carbs: 0 },
+  { name: 'Тунець у власному соку', kcal: 96, protein: 22, fat: 1, carbs: 0 },
+  { name: 'Яловичина, пісна', kcal: 187, protein: 26, fat: 9, carbs: 0 },
+  { name: 'Лосось', kcal: 208, protein: 20, fat: 13, carbs: 0 },
+  { name: 'Яйце куряче', kcal: 157, protein: 12.7, fat: 11.5, carbs: 0.7 },
+  { name: 'Яєчний білок', kcal: 48, protein: 11, fat: 0.2, carbs: 0.7 },
+  { name: 'Сир кисломолочний 5%', kcal: 121, protein: 17, fat: 5, carbs: 1.8 },
+  { name: 'Сир кисломолочний 0%', kcal: 71, protein: 16, fat: 0.2, carbs: 1.8 },
+  { name: 'Грецький йогурт 2%', kcal: 73, protein: 10, fat: 2, carbs: 3.6 },
+  { name: 'Кефір 1%', kcal: 40, protein: 3, fat: 1, carbs: 4 },
+  { name: 'Сир твердий 45%', kcal: 350, protein: 25, fat: 27, carbs: 0 },
+  // вуглеводи
+  { name: 'Гречка, варена', kcal: 110, protein: 4.2, fat: 1.1, carbs: 21 },
+  { name: 'Рис, варений', kcal: 130, protein: 2.7, fat: 0.3, carbs: 28 },
+  { name: 'Вівсянка на воді', kcal: 88, protein: 3, fat: 1.7, carbs: 15 },
+  { name: 'Картопля, варена', kcal: 82, protein: 2, fat: 0.1, carbs: 17 },
+  { name: 'Макарони, варені', kcal: 131, protein: 5, fat: 1.1, carbs: 25 },
+  { name: 'Хліб житній', kcal: 250, protein: 8, fat: 3, carbs: 45 },
+  { name: 'Квасоля, варена', kcal: 123, protein: 7.8, fat: 0.5, carbs: 21 },
+  { name: 'Сочевиця, варена', kcal: 116, protein: 9, fat: 0.4, carbs: 20 },
+  { name: 'Банан', kcal: 89, protein: 1.1, fat: 0.3, carbs: 23 },
+  { name: 'Яблуко', kcal: 52, protein: 0.3, fat: 0.2, carbs: 14 },
+  // жири
+  { name: 'Олія соняшникова', kcal: 899, protein: 0, fat: 100, carbs: 0 },
+  { name: 'Горіхи волоські', kcal: 654, protein: 15, fat: 65, carbs: 14 },
+  { name: 'Авокадо', kcal: 160, protein: 2, fat: 15, carbs: 9 },
+  // овочі
+  { name: 'Огірок', kcal: 15, protein: 0.8, fat: 0.1, carbs: 2.8 },
+  { name: 'Помідор', kcal: 18, protein: 0.9, fat: 0.2, carbs: 3.9 },
+  { name: 'Капуста, тушкована', kcal: 40, protein: 2, fat: 1, carbs: 6 },
+];
+
 /* ---------- Що доїсти ---------- */
 
 /**
@@ -918,6 +960,19 @@ function suggestions({ left, products, dishes, food }) {
       kind: 'страва',
       per: { kcal: d.kcal, protein: d.protein, fat: d.fat, carbs: d.carbs },
       min: 0.25, max: 3, step: 0.25, unit: 'порц.',
+    });
+  });
+
+  // довідник — тільки якщо такого продукту немає у власній базі
+  const mine = new Set(products.map((p) => p.name.toLowerCase().trim()));
+  BASIC_FOODS.forEach((f) => {
+    if (mine.has(f.name.toLowerCase())) return;
+    cands.push({
+      label: f.name,
+      kind: 'довідник',
+      basic: true,
+      per: { kcal: f.kcal / 100, protein: f.protein / 100, fat: f.fat / 100, carbs: f.carbs / 100 },
+      min: 20, max: 400, step: 10, unit: 'г',
     });
   });
 
@@ -959,8 +1014,9 @@ function suggestions({ left, products, dishes, food }) {
         0.5 * over(got.protein, need.protein);
       if (!best || score > best.score) best = { k, got, score };
     }
+    // свої продукти й страви точніші за довідник, тож ідуть попереду
     if (best && best.score > 0.15 && best.got.kcal >= 40) {
-      scored.push({ ...c, ...best });
+      scored.push({ ...c, ...best, score: c.basic ? best.score * 0.85 : best.score });
     }
   });
 
@@ -970,7 +1026,7 @@ function suggestions({ left, products, dishes, food }) {
     const key = x.label.toLowerCase().trim();
     if (!uniq.has(key)) uniq.set(key, x);
   });
-  return [...uniq.values()].slice(0, 4);
+  return [...uniq.values()].slice(0, 5);
 }
 
 /** Чого сьогодні бракує найбільше — це і є головна підказка */
@@ -1035,10 +1091,16 @@ function SuggestBlock({ data, day, onPick }) {
         </div>
       )}
 
+      {list.some((x) => x.basic) && (
+        <div className="h-sug-n h-sug-ref">
+          Позначені «довідник» — усереднені значення звичайних продуктів.
+          Свої, відскановані чи введені, точніші й показуються першими.
+        </div>
+      )}
+
       {list.length === 0 ? (
         <div className="h-sug-n">
-          Підказки беруться з ваших продуктів, страв і того, що ви вже їли.
-          Запишіть кілька — і тут зʼявиться, чим саме добрати норму.
+          Немає нічого, що вписалося б у залишок — схоже, норма майже вибрана.
         </div>
       ) : (
         <div className="h-sug-list">
@@ -1046,7 +1108,7 @@ function SuggestBlock({ data, day, onPick }) {
             <button className="h-sug-i" key={i} onClick={() => onPick(x)}>
               <span className="h-sug-t">
                 {x.label}
-                <i>{x.kind}</i>
+                <i className={x.basic ? 'is-basic' : ''}>{x.kind}</i>
               </span>
               <span className="h-sug-q">
                 {x.unit === 'г' ? `${Math.round(x.k)} г` : `${n1(x.k)} ${x.unit}`}
@@ -1977,6 +2039,14 @@ function GoalsTab({ data, reload, setBusy }) {
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState('');
 
+  // чи відрізняється те, що на екрані, від записаного в таблиці
+  const dirty = [...PROFILE_FIELDS, ...GOAL_FIELDS].some((f) => {
+    const stored = data.goals?.[f.key] || '';
+    const shown = vals[f.key] === '' || vals[f.key] === undefined ? '' : vals[f.key];
+    const norm = f.mm && stored !== '' ? String(toMm(stored)) : String(stored);
+    return String(shown) !== norm;
+  }) || String(vals.sex || 'm') !== String(data.goals?.sex || 'm');
+
   const age = vals.birthYear ? new Date().getFullYear() - num(vals.birthYear) : null;
 
   // остання зважена вага — з неї й рахуємо норму
@@ -1987,32 +2057,44 @@ function GoalsTab({ data, reload, setBusy }) {
     activity: vals.activity || '1.375', aim: vals.aim || '-20',
   });
 
-  const applyNorm = () => {
-    if (!norm) return;
-    setVals((p) => ({
-      ...p,
-      kcal: String(norm.kcal),
-      protein: String(norm.protein),
-      fat: String(norm.fat),
-      carbs: String(norm.carbs),
-    }));
-    setSaved(false);
-  };
-
-  const save = async () => {
+  /** Один запис у таблицю. Порожні значення не шлемо — вони лише сміття. */
+  const persist = async (v) => {
     setBusy(true); setErr(''); setSaved(false);
     try {
-      const out = { ...vals };
-      PROFILE_FIELDS.forEach((f) => {
-        if (f.mm && out[f.key] !== '') out[f.key] = String(toCm(out[f.key]));
+      const out = {};
+      Object.entries(v).forEach(([k, val]) => {
+        if (val === undefined || val === null || val === '') return;
+        const f = PROFILE_FIELDS.find((x) => x.key === k);
+        out[k] = f?.mm ? String(toCm(val)) : String(val);
       });
       await api('/api/health', { method: 'POST', body: { action: 'goals', goals: out } });
       await reload();
       setSaved(true);
+      setTimeout(() => setSaved(false), 4000);
+      return true;
     } catch (e) {
       setErr(e.message);
+      return false;
     } finally { setBusy(false); }
   };
+
+  // Кнопка не лише підставляє числа, а й одразу зберігає: поля цілей лежать
+  // нижче за екраном, і без запису здавалося, що нічого не сталося.
+  const applyNorm = async () => {
+    if (!norm) return;
+    const next = {
+      ...vals,
+      kcal: String(norm.kcal),
+      protein: String(norm.protein),
+      fat: String(norm.fat),
+      carbs: String(norm.carbs),
+    };
+    setVals(next);
+    await persist(next);
+  };
+
+  const save = () => persist(vals);
+
 
   return (
     <>
@@ -2063,7 +2145,10 @@ function GoalsTab({ data, reload, setBusy }) {
             <div className="h-norm-m">
               Б {norm.protein} г · Ж {norm.fat} г · В {norm.carbs} г
             </div>
-            <button className="h-btn h-btn-p" onClick={applyNorm}>Підставити в цілі</button>
+            <button className="h-btn h-btn-p" onClick={applyNorm}>
+              Підставити в цілі й зберегти
+            </button>
+            {saved && <div className="h-ok" style={{ marginTop: 8 }}>норми записано</div>}
           </div>
           <div className="h-hint">
             Пораховано за формулою Міффліна-Сан Жеора з ваги <b>{n1(weight)} кг</b>,
@@ -2097,9 +2182,11 @@ function GoalsTab({ data, reload, setBusy }) {
         ))}
       </div>
       {err && <div className="h-err">{err}</div>}
-      <div className="h-sec">
+      <div className="h-sec h-save">
         <button className="h-btn h-btn-p" onClick={save}>Зберегти цілі</button>
-        {saved && <span className="h-ok">збережено</span>}
+        {saved
+          ? <span className="h-ok">збережено</span>
+          : dirty && <span className="h-dirty">є незбережені зміни</span>}
       </div>
 
       <div className="h-priv">
