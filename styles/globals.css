@@ -1665,3 +1665,25 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-sug-k i {
   display: block; font-style: normal; font-size: .66rem; font-weight: 400; color: var(--muted);
 }
+
+/* Поля на самій сторінці — щоб колонки не розповзались за екран */
+.h-row2 > div, .h-row4 > div { min-width: 0; }
+.h-row2 input, .h-row2 select, .h-row4 input,
+.h-wrap > input, .h-wrap > select { width: 100%; }
+.h-wrap select { width: 100%; }
+
+/* Скільки жиру зайвого */
+.h-goals { display: flex; flex-direction: column; gap: 6px; }
+.h-goal-row {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--amber); border-radius: var(--r);
+  padding: 11px 14px;
+}
+.h-goal-row.is-done { border-left-color: var(--green); opacity: .75; }
+.h-goal-t { display: flex; align-items: baseline; gap: 10px; }
+.h-goal-n { font-weight: 600; flex: 1 1 auto; }
+.h-goal-p { font-family: var(--mono); font-weight: 700; color: var(--amber); }
+.h-goal-row.is-done .h-goal-p { color: var(--green); }
+.h-goal-s { font-size: .74rem; color: var(--muted); margin-top: 2px; }
+.h-goal-v { font-size: .84rem; margin-top: 6px; color: var(--text-dim); }
+.h-goal-v b { font-family: var(--mono); color: var(--text); }
