@@ -1193,6 +1193,8 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-gate { max-width: 420px; margin: 18vh auto; text-align: center; line-height: 1.6; }
 .h-gate h1 { font-size: 1.1rem; letter-spacing: .14em; text-transform: uppercase; }
 .h-gate p { color: var(--text-dim); margin-bottom: 18px; }
+.h-gate-slow { font-size: .84rem; color: var(--muted) !important; }
+.h-gate .h-btn { margin: 0 4px; }
 
 .h-head {
   display: flex; align-items: baseline; gap: 12px;
