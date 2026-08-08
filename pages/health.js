@@ -177,12 +177,31 @@ const PHOTO_SIDES = [
 
 /* ---------- Дрібниці ---------- */
 
+/**
+ * Запит із межею терпіння. Без неї застряглий запит виглядає як вічне
+ * «Завантаження…»: сторінка ніби працює, а насправді вже нікуди не йде.
+ */
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    ...opts,
-    headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  const stop = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const bell = stop ? setTimeout(() => stop.abort(), opts.wait || 25000) : null;
+  let res;
+  try {
+    res = await fetch(path, {
+      ...opts,
+      signal: stop?.signal,
+      headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      const err = new Error('Таблиця не відповіла за 25 секунд. Спробуйте ще раз.');
+      err.status = 0;
+      throw err;
+    }
+    throw e;
+  } finally {
+    if (bell) clearTimeout(bell);
+  }
   const text = await res.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
@@ -2765,12 +2784,20 @@ export default function Health() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
+  const [slow, setSlow] = useState(false);
+
   const load = useCallback(async () => {
+    setError(null);
+    setSlow(false);
+    // якщо таблиця думає довше десяти секунд — краще сказати про це вголос,
+    // ніж лишати людину перед написом «Завантаження…»
+    const warn = setTimeout(() => setSlow(true), 10000);
     try {
       setData(await api('/api/health'));
-      setError(null);
     } catch (e) {
       setError(e);
+    } finally {
+      clearTimeout(warn);
     }
   }, []);
 
@@ -2789,7 +2816,10 @@ export default function Health() {
         <div className="h-gate">
           <h1>Здоровʼя</h1>
           <p>{error.status === 401 ? 'Спершу увійдіть у застосунок.' : error.message}</p>
-          <a className="h-btn h-btn-p" href="/">На головну</a>
+          {error.status !== 401 && error.status !== 403 && (
+            <button className="h-btn h-btn-p" onClick={load}>Спробувати ще раз</button>
+          )}
+          <a className="h-btn" href="/">На головну</a>
         </div>
       </>
     );
@@ -2799,7 +2829,18 @@ export default function Health() {
     return (
       <>
         <Head><title>Здоровʼя</title></Head>
-        <div className="h-gate"><p>Завантаження…</p></div>
+        <div className="h-gate">
+          <p>Завантаження…</p>
+          {slow && (
+            <>
+              <p className="h-gate-slow">
+                Таблиця відповідає довше, ніж зазвичай. Ще чекаємо — якщо не
+                вийде, за 25 секунд скажемо про це прямо.
+              </p>
+              <button className="h-btn" onClick={load}>Спробувати ще раз</button>
+            </>
+          )}
+        </div>
       </>
     );
   }
