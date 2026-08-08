@@ -431,8 +431,9 @@ function FoodModal({ date, known, onClose, onDone }) {
 /* ---------- Вкладка «Вага» ---------- */
 
 function WeightTab({ data, reload }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(null);   // дата, яку редагуємо, або 'new'
   const [shot, setShot] = useState(null);
+  const [compare, setCompare] = useState(false);
 
   const weights = data.days.filter((d) => d.weight !== null && d.weight !== undefined);
   const last = weights[weights.length - 1] || null;
@@ -448,6 +449,8 @@ function WeightTab({ data, reload }) {
     : 0;
 
   const history = [...weights].reverse();
+  // порівнювати є що лише коли фото є хоча б у двох днях
+  const withPhotos = data.days.filter((d) => PHOTO_SIDES.some((s) => d[s.key]));
 
   return (
     <>
@@ -484,7 +487,12 @@ function WeightTab({ data, reload }) {
 
       <div className="h-sec">
         <h3>Динаміка ваги</h3>
-        <button className="h-btn h-btn-p" onClick={() => setOpen(true)}>+ Записати вагу</button>
+        <div className="h-sec-a">
+          {withPhotos.length >= 2 && (
+            <button className="h-btn" onClick={() => setCompare(true)}>Порівняти фото</button>
+          )}
+          <button className="h-btn h-btn-p" onClick={() => setOpen('new')}>+ Записати вагу</button>
+        </div>
       </div>
 
       <LineChart
@@ -505,9 +513,7 @@ function WeightTab({ data, reload }) {
             return (
               <div className="h-hrow" key={d.date}>
                 <div className="h-hshots">
-                  {photos.length === 0 ? (
-                    <span className="h-hshot-ph">—</span>
-                  ) : photos.map((s) => (
+                  {photos.map((s) => (
                     <img
                       key={s.key}
                       className="h-hshot"
@@ -517,19 +523,36 @@ function WeightTab({ data, reload }) {
                       onClick={() => setShot({ src: photoSrc(d[s.key]), label: `${s.label} · ${d.date}` })}
                     />
                   ))}
+                  {photos.length < PHOTO_SIDES.length && (
+                    <button
+                      className="h-hshot-add"
+                      onClick={() => setOpen(d.date)}
+                      title={photos.length ? 'Додати ще ракурс' : 'Додати фото до цього запису'}
+                    >
+                      +
+                    </button>
+                  )}
                 </div>
                 <span className="h-hw">{n1(d.weight)} кг</span>
                 <span className={'h-hd' + (delta > 0 ? ' is-up' : delta < 0 ? ' is-down' : '')}>
                   {delta === null ? '' : `${delta > 0 ? '+' : ''}${delta} кг`}
                 </span>
-                <span className="h-hdate">{d.date}</span>
+                <button className="h-hedit" onClick={() => setOpen(d.date)} title="Змінити запис">{d.date}</button>
               </div>
             );
           })}
         </div>
       )}
 
-      {open && <WeightModal data={data} onClose={() => setOpen(false)} onDone={reload} />}
+      {open && (
+        <WeightModal
+          data={data}
+          initialDate={open === 'new' ? null : open}
+          onClose={() => setOpen(null)}
+          onDone={reload}
+        />
+      )}
+      {compare && <PhotoCompare data={data} onClose={() => setCompare(false)} />}
       {shot && (
         <div className="h-overlay" onClick={() => setShot(null)}>
           <div className="h-lightbox">
@@ -542,8 +565,8 @@ function WeightTab({ data, reload }) {
   );
 }
 
-function WeightModal({ data, onClose, onDone }) {
-  const [date, setDate] = useState(today());
+function WeightModal({ data, initialDate, onClose, onDone }) {
+  const [date, setDate] = useState(initialDate || today());
   const existing = data.days.find((d) => d.date === date);
   const [weight, setWeight] = useState('');
   const [photos, setPhotos] = useState({ front: '', side: '', back: '' });
@@ -600,6 +623,103 @@ function WeightModal({ data, onClose, onDone }) {
       <label>Примітка</label>
       <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="самопочуття, обставини…" />
     </Modal>
+  );
+}
+
+/**
+ * Порівняння двох дат: три ракурси поруч, з вагою і різницею.
+ * Дати обираються самі — найдавніша з фото проти найсвіжішої, бо саме це
+ * питання виникає першим: «що змінилось відтоді, як почав».
+ */
+function PhotoCompare({ data, onClose }) {
+  const withPhotos = data.days
+    .filter((d) => PHOTO_SIDES.some((s) => d[s.key]))
+    .sort((a, b) => stamp(a.date) - stamp(b.date));
+
+  const [left, setLeft] = useState(withPhotos[0]?.date || '');
+  const [right, setRight] = useState(withPhotos[withPhotos.length - 1]?.date || '');
+  const [side, setSide] = useState(null); // null — усі ракурси
+
+  const a = withPhotos.find((d) => d.date === left);
+  const b = withPhotos.find((d) => d.date === right);
+  const sides = side ? PHOTO_SIDES.filter((s) => s.key === side) : PHOTO_SIDES;
+  const shown = sides.filter((s) => a?.[s.key] || b?.[s.key]);
+
+  const dw = a?.weight != null && b?.weight != null ? n1(b.weight - a.weight) : null;
+  const days = a && b ? Math.round((stamp(b.date) - stamp(a.date)) / 86400000) : null;
+
+  return (
+    <div className="h-overlay" onClick={(e) => e.target.classList.contains('h-overlay') && onClose()}>
+      <div className="h-cmp">
+        <div className="h-cmp-head">
+          <span>Порівняння</span>
+          <button className="h-cmp-x" onClick={onClose}>×</button>
+        </div>
+
+        <div className="h-cmp-pick">
+          <select value={left} onChange={(e) => setLeft(e.target.value)}>
+            {withPhotos.map((d) => (
+              <option key={d.date} value={d.date}>
+                {d.date}{d.weight != null ? ` · ${n1(d.weight)} кг` : ''}
+              </option>
+            ))}
+          </select>
+          <span className="h-cmp-arrow">→</span>
+          <select value={right} onChange={(e) => setRight(e.target.value)}>
+            {withPhotos.map((d) => (
+              <option key={d.date} value={d.date}>
+                {d.date}{d.weight != null ? ` · ${n1(d.weight)} кг` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {(dw !== null || days !== null) && (
+          <div className="h-cmp-sum">
+            {days !== null && <span>минуло <b>{Math.abs(days)}</b> дн.</span>}
+            {dw !== null && (
+              <span className={dw > 0 ? 'is-up' : dw < 0 ? 'is-down' : ''}>
+                вага <b>{dw > 0 ? '+' : ''}{dw} кг</b>
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="h-cmp-pills">
+          <button className={'h-pill' + (side === null ? ' on' : '')} onClick={() => setSide(null)}>Усі</button>
+          {PHOTO_SIDES.map((s) => (
+            <button key={s.key} className={'h-pill' + (side === s.key ? ' on' : '')} onClick={() => setSide(s.key)}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="h-cmp-body">
+          {shown.length === 0 ? (
+            <div className="h-empty">На цих датах немає фото для порівняння</div>
+          ) : shown.map((sd) => (
+            <div className="h-cmp-pair" key={sd.key}>
+              <div className="h-cmp-t">{sd.label}</div>
+              <div className="h-cmp-imgs">
+                {[a, b].map((d, i) => (
+                  <figure className="h-cmp-fig" key={i}>
+                    {d?.[sd.key] ? (
+                      <img src={photoSrc(d[sd.key])} alt={`${sd.label} ${d.date}`} />
+                    ) : (
+                      <div className="h-cmp-none">немає фото</div>
+                    )}
+                    <figcaption>
+                      {d?.date}
+                      {d?.weight != null && <b> {n1(d.weight)} кг</b>}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
