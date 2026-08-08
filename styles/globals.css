@@ -1691,3 +1691,32 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-save { position: sticky; bottom: 0; background: var(--bg); padding-bottom: 8px; z-index: 5; }
 .h-sug-t i.is-basic { color: var(--blue); }
 .h-sug-ref { font-size: .74rem; opacity: .85; }
+
+/* Швидкі кнопки дня */
+.h-quick {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 12px; padding: 10px 12px;
+  background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: var(--r);
+}
+.h-quick-w { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; }
+.h-quick-l { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.h-quick-b {
+  width: 34px; height: 34px; border-radius: var(--r-sm); font-size: 1.1rem; line-height: 1;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text-dim); cursor: pointer;
+}
+.h-quick-b:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+.h-quick-b:disabled { opacity: .3; cursor: default; }
+.h-quick-v { font-family: var(--mono); font-weight: 700; min-width: 68px; text-align: center; }
+.h-quick-v i { font-style: normal; font-size: .74rem; color: var(--muted); }
+.h-quick-x {
+  background: none; border: 1px solid var(--line); border-radius: 20px;
+  color: var(--muted); font: inherit; font-size: .74rem; padding: 4px 10px; cursor: pointer;
+}
+.h-quick-x:hover { border-color: var(--blue); color: var(--blue); }
+.h-quick-more { flex: 0 0 auto; }
+
+.h-steps { margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.h-steps code {
+  font-family: var(--mono); font-size: .74rem; color: var(--amber);
+  background: var(--panel-3); padding: 1px 5px; border-radius: 3px;
+}
