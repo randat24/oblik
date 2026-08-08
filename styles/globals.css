@@ -333,6 +333,63 @@ input:focus, select:focus, textarea:focus {
 .act-accept.on { background: var(--green-dim); border-color: var(--green); }
 .act-del.on { background: var(--red-dim); border-color: var(--red); }
 
+.a-skip b { color: var(--text-dim); }
+
+/* Причина під позначкою «немає» */
+.audit-why {
+  flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line);
+}
+.audit-why-l { font-size: .74rem; color: var(--muted); margin-right: 2px; }
+.why-chip {
+  background: var(--panel-2); border: 1px solid var(--line-soft); color: var(--text-dim);
+  border-radius: 999px; padding: 4px 10px; font-size: .74rem; cursor: pointer;
+}
+.why-chip:hover { border-color: var(--line); color: var(--text); }
+.why-chip.on { background: var(--amber-dim); border-color: var(--amber); color: var(--text); }
+.why-own { flex: 1 1 140px; min-width: 0; }
+
+/* Історія звірок: рядок відкриває перелік */
+.log-row-click { cursor: pointer; }
+.log-row-click:hover { border-color: var(--line); }
+.audit-open { margin-top: 6px; font-size: .74rem; color: var(--amber); }
+
+/* Розбір однієї звірки */
+.audit-sum {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 12px 14px; margin-bottom: 10px;
+}
+.audit-sum-top {
+  font-family: var(--mono); font-size: .74rem; color: var(--muted); margin-bottom: 8px;
+}
+.audit-why-sum { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.why-tag {
+  background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 999px;
+  padding: 3px 10px; font-size: .74rem; color: var(--muted);
+}
+.why-tag b { color: var(--text); }
+
+.audit-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.audit-tab {
+  background: var(--panel); border: 1px solid var(--line-soft); color: var(--text-dim);
+  border-radius: 999px; padding: 6px 12px; font-size: .78rem; cursor: pointer;
+}
+.audit-tab b { font-family: var(--mono); }
+.audit-tab.on { background: var(--panel-2); border-color: var(--line); color: var(--text); }
+.audit-tab.a-miss.on { border-color: var(--red); }
+.audit-tab.a-diff.on { border-color: var(--amber); }
+.audit-tab.a-ok.on { border-color: var(--green); }
+
+/* Смужка збоку одразу каже, що з річчю */
+.audit-item[class*="audit-res-"] { border-left-width: 3px; }
+.audit-res-missing { border-left-color: var(--red); }
+.audit-res-diff { border-left-color: var(--amber); }
+.audit-res-ok { border-left-color: var(--green); }
+.audit-res-skip { border-left-color: var(--line); }
+.audit-note { margin-top: 4px; font-size: .78rem; color: var(--text-dim); }
+.audit-note-empty { color: var(--muted); font-style: italic; }
+.audit-by { margin-top: 3px; font-family: var(--mono); font-size: .7rem; color: var(--muted); }
+
 @media (max-width: 560px) {
   .audit-item { gap: 8px; }
   .audit-btns { flex: 1 1 100%; }
