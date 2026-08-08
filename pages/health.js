@@ -390,6 +390,7 @@ function Bar({ label, value, goal, unit = 'г', tone }) {
 function DayTab({ data, date, setDate, reload, setBusy, toast }) {
   const [food, setFood] = useState(null);
   const [copy, setCopy] = useState(false);
+  const [dayEdit, setDayEdit] = useState(false);
   const day = data.days.find((d) => d.date === date) || { date, kcal: 0, protein: 0, fat: 0, carbs: 0, water: 0, steps: 0 };
   const meals = data.food.filter((f) => f.date === date);
   const g = data.goals || {};
@@ -447,6 +448,19 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
         {num(g.steps) > 0 && <Bar label="Кроки" value={day.steps} goal={num(g.steps)} unit="" tone="var(--blue)" />}
       </div>
 
+      <DayStats
+        day={day}
+        goals={g}
+        onWater={async (v) => {
+          setBusy(true);
+          try {
+            await api('/api/health', { method: 'POST', body: { action: 'day', day: { date, water: v } } });
+            await reload();
+          } finally { setBusy(false); }
+        }}
+        onOpen={() => setDayEdit(true)}
+      />
+
       <SuggestBlock
         data={data}
         day={day}
@@ -491,6 +505,15 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
           prefill={food.prefill}
           onClose={() => setFood(null)}
           onDone={reload}
+        />
+      )}
+
+      {dayEdit && (
+        <DayModal
+          date={date}
+          day={day}
+          onClose={() => setDayEdit(false)}
+          onDone={async () => { await reload(); toast('День записано'); }}
         />
       )}
 
@@ -922,6 +945,96 @@ const BASIC_FOODS = [
   { name: 'Помідор', kcal: 18, protein: 0.9, fat: 0.2, carbs: 3.9 },
   { name: 'Капуста, тушкована', kcal: 40, protein: 2, fat: 1, carbs: 6 },
 ];
+
+/** Швидкі кнопки для води й решти денних чисел */
+function DayStats({ day, goals, onWater, onOpen }) {
+  const water = num(day.water);
+  const glass = 250;
+
+  return (
+    <div className="h-quick">
+      <div className="h-quick-w">
+        <span className="h-quick-l">Вода</span>
+        <button className="h-quick-b" disabled={water <= 0} onClick={() => onWater(Math.max(0, water - glass))}>−</button>
+        <span className="h-quick-v">{water}<i> мл</i></span>
+        <button className="h-quick-b" onClick={() => onWater(water + glass)}>+</button>
+        <button className="h-quick-x" onClick={() => onWater(water + 500)}>+500</button>
+      </div>
+      <button className="h-btn h-quick-more" onClick={onOpen}>
+        Кроки, тренування, сон
+      </button>
+    </div>
+  );
+}
+
+/** Решта денних чисел — те, що вводиться раз на день */
+function DayModal({ date, day, onClose, onDone }) {
+  const [steps, setSteps] = useState(day.steps ? String(day.steps) : '');
+  const [burned, setBurned] = useState(day.burned ? String(day.burned) : '');
+  const [workout, setWorkout] = useState(day.workout ? String(day.workout) : '');
+  const [sleep, setSleep] = useState(day.sleep ? String(day.sleep) : '');
+  const [water, setWater] = useState(day.water ? String(day.water) : '');
+  const [mood, setMood] = useState(day.mood || '');
+  const [note, setNote] = useState(day.note || '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const save = async () => {
+    setBusy(true); setErr('');
+    try {
+      await api('/api/health', {
+        method: 'POST',
+        body: { action: 'day', day: { date, steps, burned, workout, sleep, water, mood, note } },
+      });
+      await onDone();
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title={`День ${date}`} onClose={onClose} onSave={save} busy={busy} error={err}>
+      <div className="h-row2">
+        <div>
+          <label>Кроки</label>
+          <input type="number" inputMode="numeric" value={steps} autoFocus onChange={(e) => setSteps(e.target.value)} />
+        </div>
+        <div>
+          <label>Вода, мл</label>
+          <input type="number" inputMode="numeric" step="50" value={water} onChange={(e) => setWater(e.target.value)} />
+        </div>
+        <div>
+          <label>Спалено, ккал</label>
+          <input type="number" inputMode="numeric" value={burned} onChange={(e) => setBurned(e.target.value)} />
+        </div>
+        <div>
+          <label>Тренування, хв</label>
+          <input type="number" inputMode="numeric" value={workout} onChange={(e) => setWorkout(e.target.value)} />
+        </div>
+        <div>
+          <label>Сон, год</label>
+          <input type="number" inputMode="decimal" step="0.5" value={sleep} onChange={(e) => setSleep(e.target.value)} />
+        </div>
+      </div>
+      <label>Самопочуття</label>
+      <div className="h-pills">
+        {MOODS.map((m) => (
+          <button key={m} className={'h-pill' + (mood === m ? ' on' : '')} onClick={() => setMood(mood === m ? '' : m)}>
+            {m}
+          </button>
+        ))}
+      </div>
+      <label>Примітка</label>
+      <input type="text" value={note} onChange={(e) => setNote(e.target.value)} />
+      <div className="h-hint">
+        Кроки й спалені калорії подивіться в «Здоровʼї» на iPhone — сторінка
+        сама їх не бачить. Як налаштувати, щоб вони підставлялись автоматично,
+        написано в кінці вкладки «Цілі».
+      </div>
+    </Modal>
+  );
+}
 
 /* ---------- Що доїсти ---------- */
 
@@ -2187,6 +2300,26 @@ function GoalsTab({ data, reload, setBusy }) {
         {saved
           ? <span className="h-ok">збережено</span>
           : dirty && <span className="h-dirty">є незбережені зміни</span>}
+      </div>
+
+      <div className="h-sec"><h3>Кроки з годинника</h3></div>
+      <div className="h-hint">
+        Сторінка не бачить Apple Health — браузеру туди доступу не дають.
+        Але «Команди» на iPhone бачать. Якщо задати змінну
+        <b> HEALTH_INGEST_TOKEN</b> у Vercel, зʼявиться адреса
+        <b> /api/health-in</b>, і команда зможе щовечора надсилати туди
+        кроки та спалені калорії — вони підставлятимуться самі.
+        <div className="h-steps">
+          <div>1. «Команди» → нова команда → <b>Знайти дані «Здоровʼя»</b>, тип
+            «Кроки», за сьогодні, підсумувати.</div>
+          <div>2. Додати дію <b>Отримати вміст URL</b>: метод POST, заголовок
+            <code> Authorization: Bearer ваш-ключ</code>, тіло JSON
+            <code> steps</code> = результат попереднього кроку.</div>
+          <div>3. В «Автоматизації» поставити запуск щодня о 23:50.</div>
+        </div>
+        Ключ вигадайте самі — довгий рядок, який більше ніде не
+        використовується. Поки змінної немає, адреса відповідає «не знайдено»,
+        тож дописати щось у розділ повз вхід неможливо.
       </div>
 
       <div className="h-priv">
