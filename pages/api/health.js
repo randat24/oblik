@@ -1,6 +1,7 @@
 import { withAuth, currentActor } from '../../lib/auth';
 import {
   readAll, saveDay, addFood, delFood, recalcDay, saveBody, saveGoals,
+  saveProduct, lookupBarcode,
   isOwner, healthOwner, todayKyiv,
 } from '../../lib/health';
 
@@ -41,6 +42,17 @@ export default withAuth(async (req, res) => {
 
     if (action === 'body') {
       await saveBody(req.body.body || {});
+      return res.json(await readAll());
+    }
+
+    // Пошук за штрихкодом. Дані самі по собі не змінюються — тому окремо
+    // від решти дій і без перечитування всього розділу.
+    if (action === 'barcode') {
+      return res.json(await lookupBarcode(req.body.code));
+    }
+
+    if (action === 'product') {
+      await saveProduct(req.body.product || {});
       return res.json(await readAll());
     }
 
