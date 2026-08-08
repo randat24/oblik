@@ -1573,3 +1573,56 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-norm-v i { font-size: .9rem; font-style: normal; color: var(--muted); }
 .h-norm-l { font-size: .74rem; color: var(--muted); margin-top: 6px; }
 .h-norm-m { font-family: var(--mono); font-size: .84rem; margin: 10px 0 12px; }
+
+/* Середня вага */
+.h-avg {
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--green); border-radius: var(--r);
+  padding: 14px 16px; margin-bottom: 8px;
+}
+.h-avg-l { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.h-avg-v { font-family: var(--mono); font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+.h-avg-v i { font-size: .8rem; font-style: normal; color: var(--muted); }
+.h-avg-d { font-family: var(--mono); font-size: .82rem; margin-top: 3px; color: var(--muted); }
+.h-avg-d.is-up { color: var(--red); }
+.h-avg-d.is-down { color: var(--green); }
+.h-avg-n { font-size: .74rem; color: var(--muted); margin-top: 6px; }
+
+/* Страви */
+.h-dish {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 13px 15px; margin-bottom: 8px;
+}
+.h-dish-h { display: flex; align-items: baseline; gap: 10px; }
+.h-dish-n { font-weight: 600; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.h-dish-k { font-family: var(--mono); font-weight: 700; flex: 0 0 auto; }
+.h-dish-m { font-family: var(--mono); font-size: .76rem; color: var(--muted); margin-top: 3px; }
+.h-dish-m i { font-style: normal; color: var(--text-dim); }
+.h-dish-i {
+  display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 8px 0 10px;
+  font-size: .76rem; color: var(--text-dim);
+}
+.h-dish-i span::after { content: '·'; color: var(--muted); margin-left: 8px; }
+.h-dish-i span:last-child::after { content: ''; }
+.h-dish-total {
+  margin-top: 14px; padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--panel-2); border-left: 2px solid var(--green);
+  font-size: .82rem; font-family: var(--mono);
+}
+.h-dish-total b { font-size: 1rem; }
+.h-seen-b.is-dish { border-color: var(--amber-dim); color: var(--amber); }
+
+.h-ing {
+  border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  padding: 10px; margin-bottom: 8px; background: var(--panel-2);
+}
+.h-ing-top { display: flex; gap: 6px; align-items: center; }
+.h-ing-n { flex: 1 1 auto; min-width: 0; }
+.h-ing-g { flex: 0 0 74px; }
+.h-ing .h-row4 { margin-top: 8px; }
+
+.h-toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  background: var(--panel-3); border: 1px solid var(--line); border-radius: 20px;
+  padding: 9px 16px; font-size: .84rem; box-shadow: var(--shadow); z-index: 300;
+}
