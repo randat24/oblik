@@ -106,6 +106,29 @@ function calcNorm({ sex, weight, height, age, activity, aim }) {
   };
 }
 
+/**
+ * Ковзне середнє за 7 днів. Денна вага стрибає на кілограм від солі й води,
+ * тож саме згладжене число показує справжній рух, а не шум.
+ */
+function weekly(days) {
+  const pts = days.filter((d) => d.weight != null);
+  return pts.map((d, i) => {
+    const from = stamp(d.date) - 6 * 86400000;
+    const win = pts.filter((x, j) => j <= i && stamp(x.date) >= from);
+    return { d: d.date, v: win.reduce((a, x) => a + x.weight, 0) / win.length, n: win.length };
+  });
+}
+
+/** Середнє за останні N днів від найсвіжішого запису */
+function avgLast(days, back = 0, span = 7) {
+  const pts = days.filter((d) => d.weight != null);
+  if (!pts.length) return null;
+  const end = stamp(pts[pts.length - 1].date) - back * span * 86400000;
+  const start = end - (span - 1) * 86400000;
+  const win = pts.filter((d) => stamp(d.date) >= start && stamp(d.date) <= end);
+  return win.length ? win.reduce((a, d) => a + d.weight, 0) / win.length : null;
+}
+
 function bmi(weight, height) {
   const w = num(weight), h = num(height) / 100;
   return w > 0 && h > 0 ? w / (h * h) : null;
@@ -217,6 +240,8 @@ function LineChart({ points, goal, unit = '' }) {
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(2)},${y(p.v).toFixed(2)}`).join(' ');
   const area = `${line} L${x(points.length - 1).toFixed(2)},${H} L${x(0).toFixed(2)},${H} Z`;
   const ticks = [hi, (hi + lo) / 2, lo];
+  // дат на осі має бути близько пʼяти — інакше вони налазять одна на одну
+  const labelStep = Math.max(1, Math.ceil(points.length / 5));
 
   return (
     <div className="h-chart">
@@ -238,15 +263,20 @@ function LineChart({ points, goal, unit = '' }) {
               key={i}
               className="h-dot"
               style={{ left: `${x(i)}%`, top: `${(y(p.v) / H) * 100}%` }}
-              title={`${p.d} — ${p.v}${unit}`}
+              title={`${p.d} — ${n1(p.v)}${unit}`}
             >
-              <b>{n1(p.v)}</b>
+              {/* число біля кожної точки читається лише коли їх мало */}
+              {(points.length <= 8 || i === 0 || i === points.length - 1) && <b>{n1(p.v)}</b>}
             </span>
           ))}
         </div>
       </div>
       <div className="h-chart-x">
-        {points.map((p, i) => <span key={i} style={{ left: `${x(i)}%` }}>{short(p.d)}</span>)}
+        {points.map((p, i) => (
+          (i % labelStep === 0 || i === points.length - 1)
+            ? <span key={i} style={{ left: `${x(i)}%` }}>{short(p.d)}</span>
+            : null
+        ))}
       </div>
     </div>
   );
@@ -347,8 +377,9 @@ function Bar({ label, value, goal, unit = 'г', tone }) {
 
 /* ---------- Вкладка «День» ---------- */
 
-function DayTab({ data, date, setDate, reload, setBusy }) {
+function DayTab({ data, date, setDate, reload, setBusy, toast }) {
   const [food, setFood] = useState(null);
+  const [copy, setCopy] = useState(false);
   const day = data.days.find((d) => d.date === date) || { date, kcal: 0, protein: 0, fat: 0, carbs: 0, water: 0, steps: 0 };
   const meals = data.food.filter((f) => f.date === date);
   const g = data.goals || {};
@@ -408,7 +439,10 @@ function DayTab({ data, date, setDate, reload, setBusy }) {
 
       <div className="h-sec">
         <h3>Що зʼїв<span className="h-count">{meals.length}</span></h3>
-        <button className="h-btn h-btn-p" onClick={() => setFood({ date })}>+ Додати їжу</button>
+        <div className="h-sec-a">
+          <button className="h-btn" onClick={() => setCopy(true)}>Скопіювати день</button>
+          <button className="h-btn h-btn-p" onClick={() => setFood({ date })}>+ Додати їжу</button>
+        </div>
       </div>
 
       {meals.length === 0 ? (
@@ -437,8 +471,18 @@ function DayTab({ data, date, setDate, reload, setBusy }) {
           date={date}
           known={data.food}
           products={data.products || []}
+          dishes={data.dishes || []}
           onClose={() => setFood(null)}
           onDone={reload}
+        />
+      )}
+
+      {copy && (
+        <CopyDayModal
+          date={date}
+          days={data.days}
+          onClose={() => setCopy(false)}
+          onDone={async (n) => { await reload(); toast(n ? `Скопійовано записів: ${n}` : 'Копіювати не було чого'); }}
         />
       )}
     </>
@@ -560,7 +604,7 @@ function BarcodeScanner({ onFound, onClose }) {
   );
 }
 
-function FoodModal({ date, known, products = [], onClose, onDone }) {
+function FoodModal({ date, known, products = [], dishes = [], onClose, onDone }) {
   const [meal, setMeal] = useState(MEALS[0]);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
@@ -577,6 +621,28 @@ function FoodModal({ date, known, products = [], onClose, onDone }) {
   const [found, setFound] = useState('');
   const [newCode, setNewCode] = useState('');
   const [np, setNp] = useState({});
+  const [portionOf, setPortionOf] = useState(null);
+  const [portions, setPortions] = useState('1');
+
+  const takeDish = (d) => {
+    setPer100(null); setNewCode('');
+    setPortionOf(d);
+    setPortions('1');
+    setName(d.name);
+    setFound('з ваших страв');
+    setErr('');
+  };
+
+  // порції змінились — перераховуємо страву
+  useEffect(() => {
+    if (!portionOf) return;
+    const k = num(portions) || 1;
+    setKcal(String(n1(portionOf.kcal * k)));
+    setProtein(String(n1(portionOf.protein * k)));
+    setFat(String(n1(portionOf.fat * k)));
+    setCarbs(String(n1(portionOf.carbs * k)));
+    setAmount(k === 1 ? '1 порція' : `${n1(k)} порції`);
+  }, [portionOf, portions]);
 
   // грами змінились — перераховуємо все, що знаємо на 100 г
   useEffect(() => {
@@ -590,6 +656,7 @@ function FoodModal({ date, known, products = [], onClose, onDone }) {
   }, [per100, grams]);
 
   const takeProduct = (p, note) => {
+    setPortionOf(null);
     setPer100({ kcal: p.kcal, protein: p.protein, fat: p.fat, carbs: p.carbs });
     setName([p.name, p.brand].filter(Boolean).join(' · ') || p.name || 'Без назви');
     setGrams(String(p.serving > 0 ? p.serving : 100));
@@ -624,7 +691,7 @@ function FoodModal({ date, known, products = [], onClose, onDone }) {
   });
 
   const use = (f) => {
-    setPer100(null); setFound('');
+    setPer100(null); setPortionOf(null); setFound('');
     setName(f.name); setAmount(f.amount);
     setKcal(String(f.kcal)); setProtein(String(f.protein));
     setFat(String(f.fat)); setCarbs(String(f.carbs));
@@ -663,12 +730,39 @@ function FoodModal({ date, known, products = [], onClose, onDone }) {
           Сканувати штрихкод
         </button>
       </div>
+      {dishes.length > 0 && (
+        <>
+          <label>Мої страви</label>
+          <div className="h-seen">
+            {dishes.map((d) => (
+              <button key={d.name} className="h-seen-b is-dish" onClick={() => takeDish(d)}>
+                {d.name} <i>{Math.round(d.kcal)} ккал</i>
+              </button>
+            ))}
+          </div>
+          {portionOf && (
+            <>
+              <label>Скільки порцій</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.25"
+                value={portions}
+                onChange={(e) => setPortions(e.target.value)}
+              />
+              <div className="h-hint">
+                Одна порція «{portionOf.name}» — <b>{Math.round(portionOf.kcal)}</b> ккал.
+              </div>
+            </>
+          )}
+        </>
+      )}
       <label>Страва</label>
       <input
         type="text"
         value={name}
         autoFocus
-        onChange={(e) => { setName(e.target.value); setPer100(null); setFound(''); }}
+        onChange={(e) => { setName(e.target.value); setPer100(null); setPortionOf(null); setFound(''); }}
         placeholder="вівсянка, куряче філе…"
       />
       {found && <div className="h-found">Знайдено {found}</div>}
@@ -726,7 +820,7 @@ function FoodModal({ date, known, products = [], onClose, onDone }) {
           ))}
         </div>
       )}
-      {per100 ? (
+      {portionOf ? null : per100 ? (
         <>
           <label>Скільки зʼїли, г</label>
           <input
@@ -758,12 +852,287 @@ function FoodModal({ date, known, products = [], onClose, onDone }) {
   );
 }
 
+/* ---------- Вкладка «Страви» ---------- */
+
+function DishesTab({ data, reload, setBusy }) {
+  const [edit, setEdit] = useState(null); // {name, items} або 'new'
+  const dishes = data.dishes || [];
+
+  const remove = async (name) => {
+    if (!confirm(`Прибрати страву «${name}»?`)) return;
+    setBusy(true);
+    try {
+      await api('/api/health', { method: 'POST', body: { action: 'delDish', name } });
+      await reload();
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <div className="h-sec">
+        <h3>Мої страви<span className="h-count">{dishes.length}</span></h3>
+        <div className="h-sec-a">
+          <button className="h-btn h-btn-p" onClick={() => setEdit('new')}>+ Страва</button>
+        </div>
+      </div>
+      <div className="h-note">
+        Страва — це набір складників із порахованим підсумком. Записали раз —
+        далі додаєте її в день одним дотиком, не перебираючи інгредієнти.
+      </div>
+
+      {dishes.length === 0 ? (
+        <div className="h-empty">Страв ще немає</div>
+      ) : (
+        dishes.map((d) => (
+          <div className="h-dish" key={d.name}>
+            <div className="h-dish-h">
+              <span className="h-dish-n">{d.name}</span>
+              <span className="h-dish-k">{Math.round(d.kcal)} ккал</span>
+              <button className="h-food-x" onClick={() => remove(d.name)} title="Прибрати">×</button>
+            </div>
+            <div className="h-dish-m">
+              {d.grams > 0 && <>{n1(d.grams)} г · </>}
+              Б {n1(d.protein)} · Ж {n1(d.fat)} · В {n1(d.carbs)}
+              {d.grams > 0 && <> · <i>{Math.round((d.kcal / d.grams) * 100)} ккал/100 г</i></>}
+            </div>
+            <div className="h-dish-i">
+              {d.items.map((it, i) => (
+                <span key={i}>{it.name}{it.grams ? ` ${n1(it.grams)} г` : ''}</span>
+              ))}
+            </div>
+            <button className="h-btn" onClick={() => setEdit(d)}>Змінити</button>
+          </div>
+        ))
+      )}
+
+      {edit && (
+        <DishModal
+          dish={edit === 'new' ? null : edit}
+          products={data.products || []}
+          onClose={() => setEdit(null)}
+          onDone={reload}
+        />
+      )}
+    </>
+  );
+}
+
+function DishModal({ dish, products, onClose, onDone }) {
+  const [name, setName] = useState(dish?.name || '');
+  const [items, setItems] = useState(
+    dish?.items?.length ? dish.items.map((i) => ({ ...i })) : [{ name: '', grams: '', kcal: '', protein: '', fat: '', carbs: '' }]
+  );
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const set = (i, key, v) => setItems((p) => p.map((it, j) => (j === i ? { ...it, [key]: v } : it)));
+
+  // взяли продукт з бази — рахуємо його склад від грамів
+  const fromProduct = (i, p) => {
+    const g = num(items[i].grams) || 100;
+    setItems((prev) => prev.map((it, j) => (j === i ? {
+      name: [p.name, p.brand].filter(Boolean).join(' · '),
+      grams: String(g),
+      kcal: String(n1((p.kcal * g) / 100)),
+      protein: String(n1((p.protein * g) / 100)),
+      fat: String(n1((p.fat * g) / 100)),
+      carbs: String(n1((p.carbs * g) / 100)),
+      per100: { kcal: p.kcal, protein: p.protein, fat: p.fat, carbs: p.carbs },
+    } : it)));
+  };
+
+  // грами змінились у складника, взятого з бази — перераховуємо
+  const setGrams = (i, v) => {
+    setItems((prev) => prev.map((it, j) => {
+      if (j !== i) return it;
+      if (!it.per100) return { ...it, grams: v };
+      const k = num(v) / 100;
+      return {
+        ...it, grams: v,
+        kcal: String(n1(it.per100.kcal * k)),
+        protein: String(n1(it.per100.protein * k)),
+        fat: String(n1(it.per100.fat * k)),
+        carbs: String(n1(it.per100.carbs * k)),
+      };
+    }));
+  };
+
+  const total = items.reduce((a, it) => ({
+    grams: a.grams + num(it.grams), kcal: a.kcal + num(it.kcal),
+    protein: a.protein + num(it.protein), fat: a.fat + num(it.fat), carbs: a.carbs + num(it.carbs),
+  }), { grams: 0, kcal: 0, protein: 0, fat: 0, carbs: 0 });
+
+  const save = async () => {
+    if (!name.trim()) { setErr('Вкажіть назву страви'); return; }
+    setBusy(true); setErr('');
+    try {
+      await api('/api/health', {
+        method: 'POST',
+        body: {
+          action: 'dish',
+          dish: {
+            name: name.trim(),
+            rename: dish?.name || '',
+            items: items
+              .filter((it) => it.name?.trim() || num(it.kcal))
+              .map((it) => ({
+                name: it.name, grams: num(it.grams), kcal: num(it.kcal),
+                protein: num(it.protein), fat: num(it.fat), carbs: num(it.carbs),
+              })),
+          },
+        },
+      });
+      await onDone();
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal
+      title={dish ? `Страва: ${dish.name}` : 'Нова страва'}
+      onClose={onClose}
+      onSave={save}
+      busy={busy}
+      error={err}
+    >
+      <label>Назва</label>
+      <input type="text" value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="яєчня з овочами" />
+
+      <label>Складники</label>
+      {items.map((it, i) => (
+        <div className="h-ing" key={i}>
+          <div className="h-ing-top">
+            <input
+              type="text"
+              className="h-ing-n"
+              value={it.name}
+              placeholder="продукт"
+              onChange={(e) => set(i, 'name', e.target.value)}
+            />
+            <input
+              type="number"
+              inputMode="decimal"
+              className="h-ing-g"
+              value={it.grams}
+              placeholder="г"
+              onChange={(e) => setGrams(i, e.target.value)}
+            />
+            <button className="h-food-x" onClick={() => setItems((p) => p.filter((_, j) => j !== i))}>×</button>
+          </div>
+          {it.name?.trim() && !it.per100 && (
+            <ProductHints
+              q={it.name}
+              products={products}
+              onPick={(p) => fromProduct(i, p)}
+            />
+          )}
+          <div className="h-row4">
+            <input type="number" inputMode="decimal" value={it.kcal} placeholder="ккал" onChange={(e) => set(i, 'kcal', e.target.value)} />
+            <input type="number" inputMode="decimal" value={it.protein} placeholder="Б" onChange={(e) => set(i, 'protein', e.target.value)} />
+            <input type="number" inputMode="decimal" value={it.fat} placeholder="Ж" onChange={(e) => set(i, 'fat', e.target.value)} />
+            <input type="number" inputMode="decimal" value={it.carbs} placeholder="В" onChange={(e) => set(i, 'carbs', e.target.value)} />
+          </div>
+        </div>
+      ))}
+
+      <button
+        className="h-btn"
+        style={{ width: '100%', marginTop: 10, borderStyle: 'dashed' }}
+        onClick={() => setItems((p) => [...p, { name: '', grams: '', kcal: '', protein: '', fat: '', carbs: '' }])}
+      >
+        + складник
+      </button>
+
+      <div className="h-dish-total">
+        Разом: <b>{Math.round(total.kcal)}</b> ккал
+        {total.grams > 0 && <> · {n1(total.grams)} г</>}
+        {' · '}Б {n1(total.protein)} · Ж {n1(total.fat)} · В {n1(total.carbs)}
+      </div>
+    </Modal>
+  );
+}
+
+/** Підказки з бази продуктів під полем складника */
+function ProductHints({ q, products, onPick }) {
+  const s = (q || '').trim().toLowerCase();
+  const hits = s.length >= 2
+    ? products.filter((p) => (p.name + ' ' + p.brand).toLowerCase().includes(s)).slice(0, 4)
+    : [];
+  if (!hits.length) return null;
+  return (
+    <div className="h-seen">
+      {hits.map((p) => (
+        <button key={p.row} className="h-seen-b is-prod" onClick={() => onPick(p)}>
+          {p.name} <i>{Math.round(p.kcal)} ккал/100 г</i>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Перенести їжу з іншого дня */
+function CopyDayModal({ date, days, onClose, onDone }) {
+  const withFood = days.filter((d) => d.date !== date && d.kcal > 0)
+    .sort((a, b) => stamp(b.date) - stamp(a.date));
+  const [from, setFrom] = useState(withFood[0]?.date || '');
+  const [meals, setMeals] = useState(MEALS);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const toggle = (m) => setMeals((p) => (p.includes(m) ? p.filter((x) => x !== m) : [...p, m]));
+
+  const save = async () => {
+    if (!from) { setErr('Немає дня, з якого копіювати'); return; }
+    setBusy(true); setErr('');
+    try {
+      const r = await api('/api/health', {
+        method: 'POST', body: { action: 'copyDay', from, to: date, meals },
+      });
+      await onDone(r.copied);
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title={`Скопіювати в ${date}`} onClose={onClose} onSave={save} saveLabel="Скопіювати" busy={busy} error={err}>
+      {withFood.length === 0 ? (
+        <div className="h-empty">Немає жодного дня із записаною їжею</div>
+      ) : (
+        <>
+          <label>Звідки</label>
+          <select value={from} onChange={(e) => setFrom(e.target.value)}>
+            {withFood.map((d) => (
+              <option key={d.date} value={d.date}>{d.date} · {Math.round(d.kcal)} ккал</option>
+            ))}
+          </select>
+          <label>Що саме</label>
+          <div className="h-pills">
+            {MEALS.map((m) => (
+              <button key={m} className={'h-pill' + (meals.includes(m) ? ' on' : '')} onClick={() => toggle(m)}>
+                {m}
+              </button>
+            ))}
+          </div>
+          <div className="h-hint">
+            Записи додадуться до того, що вже є в цьому дні, — нічого не зітреться.
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
 /* ---------- Вкладка «Вага» ---------- */
 
 function WeightTab({ data, reload }) {
   const [open, setOpen] = useState(null);   // дата, яку редагуємо, або 'new'
   const [shot, setShot] = useState(null);
   const [compare, setCompare] = useState(false);
+  const [avgMode, setAvgMode] = useState(false);
 
   const weights = data.days.filter((d) => d.weight !== null && d.weight !== undefined);
   const last = weights[weights.length - 1] || null;
@@ -781,6 +1150,11 @@ function WeightTab({ data, reload }) {
   const history = [...weights].reverse();
   // порівнювати є що лише коли фото є хоча б у двох днях
   const withPhotos = data.days.filter((d) => PHOTO_SIDES.some((s) => d[s.key]));
+
+  const avg7 = avgLast(data.days, 0);
+  const avgPrev = avgLast(data.days, 1);
+  const trend = avg7 !== null && avgPrev !== null ? n1(avg7 - avgPrev) : null;
+  const smooth = weekly(data.days);
 
   return (
     <>
@@ -815,9 +1189,28 @@ function WeightTab({ data, reload }) {
         )}
       </div>
 
+      {avg7 !== null && (
+        <div className="h-avg">
+          <div className="h-avg-l">Середнє за 7 днів</div>
+          <div className="h-avg-v">{n1(avg7)} <i>кг</i></div>
+          {trend !== null && (
+            <div className={'h-avg-d' + (trend > 0 ? ' is-up' : trend < 0 ? ' is-down' : '')}>
+              {trend > 0 ? '+' : ''}{trend} кг до попереднього тижня
+            </div>
+          )}
+          <div className="h-avg-n">
+            Денна вага стрибає від солі й води — рухається саме це число.
+          </div>
+        </div>
+      )}
+
       <div className="h-sec">
         <h3>Динаміка ваги</h3>
         <div className="h-sec-a">
+          <div className="h-pills">
+            <button className={'h-pill' + (!avgMode ? ' on' : '')} onClick={() => setAvgMode(false)}>Дні</button>
+            <button className={'h-pill' + (avgMode ? ' on' : '')} onClick={() => setAvgMode(true)}>Середнє</button>
+          </div>
           {withPhotos.length >= 2 && (
             <button className="h-btn" onClick={() => setCompare(true)}>Порівняти фото</button>
           )}
@@ -826,10 +1219,16 @@ function WeightTab({ data, reload }) {
       </div>
 
       <LineChart
-        points={weights.slice(-14).map((d) => ({ d: d.date, v: d.weight }))}
+        points={(avgMode ? smooth : weights.map((d) => ({ d: d.date, v: d.weight }))).slice(-14)}
         goal={goal || null}
         unit=" кг"
       />
+      {avgMode && (
+        <div className="h-hint">
+          Кожна точка — середнє за сім днів до неї. Лінія рівніша за денну,
+          бо не реагує на разові стрибки.
+        </div>
+      )}
 
       <div className="h-sec"><h3>Історія<span className="h-count">{history.length}</span></h3></div>
       {history.length === 0 ? (
@@ -1430,12 +1829,14 @@ function GoalsTab({ data, reload, setBusy }) {
 const TABS = [
   { key: 'day', label: 'День' },
   { key: 'weight', label: 'Вага' },
+  { key: 'dishes', label: 'Страви' },
   { key: 'body', label: 'Заміри' },
   { key: 'goals', label: 'Цілі' },
 ];
 
 export default function Health() {
   const [data, setData] = useState(null);
+  const [note, setNote] = useState('');
   const [tab, setTab] = useState('day');
   const [date, setDate] = useState(today());
   const [busy, setBusy] = useState(false);
@@ -1451,6 +1852,12 @@ export default function Health() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // одне коротке повідомлення внизу — окремої системи сповіщень тут не треба
+  const toast = useCallback((text) => {
+    setNote(text);
+    setTimeout(() => setNote((n) => (n === text ? '' : n)), 3000);
+  }, []);
 
   if (error) {
     return (
@@ -1495,11 +1902,13 @@ export default function Health() {
           ))}
         </div>
 
-        {tab === 'day' && <DayTab data={data} date={date} setDate={setDate} reload={load} setBusy={setBusy} />}
+        {tab === 'day' && <DayTab data={data} date={date} setDate={setDate} reload={load} setBusy={setBusy} toast={toast} />}
         {tab === 'weight' && <WeightTab data={data} reload={load} />}
+        {tab === 'dishes' && <DishesTab data={data} reload={load} setBusy={setBusy} />}
         {tab === 'body' && <BodyTab data={data} reload={load} />}
         {tab === 'goals' && <GoalsTab data={data} reload={load} setBusy={setBusy} />}
       </div>
+      {note && <div className="h-toast">{note}</div>}
     </>
   );
 }

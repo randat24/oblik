@@ -1,7 +1,7 @@
 import { withAuth, currentActor } from '../../lib/auth';
 import {
   readAll, saveDay, addFood, delFood, recalcDay, saveBody, saveGoals,
-  saveProduct, lookupBarcode,
+  saveProduct, lookupBarcode, saveDish, delDish, copyDay,
   isOwner, healthOwner, todayKyiv,
 } from '../../lib/health';
 
@@ -54,6 +54,25 @@ export default withAuth(async (req, res) => {
     if (action === 'product') {
       await saveProduct(req.body.product || {});
       return res.json(await readAll());
+    }
+
+    if (action === 'dish') {
+      const r = await saveDish(req.body.dish || {});
+      if (r.error) return res.status(400).json(r);
+      return res.json(await readAll());
+    }
+
+    if (action === 'delDish') {
+      await delDish(req.body.name);
+      return res.json(await readAll());
+    }
+
+    if (action === 'copyDay') {
+      const { from, to, meals } = req.body;
+      if (!from || !to) return res.status(400).json({ error: 'Вкажіть дати' });
+      if (from === to) return res.status(400).json({ error: 'Це той самий день' });
+      const r = await copyDay({ from, to, meals });
+      return res.json({ ...(await readAll()), copied: r.copied });
     }
 
     if (action === 'goals') {
