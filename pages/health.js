@@ -21,6 +21,12 @@ const BODY_FIELDS = [
   { key: 'fat', label: '% жиру', unit: '%' },
 ];
 
+// Стать, зріст і рік народження — не цілі, а вихідні дані для формул
+const PROFILE_FIELDS = [
+  { key: 'height', label: 'Зріст', unit: 'см' },
+  { key: 'birthYear', label: 'Рік народження', unit: '' },
+];
+
 const GOAL_FIELDS = [
   { key: 'startWeight', label: 'Стартова вага', unit: 'кг' },
   { key: 'weight', label: 'Цільова вага', unit: 'кг' },
@@ -31,6 +37,44 @@ const GOAL_FIELDS = [
   { key: 'water', label: 'Вода', unit: 'мл' },
   { key: 'steps', label: 'Кроки', unit: '' },
 ];
+
+/**
+ * Відсоток жиру за формулою ВМС США (US Navy) — та сама, що в популярних
+ * застосунках. Чоловікам потрібні талія, шия і зріст; жінкам ще й стегна.
+ * Обхвати в сантиметрах.
+ */
+function navyFat({ sex, height, waist, neck, hips }) {
+  const h = num(height), w = num(waist), n = num(neck);
+  if (!(h > 0 && w > 0 && n > 0)) return null;
+  const lg = Math.log10;
+  let d;
+  if (sex === 'f') {
+    const hp = num(hips);
+    if (!(hp > 0) || w + hp - n <= 0) return null;
+    d = 1.29579 - 0.35004 * lg(w + hp - n) + 0.22100 * lg(h);
+  } else {
+    if (w - n <= 0) return null;
+    d = 1.0324 - 0.19077 * lg(w - n) + 0.15456 * lg(h);
+  }
+  if (!(d > 0)) return null;
+  const v = 495 / d - 450;
+  // за межами цього діапазону формула вже не має сенсу — краще не показувати
+  return v >= 3 && v <= 70 ? v : null;
+}
+
+function bmi(weight, height) {
+  const w = num(weight), h = num(height) / 100;
+  return w > 0 && h > 0 ? w / (h * h) : null;
+}
+
+/** Як читати ІМТ — підпис поруч із числом */
+function bmiLabel(v) {
+  if (v === null) return '';
+  if (v < 18.5) return 'дефіцит ваги';
+  if (v < 25) return 'норма';
+  if (v < 30) return 'надлишок';
+  return 'ожиріння';
+}
 
 const PHOTO_SIDES = [
   { key: 'front', label: 'Спереду' },
@@ -731,6 +775,29 @@ function BodyTab({ data, reload }) {
   const last = rows[0];
   const prev = rows[1];
 
+  const g = data.goals || {};
+  // вага на день заміру, а якщо її нема — найсвіжіша до цієї дати
+  const weightAt = (date) => {
+    const upto = data.days.filter((d) => d.weight != null && stamp(d.date) <= stamp(date));
+    return upto.length ? upto[upto.length - 1].weight : null;
+  };
+  const derive = (m) => {
+    if (!m) return null;
+    const w = weightAt(m.date);
+    const fat = m.fat != null ? m.fat : navyFat({ sex: g.sex, height: g.height, waist: m.waist, neck: m.neck, hips: m.hips });
+    const mass = w != null && fat != null ? (w * fat) / 100 : null;
+    return {
+      weight: w,
+      fat,
+      fatMass: mass,
+      leanMass: mass != null ? w - mass : null,
+      bmi: bmi(w, g.height),
+    };
+  };
+  const dLast = derive(last);
+  const dPrev = derive(prev);
+  const delta = (a, b) => (a != null && b != null ? n1(a - b) : null);
+
   return (
     <>
       <div className="h-sec">
@@ -743,7 +810,7 @@ function BodyTab({ data, reload }) {
       ) : (
         <>
           <div className="h-mgrid">
-            {BODY_FIELDS.filter((f) => last[f.key] != null).map((f) => {
+            {BODY_FIELDS.filter((f) => f.key !== 'fat' && last[f.key] != null).map((f) => {
               const d = prev && prev[f.key] != null ? n1(last[f.key] - prev[f.key]) : null;
               return (
                 <div className="h-mcell" key={f.key}>
@@ -759,6 +826,42 @@ function BodyTab({ data, reload }) {
             })}
           </div>
           <div className="h-note">Останні заміри: <b>{last.date}</b></div>
+
+          {dLast && (dLast.fat != null || dLast.bmi != null) && (
+            <>
+              <div className="h-sec"><h3>Порахувалось саме</h3></div>
+              <div className="h-mgrid">
+                {dLast.fat != null && (
+                  <Derived label="Жир" value={n1(dLast.fat)} unit="%"
+                    delta={delta(dLast.fat, dPrev?.fat)} good="down" />
+                )}
+                {dLast.fatMass != null && (
+                  <Derived label="Жирова маса" value={n1(dLast.fatMass)} unit="кг"
+                    delta={delta(dLast.fatMass, dPrev?.fatMass)} good="down" />
+                )}
+                {dLast.leanMass != null && (
+                  <Derived label="Безжирова маса" value={n1(dLast.leanMass)} unit="кг"
+                    delta={delta(dLast.leanMass, dPrev?.leanMass)} good="up" />
+                )}
+                {dLast.bmi != null && (
+                  <Derived label="ІМТ" value={n1(dLast.bmi)} sub={bmiLabel(dLast.bmi)}
+                    delta={delta(dLast.bmi, dPrev?.bmi)} good="down" />
+                )}
+              </div>
+              <div className="h-hint">
+                Відсоток жиру — за формулою ВМС США (талія, шия, зріст).
+                {dLast.weight != null && <> Маси пораховані з ваги <b>{n1(dLast.weight)} кг</b>.</>}
+                {' '}Це оцінка, а не заміри калiпером — цінна саме динамікою.
+              </div>
+            </>
+          )}
+
+          {!dLast?.fat && (
+            <div className="h-hint">
+              Щоб рахувалися відсоток жиру й маси, вкажіть стать і зріст на
+              вкладці «Цілі», а тут — талію й шию.
+            </div>
+          )}
 
           <div className="h-sec"><h3>Історія<span className="h-count">{rows.length}</span></h3></div>
           <div className="h-tablewrap">
@@ -787,20 +890,53 @@ function BodyTab({ data, reload }) {
   );
 }
 
+/** Порахована величина з різницею від попереднього заміру */
+function Derived({ label, value, unit, sub, delta, good }) {
+  const better = delta === null || delta === 0 ? null
+    : (good === 'down' ? delta < 0 : delta > 0);
+  return (
+    <div className="h-mcell">
+      <div className="h-mcell-v">{value}{unit ? <i> {unit}</i> : null}</div>
+      <div className="h-mcell-l">{label}</div>
+      {sub && <div className="h-mcell-s">{sub}</div>}
+      {delta !== null && delta !== 0 && (
+        <div className={'h-mcell-d' + (better ? ' is-down' : ' is-up')}>
+          {delta > 0 ? '+' : ''}{delta}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BodyModal({ data, onClose, onDone }) {
   const [date, setDate] = useState(today());
   const existing = data.body.find((b) => b.date === date);
   const [vals, setVals] = useState({});
   const [note, setNote] = useState('');
+  const [manualFat, setManualFat] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+
+  const g = data.goals || {};
+  const auto = navyFat({
+    sex: g.sex, height: g.height,
+    waist: vals.waist, neck: vals.neck, hips: vals.hips,
+  });
 
   useEffect(() => {
     const v = {};
     BODY_FIELDS.forEach((f) => { v[f.key] = existing?.[f.key] != null ? String(existing[f.key]) : ''; });
     setVals(v);
     setNote(existing?.note || '');
+    setManualFat(false);
   }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // поки відсоток не правили руками — тримаємо його порахованим
+  useEffect(() => {
+    if (manualFat || auto === null) return;
+    const v = String(n1(auto));
+    setVals((p) => (p.fat === v ? p : { ...p, fat: v }));
+  }, [auto, manualFat]);
 
   const save = async () => {
     setBusy(true); setErr('');
@@ -822,17 +958,38 @@ function BodyModal({ data, onClose, onDone }) {
       <div className="h-row2">
         {BODY_FIELDS.map((f) => (
           <div key={f.key}>
-            <label>{f.label}{f.unit ? `, ${f.unit}` : ''}</label>
+            <label>
+              {f.label}{f.unit ? `, ${f.unit}` : ''}
+              {f.key === 'fat' && auto !== null && !manualFat && <i className="h-auto">авто</i>}
+            </label>
             <input
               type="number"
               inputMode="decimal"
               step="0.1"
               value={vals[f.key] || ''}
-              onChange={(e) => setVals((p) => ({ ...p, [f.key]: e.target.value }))}
+              onChange={(e) => {
+                if (f.key === 'fat') setManualFat(true);
+                setVals((p) => ({ ...p, [f.key]: e.target.value }));
+              }}
             />
           </div>
         ))}
       </div>
+      {auto !== null && (
+        <div className="h-hint">
+          Відсоток жиру порахований за формулою ВМС США з талії, шиї та зросту:
+          {' '}<b>{n1(auto)}%</b>.
+          {manualFat && (
+            <> Ви ввели своє значення — <button className="h-link" onClick={() => setManualFat(false)}>повернути пораховане</button>.</>
+          )}
+        </div>
+      )}
+      {auto === null && (
+        <div className="h-hint">
+          Щоб відсоток жиру рахувався сам, заповніть талію й шию тут, а стать
+          і зріст — на вкладці «Цілі».
+        </div>
+      )}
       <label>Примітка</label>
       <input type="text" value={note} onChange={(e) => setNote(e.target.value)} />
     </Modal>
@@ -843,12 +1000,14 @@ function BodyModal({ data, onClose, onDone }) {
 
 function GoalsTab({ data, reload, setBusy }) {
   const [vals, setVals] = useState(() => {
-    const v = {};
-    GOAL_FIELDS.forEach((f) => { v[f.key] = data.goals?.[f.key] || ''; });
+    const v = { sex: data.goals?.sex || 'm' };
+    [...PROFILE_FIELDS, ...GOAL_FIELDS].forEach((f) => { v[f.key] = data.goals?.[f.key] || ''; });
     return v;
   });
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState('');
+
+  const age = vals.birthYear ? new Date().getFullYear() - num(vals.birthYear) : null;
 
   const save = async () => {
     setBusy(true); setErr(''); setSaved(false);
@@ -863,6 +1022,33 @@ function GoalsTab({ data, reload, setBusy }) {
 
   return (
     <>
+      <div className="h-sec"><h3>Профіль</h3></div>
+      <div className="h-note">
+        Стать і зріст потрібні, щоб застосунок сам рахував відсоток жиру та ІМТ.
+      </div>
+      <label>Стать</label>
+      <div className="h-pills">
+        <button className={'h-pill' + (vals.sex !== 'f' ? ' on' : '')} onClick={() => setVals((p) => ({ ...p, sex: 'm' }))}>Чоловік</button>
+        <button className={'h-pill' + (vals.sex === 'f' ? ' on' : '')} onClick={() => setVals((p) => ({ ...p, sex: 'f' }))}>Жінка</button>
+      </div>
+      <div className="h-row2">
+        {PROFILE_FIELDS.map((f) => (
+          <div key={f.key}>
+            <label>{f.label}{f.unit ? `, ${f.unit}` : ''}</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              step={f.key === 'birthYear' ? '1' : '0.1'}
+              value={vals[f.key]}
+              onChange={(e) => setVals((p) => ({ ...p, [f.key]: e.target.value }))}
+            />
+          </div>
+        ))}
+      </div>
+      {age !== null && age > 0 && age < 120 && (
+        <div className="h-hint">Вам {age} — рахується з року народження.</div>
+      )}
+
       <div className="h-sec"><h3>Мої цілі</h3></div>
       <div className="h-note">
         Ці числа задають норми на день і лінію цілі на графіку ваги.
