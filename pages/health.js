@@ -39,6 +39,9 @@ const PROFILE_FIELDS = [
 
 const GOAL_FIELDS = [
   { key: 'startWeight', label: 'Стартова вага', unit: 'кг' },
+  { key: 'burned', label: 'Ціль руху', unit: 'ккал' },
+  { key: 'exercise', label: 'Ціль тренувань', unit: 'хв' },
+  { key: 'stand', label: 'Ціль розминки', unit: 'год' },
   { key: 'weight', label: 'Цільова вага', unit: 'кг' },
   { key: 'kcal', label: 'Норма калорій', unit: 'ккал' },
   { key: 'protein', label: 'Білки', unit: 'г' },
@@ -427,6 +430,8 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
         <button className="h-nav" onClick={() => shift(1)} disabled={stamp(date) >= stamp(today())}>›</button>
       </div>
 
+      <TodayBoard data={data} day={day} date={date} />
+
       <div className="h-kcal">
         <div className="h-kcal-v">
           {Math.round(eaten)}
@@ -444,8 +449,7 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
         <Bar label="Білки" value={day.protein} goal={num(g.protein)} tone="var(--red)" />
         <Bar label="Жири" value={day.fat} goal={num(g.fat)} tone="var(--amber)" />
         <Bar label="Вуглеводи" value={day.carbs} goal={num(g.carbs)} tone="var(--green)" />
-        {num(g.water) > 0 && <Bar label="Вода" value={day.water} goal={num(g.water)} unit="мл" tone="var(--blue)" />}
-        {num(g.steps) > 0 && <Bar label="Кроки" value={day.steps} goal={num(g.steps)} unit="" tone="var(--blue)" />}
+        {/* вода й кроки вже є вище — у кільцях, плитках і швидких кнопках */}
       </div>
 
       <DayStats
@@ -945,6 +949,212 @@ const BASIC_FOODS = [
   { name: 'Помідор', kcal: 18, protein: 0.9, fat: 0.2, carbs: 3.9 },
   { name: 'Капуста, тушкована', kcal: 40, protein: 2, fat: 1, carbs: 6 },
 ];
+
+/* ---------- Інфографіка в стилі Apple ---------- */
+
+/**
+ * Кільця активності. Три дуги від 12-ї години за годинниковою стрілкою,
+ * як у Apple: рух, тренування, розминка. Перевиконання не обрізаємо —
+ * кільце йде на друге коло, це видно за яскравішим кінцем.
+ */
+function Rings({ move, moveGoal, exercise, exerciseGoal, stand, standGoal, size = 168 }) {
+  const rings = [
+    { v: move, g: moveGoal, color: 'var(--ring-move)', dim: 'var(--ring-move-dim)', r: 0.42, label: 'Рух' },
+    { v: exercise, g: exerciseGoal, color: 'var(--ring-ex)', dim: 'var(--ring-ex-dim)', r: 0.30, label: 'Тренування' },
+    { v: stand, g: standGoal, color: 'var(--ring-stand)', dim: 'var(--ring-stand-dim)', r: 0.18, label: 'Розминка' },
+  ];
+  const w = 12 / 168 * size;
+
+  return (
+    <svg className="h-rings" viewBox="0 0 100 100" width={size} height={size} role="img" aria-label="Кільця активності">
+      {rings.map((x, i) => {
+        const rad = x.r * 100;
+        const len = 2 * Math.PI * rad;
+        const pct = x.g > 0 ? Math.min(1, x.v / x.g) : 0;
+        return (
+          <g key={i} transform="rotate(-90 50 50)">
+            <circle cx="50" cy="50" r={rad} fill="none" stroke={x.dim} strokeWidth={w * 100 / size} />
+            <circle
+              cx="50" cy="50" r={rad} fill="none"
+              stroke={x.color}
+              strokeWidth={w * 100 / size}
+              strokeLinecap="round"
+              strokeDasharray={`${len * pct} ${len}`}
+              className="h-ring-arc"
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Підпис до кільця: число, ціль і колір */
+function RingLegend({ rows }) {
+  return (
+    <div className="h-ring-leg">
+      {rows.map((r) => (
+        <div className="h-ring-row" key={r.label}>
+          <span className="h-ring-dot" style={{ background: r.color }} />
+          <span className="h-ring-l">{r.label}</span>
+          <span className="h-ring-v" style={{ color: r.color }}>
+            {r.value}<i>/{r.goal} {r.unit}</i>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Стовпчики за останні дні з лінією середнього — так Apple показує
+ * «Діаграми» у «Здоровʼї». Стовпчик за сьогодні підсвічений.
+ */
+function WeekBars({ days, pick, goal, unit = '', label, color = 'var(--ring-move)' }) {
+  const rows = days.slice(-7);
+  if (!rows.length) return null;
+  const vals = rows.map((d) => num(pick(d)));
+  const max = Math.max(...vals, goal || 0, 1);
+  const filled = vals.filter((v) => v > 0);
+  const avg = filled.length ? filled.reduce((a, v) => a + v, 0) / filled.length : 0;
+  const now = today();
+
+  return (
+    <div className="h-week">
+      <div className="h-week-h">
+        <span className="h-week-t">{label}</span>
+        {avg > 0 && (
+          <span className="h-week-a">
+            у середньому <b>{Math.round(avg)}</b> {unit}
+          </span>
+        )}
+      </div>
+      <div className="h-week-b">
+        {goal > 0 && goal <= max && (
+          <div className="h-week-goal" style={{ bottom: `${(goal / max) * 100}%` }}>
+            <span>{goal}</span>
+          </div>
+        )}
+        {rows.map((d, i) => {
+          const v = vals[i];
+          const h = max > 0 ? (v / max) * 100 : 0;
+          const done = goal > 0 && v >= goal;
+          return (
+            <div className="h-week-c" key={d.date}>
+              <div className="h-week-bar-wrap">
+                {v > 0 && <span className="h-week-v">{v >= 1000 ? Math.round(v / 100) / 10 + 'к' : Math.round(v)}</span>}
+                <div
+                  className={'h-week-bar' + (done ? ' is-done' : '') + (d.date === now ? ' is-today' : '')}
+                  style={{ height: `${Math.max(h, v > 0 ? 3 : 0)}%`, background: color }}
+                />
+              </div>
+              <span className="h-week-d">{d.date.slice(0, 2)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Плитка показника: велике число, підпис, зміна */
+function Tile({ value, unit, label, delta, deltaGood, sub, tone }) {
+  const better = delta === null || delta === undefined || delta === 0 ? null
+    : (deltaGood === 'down' ? delta < 0 : delta > 0);
+  return (
+    <div className="h-tile">
+      <div className="h-tile-l">{label}</div>
+      <div className="h-tile-v" style={tone ? { color: tone } : undefined}>
+        {value}{unit && <i> {unit}</i>}
+      </div>
+      {sub && <div className="h-tile-s">{sub}</div>}
+      {delta !== null && delta !== undefined && delta !== 0 && (
+        <div className={'h-tile-d' + (better ? ' is-good' : ' is-bad')}>
+          {delta > 0 ? '↑' : '↓'} {Math.abs(delta)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Верх вкладки «День»: кільця, головні показники й тижневі стовпчики.
+ * Усе, заради чого відкривають сторінку, — на першому екрані.
+ */
+function TodayBoard({ data, day, date }) {
+  const g = data.goals || {};
+  const moveGoal = num(g.burned) || 600;
+  const exGoal = num(g.exercise) || 30;
+  const standGoal = num(g.stand) || 12;
+
+  // порівнюємо з середнім за попередні сім днів, а не з учора: так менше шуму
+  const before = data.days.filter((d) => stamp(d.date) < stamp(date)).slice(-7);
+  const avgOf = (k) => {
+    const v = before.map((d) => num(d[k])).filter((x) => x > 0);
+    return v.length ? v.reduce((a, x) => a + x, 0) / v.length : null;
+  };
+  const dOf = (k) => {
+    const a = avgOf(k);
+    return a === null || !num(day[k]) ? null : Math.round(num(day[k]) - a);
+  };
+
+  const has = (k) => num(day[k]) > 0;
+  const anyRing = has('burned') || has('workout') || has('stand');
+
+  return (
+    <div className="h-board">
+      {anyRing && (
+        <div className="h-board-rings">
+          <Rings
+            move={num(day.burned)} moveGoal={moveGoal}
+            exercise={num(day.workout)} exerciseGoal={exGoal}
+            stand={num(day.stand)} standGoal={standGoal}
+          />
+          <RingLegend rows={[
+            { label: 'Рух', value: Math.round(num(day.burned)), goal: moveGoal, unit: 'ккал', color: 'var(--ring-move)' },
+            { label: 'Тренування', value: Math.round(num(day.workout)), goal: exGoal, unit: 'хв', color: 'var(--ring-ex)' },
+            { label: 'Розминка', value: Math.round(num(day.stand)), goal: standGoal, unit: 'год', color: 'var(--ring-stand)' },
+          ]} />
+        </div>
+      )}
+
+      <div className="h-tiles">
+        {has('steps') && (
+          <Tile label="Кроки" value={Math.round(num(day.steps)).toLocaleString('uk-UA')}
+            delta={dOf('steps')} deltaGood="up"
+            sub={num(g.steps) ? `ціль ${num(g.steps).toLocaleString('uk-UA')}` : null} />
+        )}
+        {has('distance') && (
+          <Tile label="Дистанція" value={n1(day.distance)} unit="км" delta={dOf('distance')} deltaGood="up" />
+        )}
+        {has('pulse') && (
+          <Tile label="Пульс спокою" value={Math.round(num(day.pulse))} unit="уд/хв"
+            delta={dOf('pulse')} deltaGood="down" tone="var(--ring-move)"
+            sub="нижче — краще" />
+        )}
+        {has('hrv') && (
+          <Tile label="ВСР" value={Math.round(num(day.hrv))} unit="мс"
+            delta={dOf('hrv')} deltaGood="up" tone="var(--ring-stand)"
+            sub="вище — краще відновлення" />
+        )}
+        {has('sleep') && (
+          <Tile label="Сон" value={n1(day.sleep)} unit="год" delta={dOf('sleep')} deltaGood="up" />
+        )}
+        {has('water') && (
+          <Tile label="Вода" value={Math.round(num(day.water))} unit="мл"
+            sub={num(g.water) ? `ціль ${num(g.water)}` : null} tone="var(--blue)" />
+        )}
+      </div>
+
+      <div className="h-weeks">
+        <WeekBars days={data.days} pick={(d) => d.steps} goal={num(g.steps)}
+          unit="кроків" label="Кроки за тиждень" color="var(--ring-ex)" />
+        <WeekBars days={data.days} pick={(d) => d.kcal} goal={num(g.kcal)}
+          unit="ккал" label="Калорії за тиждень" color="var(--ring-move)" />
+      </div>
+    </div>
+  );
+}
 
 /** Швидкі кнопки для води й решти денних чисел */
 function DayStats({ day, goals, onWater, onOpen }) {

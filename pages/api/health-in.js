@@ -63,7 +63,10 @@ export default async function handler(req, res) {
   const day = { date: (body.date || '').trim() || todayKyiv() };
 
   // беремо лише те, що справді надіслали: нуль теж значення, а порожнє — ні
-  ['steps', 'burned', 'water', 'workout', 'sleep', 'weight'].forEach((k) => {
+  [
+    'steps', 'burned', 'water', 'workout', 'sleep', 'weight',
+    'pulse', 'hrv', 'distance', 'stand', 'restEnergy', 'bodyFat',
+  ].forEach((k) => {
     const v = num(body[k]);
     if (v !== null) day[k] = v;
   });

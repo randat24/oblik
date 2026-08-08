@@ -1720,3 +1720,103 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   font-family: var(--mono); font-size: .74rem; color: var(--amber);
   background: var(--panel-3); padding: 1px 5px; border-radius: 3px;
 }
+
+/* ---------- Інфографіка здоровʼя в стилі Apple ---------- */
+:root {
+  --ring-move: #fa3c4c;
+  --ring-move-dim: #3a1418;
+  --ring-ex: #a4f83b;
+  --ring-ex-dim: #22320d;
+  --ring-stand: #2ad2f5;
+  --ring-stand-dim: #0d2b33;
+}
+
+.h-board { margin-bottom: 18px; }
+.h-board-rings {
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: 18px; padding: 18px 20px; margin-bottom: 10px;
+}
+.h-rings { flex: 0 0 auto; display: block; }
+.h-ring-arc { transition: stroke-dasharray .5s cubic-bezier(.2,.7,.3,1); }
+.h-ring-leg { flex: 1 1 180px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.h-ring-row { display: flex; align-items: baseline; gap: 8px; }
+.h-ring-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.h-ring-l {
+  flex: 1 1 auto; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted);
+}
+.h-ring-v { font-family: var(--mono); font-size: 1.15rem; font-weight: 700; }
+.h-ring-v i { font-style: normal; font-size: .72rem; font-weight: 400; opacity: .6; }
+
+/* Плитки показників */
+.h-tiles {
+  display: grid; gap: 8px; margin-bottom: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+.h-tile {
+  position: relative; background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: 16px; padding: 14px 16px;
+}
+.h-tile-l {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+}
+.h-tile-v {
+  font-family: var(--mono); font-size: 1.7rem; font-weight: 700; line-height: 1.15; margin-top: 4px;
+}
+.h-tile-v i { font-style: normal; font-size: .74rem; color: var(--muted); font-weight: 400; }
+.h-tile-s { font-size: .7rem; color: var(--muted); margin-top: 3px; }
+.h-tile-d {
+  position: absolute; top: 13px; right: 14px;
+  font-family: var(--mono); font-size: .72rem; font-weight: 700;
+}
+.h-tile-d.is-good { color: var(--ring-ex); }
+.h-tile-d.is-bad { color: var(--ring-move); }
+
+/* Тижневі стовпчики */
+.h-weeks { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.h-week {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: 16px; padding: 14px 16px 10px;
+}
+.h-week-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.h-week-t {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+}
+.h-week-a { margin-left: auto; font-size: .72rem; color: var(--muted); }
+.h-week-a b { font-family: var(--mono); color: var(--text); }
+.h-week-b {
+  position: relative; display: flex; align-items: flex-end; gap: 6px; height: 108px;
+}
+.h-week-c { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+.h-week-bar-wrap {
+  position: relative; flex: 1 1 auto; width: 100%;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.h-week-bar {
+  width: 100%; max-width: 26px; border-radius: 6px; opacity: .45;
+  transition: height .4s cubic-bezier(.2,.7,.3,1);
+}
+.h-week-bar.is-done { opacity: .9; }
+.h-week-bar.is-today { opacity: 1; box-shadow: 0 0 0 1px var(--text); }
+.h-week-v {
+  position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+  font-family: var(--mono); font-size: .6rem; color: var(--muted); white-space: nowrap;
+}
+.h-week-d {
+  font-family: var(--mono); font-size: .64rem; color: var(--muted); margin-top: 6px;
+}
+.h-week-goal {
+  position: absolute; left: 0; right: 0; border-top: 1px dashed var(--line);
+  pointer-events: none;
+}
+.h-week-goal span {
+  position: absolute; right: 0; top: -8px;
+  font-family: var(--mono); font-size: .58rem; color: var(--muted);
+  background: var(--panel); padding: 0 3px;
+}
+
+@media (max-width: 520px) {
+  .h-board-rings { gap: 14px; padding: 16px; }
+  .h-tile-v { font-size: 1.45rem; }
+}
