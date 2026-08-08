@@ -32,14 +32,24 @@ export default async function handler(req, res) {
     return res.status(404).json({ error: 'Not found' });
   }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  // Ключ приймаємо трьома способами: заголовком, у тілі або в адресі.
+  // Заголовок надійніший, але в «Командах» його легко забути, а перевірити
+  // налаштування простіше за посиланням.
+  const given = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
+    || (req.body?.token || '')
+    || (req.query?.token || '');
+  if (!sameToken(String(given), secret)) {
+    return res.status(401).json({ error: 'Не той ключ' });
   }
 
-  const given = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
-    || (req.body?.token || '');
-  if (!sameToken(given, secret)) {
-    return res.status(401).json({ error: 'Не той ключ' });
+  // Перевірка налаштувань: відкрити в браузері й побачити, що ключ підходить.
+  // Нічого не записує.
+  if (req.method === 'GET') {
+    return res.json({ ok: true, message: 'Ключ правильний. Тепер надсилайте POST.' });
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const body = req.body || {};
