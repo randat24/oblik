@@ -344,6 +344,83 @@ function PhotoSlot({ label, value, onChange }) {
   );
 }
 
+/**
+ * Розбирає відповідь чат-моделі про страву. Числа шукаємо не за жорстким
+ * шаблоном, а за близькістю до слова: моделі пишуть і «450 ккал», і
+ * «Калорії: 450», і «калорійність — 450».
+ */
+function parseNutrition(text) {
+  const t = String(text || '').replace(/[  ]/g, ' ');
+  if (!t.trim()) return null;
+
+  const NUM = /-?\d+(?:[.,]\d+)?/g;
+  const nums = [];
+  let m;
+  while ((m = NUM.exec(t)) !== null) {
+    nums.push({ v: Number(m[0].replace(',', '.')), at: m.index, end: m.index + m[0].length });
+  }
+  if (!nums.length) return null;
+
+  // число, найближче до слова: спершу те, що одразу перед ним, далі — після
+  const near = (re) => {
+    re.lastIndex = 0;
+    let best = null;
+    let k;
+    while ((k = re.exec(t)) !== null) {
+      const s = k.index;
+      const e = k.index + k[0].length;
+      nums.forEach((n) => {
+        // між числом і словом допускаємо лише розділові знаки й одиниці
+        const gapAfter = n.at >= e ? t.slice(e, n.at) : null;
+        const gapBefore = n.end <= s ? t.slice(n.end, s) : null;
+        let dist = null;
+        if (gapAfter !== null && /^[\s:—–\-=~≈»)(]*$/.test(gapAfter) && gapAfter.length <= 4) {
+          dist = n.at - e;
+        } else if (gapBefore !== null && /^[\s]*(?:г|гр|g|грам\w*)?[\s.,;)]*$/.test(gapBefore) && gapBefore.length <= 6) {
+          dist = s - n.end + 0.5; // за однакової відстані слово після числа трохи слабше
+        }
+        if (dist !== null && (best === null || dist < best.dist)) best = { dist, v: n.v };
+      });
+      if (re.lastIndex === k.index) re.lastIndex++;
+    }
+    return best ? best.v : null;
+  };
+
+  const CYR = '[а-яіїєґёА-ЯІЇЄҐЁ]*';
+  const w = (base) => new RegExp(base.replace(/#/g, CYR), 'gi');
+  const kcal = near(w('ккал|kcal|калорійн#|калорийн#|калор#'));
+  const protein = near(w('білк#|белк#|протеїн#|протеин#|protein'));
+  const fat = near(w('жир#|\\bfat\\b'));
+  const carbs = near(w('вуглевод#|углевод#|carb[a-z]*'));
+
+  // вага порції — лише там, де поруч немає слова про БЖВ
+  let grams = null;
+  const gm = /(\d+(?:[.,]\d+)?)\s*(?:грам[а-яіїєґё]*|гр|г|g)(?![а-яіїєґёa-z])/gi;
+  let g;
+  while ((g = gm.exec(t)) !== null) {
+    // важлива лише те, що стоїть одразу перед числом: «білки 9 г» — це не вага
+    const head = t.slice(Math.max(0, g.index - 14), g.index).toLowerCase();
+    if (/білк|белк|жир|вуглевод|углевод|protein|fat|carb|ккал|kcal/.test(head)) continue;
+    grams = Number(g[1].replace(',', '.'));
+    break;
+  }
+
+  // назва — початок першого рядка до розділювача, без службових слів
+  const firstLine = t.split('\n')[0].trim();
+  let name = firstLine.split(/[—–|:]/)[0].trim();
+  if (/^(калор|білк|белк|жир|вуглевод|углевод|приблиз|орієнт|ориентир|разом|итого|всего|порц|порція)/i.test(name)) name = '';
+  name = name
+    .replace(/[,\s]*(?:порц[а-яіїєґё]*|вага|вес|маса|масса)[,\s]*\d*\s*(?:г|гр)?\.?$/i, '')
+    .replace(/\s+\d+(?:[.,]\d+)?\s*(?:г|гр)\.?$/i, '')
+    .replace(/[\s,.:;–—-]+$/, '')
+    .trim();
+  if (/^\d/.test(name) || name.length > 60) name = '';
+  name = name.replace(/\s*\(\s*\d+[^)]*\)\s*$/, '').trim();
+
+  if (kcal === null && protein === null && fat === null && carbs === null) return null;
+  return { name, grams, kcal, protein, fat, carbs };
+}
+
 /* ---------- Модалка ---------- */
 
 function Modal({ title, children, onClose, onSave, saveLabel = 'Зберегти', busy, error }) {
@@ -695,6 +772,8 @@ function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, 
   const [found, setFound] = useState('');
   const [newCode, setNewCode] = useState('');
   const [np, setNp] = useState({});
+  const [paste, setPaste] = useState(null);
+  const [pasteInfo, setPasteInfo] = useState('');
   const [portionOf, setPortionOf] = useState(null);
   const [portions, setPortions] = useState('1');
 
@@ -816,6 +895,44 @@ function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, 
           Сканувати штрихкод
         </button>
       </div>
+      <div className="h-paste">
+        <button className="h-paste-b" onClick={() => setPaste(paste === null ? '' : null)}>
+          {paste === null ? 'Вставити відповідь із чату' : 'Згорнути'}
+        </button>
+        {paste !== null && (
+          <>
+            <textarea
+              className="h-paste-t"
+              rows={4}
+              value={paste}
+              autoFocus
+              placeholder={'Сфотографуйте страву в Gemini чи іншому чаті, спитайте калорійність\nі вставте відповідь сюди — числа підставляться самі.'}
+              onChange={(e) => {
+                setPaste(e.target.value);
+                const r = parseNutrition(e.target.value);
+                if (!r) { setPasteInfo(''); return; }
+                setPortionOf(null); setPer100(null);
+                if (r.name) setName(r.name);
+                if (r.grams !== null) setAmount(`${n1(r.grams)} г`);
+                if (r.kcal !== null) setKcal(String(n1(r.kcal)));
+                if (r.protein !== null) setProtein(String(n1(r.protein)));
+                if (r.fat !== null) setFat(String(n1(r.fat)));
+                if (r.carbs !== null) setCarbs(String(n1(r.carbs)));
+                const got = ['ккал', 'білки', 'жири', 'вуглеводи']
+                  .filter((_, i) => [r.kcal, r.protein, r.fat, r.carbs][i] !== null);
+                setPasteInfo(got.length ? 'Розпізнано: ' + got.join(', ') : '');
+              }}
+            />
+            {pasteInfo && <div className="h-found">{pasteInfo}</div>}
+            <div className="h-hint">
+              Питайте так: «Скільки тут калорій, білків, жирів і вуглеводів?
+              Відповідай числами». Чат назве приблизну вагу порції — перевірте
+              її очима, бо саме вага дає найбільшу похибку.
+            </div>
+          </>
+        )}
+      </div>
+
       {dishes.length > 0 && (
         <>
           <label>Мої страви</label>

@@ -1824,3 +1824,17 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   color: var(--muted); font-size: .84rem; background: #000;
 }
+
+/* Вставка відповіді з чату */
+.h-paste { margin-top: 12px; }
+.h-paste-b {
+  width: 100%; background: none; border: 1px dashed var(--line);
+  border-radius: var(--r-sm); color: var(--text-dim);
+  font: inherit; font-size: .8rem; padding: 9px 10px; cursor: pointer;
+}
+.h-paste-b:hover { border-color: var(--amber); color: var(--amber); border-style: solid; }
+.h-paste-t {
+  width: 100%; margin-top: 8px; resize: vertical; line-height: 1.5;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  border-radius: var(--r-sm); padding: 10px 11px; font-family: var(--sans);
+}
