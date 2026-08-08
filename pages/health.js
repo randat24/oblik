@@ -11,29 +11,23 @@ const MEALS = ['Сніданок', 'Обід', 'Вечеря', 'Перекус']
 const MOODS = ['Чудово', 'Добре', 'Нормально', 'Втома', 'Погано'];
 
 /*
- * Обхвати вводяться і показуються в міліметрах — так простіше зчитувати
- * зі стрічки й не губити півсантиметра. У таблиці вони й далі лежать у
- * сантиметрах: формули працюють саме з ними, а старі записи лишаються
- * правильними. Переведення точне, тож нічого не втрачається.
+ * Обхвати всюди в сантиметрах — і на екрані, і в таблиці. Крок 0,1 дозволяє
+ * записати півсантиметра, якщо стрічка лягла між поділками.
  */
-const MM = 10;
-const toMm = (cm) => (cm === null || cm === undefined || cm === '' ? '' : n1(num(cm) * MM));
-const toCm = (mm) => (mm === null || mm === undefined || mm === '' ? '' : num(mm) / MM);
-
 const BODY_FIELDS = [
-  { key: 'chest', label: 'Груди', unit: 'мм', mm: true },
-  { key: 'waist', label: 'Талія', unit: 'мм', mm: true },
-  { key: 'belly', label: 'Живіт', unit: 'мм', mm: true },
-  { key: 'hips', label: 'Стегна', unit: 'мм', mm: true },
-  { key: 'biceps', label: 'Біцепс', unit: 'мм', mm: true },
-  { key: 'thigh', label: 'Стегно', unit: 'мм', mm: true },
-  { key: 'neck', label: 'Шия', unit: 'мм', mm: true },
+  { key: 'chest', label: 'Груди', unit: 'см', cm: true },
+  { key: 'waist', label: 'Талія', unit: 'см', cm: true },
+  { key: 'belly', label: 'Живіт', unit: 'см', cm: true },
+  { key: 'hips', label: 'Стегна', unit: 'см', cm: true },
+  { key: 'biceps', label: 'Біцепс', unit: 'см', cm: true },
+  { key: 'thigh', label: 'Стегно', unit: 'см', cm: true },
+  { key: 'neck', label: 'Шия', unit: 'см', cm: true },
   { key: 'fat', label: '% жиру', unit: '%' },
 ];
 
 // Стать, зріст і рік народження — не цілі, а вихідні дані для формул
 const PROFILE_FIELDS = [
-  { key: 'height', label: 'Зріст', unit: 'мм', mm: true },
+  { key: 'height', label: 'Зріст', unit: 'см' },
   { key: 'birthYear', label: 'Рік народження', unit: '' },
 ];
 
@@ -2273,10 +2267,10 @@ function BodyTab({ data, reload }) {
           <div className="h-mgrid">
             {BODY_FIELDS.filter((f) => f.key !== 'fat' && last[f.key] != null).map((f) => {
               const raw = prev && prev[f.key] != null ? last[f.key] - prev[f.key] : null;
-              const d = raw === null ? null : (f.mm ? n1(raw * MM) : n1(raw));
+              const d = raw === null ? null : n1(raw);
               return (
                 <div className="h-mcell" key={f.key}>
-                  <div className="h-mcell-v">{f.mm ? toMm(last[f.key]) : n1(last[f.key])}<i> {f.unit}</i></div>
+                  <div className="h-mcell-v">{n1(last[f.key])}<i> {f.unit}</i></div>
                   <div className="h-mcell-l">{f.label}</div>
                   {d !== null && d !== 0 && (
                     <div className={'h-mcell-d' + (d > 0 ? ' is-up' : ' is-down')}>
@@ -2335,7 +2329,7 @@ function BodyTab({ data, reload }) {
               <thead>
                 <tr>
                   <th>Дата</th>
-                  {BODY_FIELDS.map((f) => <th key={f.key}>{f.label}{f.mm ? ', мм' : ''}</th>)}
+                  {BODY_FIELDS.map((f) => <th key={f.key}>{f.label}{f.cm ? ', см' : ''}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -2343,7 +2337,7 @@ function BodyTab({ data, reload }) {
                   <tr key={r.date}>
                     <td>{r.date}</td>
                     {BODY_FIELDS.map((f) => (
-                      <td key={f.key}>{r[f.key] == null ? '—' : (f.mm ? toMm(r[f.key]) : n1(r[f.key]))}</td>
+                      <td key={f.key}>{r[f.key] == null ? '—' : n1(r[f.key])}</td>
                     ))}
                   </tr>
                 ))}
@@ -2446,14 +2440,14 @@ function BodyModal({ data, onClose, onDone }) {
   // формула працює в сантиметрах — переводимо назад те, що ввели в міліметрах
   const auto = navyFat({
     sex: g.sex, height: g.height,
-    waist: toCm(vals.waist), neck: toCm(vals.neck), hips: toCm(vals.hips),
+    waist: vals.waist, neck: vals.neck, hips: vals.hips,
   });
 
   useEffect(() => {
     const v = {};
     BODY_FIELDS.forEach((f) => {
       const raw = existing?.[f.key];
-      v[f.key] = raw == null ? '' : String(f.mm ? toMm(raw) : raw);
+      v[f.key] = raw == null ? '' : String(raw);
     });
     setVals(v);
     setNote(existing?.note || '');
@@ -2472,7 +2466,7 @@ function BodyModal({ data, onClose, onDone }) {
     try {
       const body = { date, note };
       BODY_FIELDS.forEach((f) => {
-        body[f.key] = vals[f.key] === '' ? '' : (f.mm ? toCm(vals[f.key]) : num(vals[f.key]));
+        body[f.key] = vals[f.key] === '' ? '' : num(vals[f.key]);
       });
       await api('/api/health', { method: 'POST', body: { action: 'body', body } });
       await onDone();
@@ -2496,7 +2490,7 @@ function BodyModal({ data, onClose, onDone }) {
             <input
               type="number"
               inputMode="decimal"
-              step={f.mm ? '1' : '0.1'}
+              step="0.1"
               value={vals[f.key] || ''}
               onChange={(e) => {
                 if (f.key === 'fat') setManualFat(true);
@@ -2534,7 +2528,7 @@ function GoalsTab({ data, reload, setBusy }) {
     const v = { sex: data.goals?.sex || 'm' };
     [...PROFILE_FIELDS, ...GOAL_FIELDS].forEach((f) => {
       const raw = data.goals?.[f.key] || '';
-      v[f.key] = raw === '' ? '' : String(f.mm ? toMm(raw) : raw);
+      v[f.key] = raw === '' ? '' : String(raw);
     });
     return v;
   });
@@ -2545,7 +2539,7 @@ function GoalsTab({ data, reload, setBusy }) {
   const dirty = [...PROFILE_FIELDS, ...GOAL_FIELDS].some((f) => {
     const stored = data.goals?.[f.key] || '';
     const shown = vals[f.key] === '' || vals[f.key] === undefined ? '' : vals[f.key];
-    const norm = f.mm && stored !== '' ? String(toMm(stored)) : String(stored);
+    const norm = String(stored);
     return String(shown) !== norm;
   }) || String(vals.sex || 'm') !== String(data.goals?.sex || 'm');
 
@@ -2555,7 +2549,7 @@ function GoalsTab({ data, reload, setBusy }) {
   const weighed = data.days.filter((d) => d.weight != null);
   const weight = weighed.length ? weighed[weighed.length - 1].weight : null;
   const norm = calcNorm({
-    sex: vals.sex, weight, height: toCm(vals.height), age,
+    sex: vals.sex, weight, height: vals.height, age,
     activity: vals.activity || '1.375', aim: vals.aim || '-20',
   });
 
@@ -2566,8 +2560,7 @@ function GoalsTab({ data, reload, setBusy }) {
       const out = {};
       Object.entries(v).forEach(([k, val]) => {
         if (val === undefined || val === null || val === '') return;
-        const f = PROFILE_FIELDS.find((x) => x.key === k);
-        out[k] = f?.mm ? String(toCm(val)) : String(val);
+        out[k] = String(val);
       });
       await api('/api/health', { method: 'POST', body: { action: 'goals', goals: out } });
       await reload();
@@ -2626,7 +2619,7 @@ function GoalsTab({ data, reload, setBusy }) {
             <input
               type="number"
               inputMode="decimal"
-              step={f.key === 'birthYear' || f.mm ? '1' : '0.1'}
+              step={f.key === 'birthYear' ? '1' : '0.1'}
               value={vals[f.key]}
               onChange={(e) => setVals((p) => ({ ...p, [f.key]: e.target.value }))}
             />
