@@ -1417,6 +1417,13 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-tbl tr:last-child td { border-bottom: 0; }
 .h-tbl td:first-child { white-space: nowrap; }
 .h-tbl td:last-child { white-space: nowrap; font-family: var(--mono); font-size: .72rem; }
+.h-code {
+  font-family: var(--mono); font-size: .74rem; line-height: 1.8;
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm); padding: 10px 12px; margin: 8px 0;
+  color: var(--text-dim); overflow-x: auto;
+}
+.h-code b { color: var(--amber); }
 .h-substep {
   margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--line);
   color: var(--muted); font-size: .78rem;
