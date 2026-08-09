@@ -46,6 +46,9 @@ const GOAL_FIELDS = [
   { key: 'carbs', label: 'Вуглеводи', unit: 'г' },
   { key: 'water', label: 'Вода', unit: 'мл' },
   { key: 'steps', label: 'Кроки', unit: '' },
+  { key: 'fiber', label: 'Клітковина', unit: 'г' },
+  { key: 'sugar', label: 'Цукор, не більше', unit: 'г' },
+  { key: 'sodium', label: 'Натрій, не більше', unit: 'мг' },
 ];
 
 /**
@@ -120,12 +123,19 @@ function calcNorm({ sex, weight, height, age, activity, aim }) {
   // округлюємо до десятків: ціль кільця — орієнтир, а не точне число
   const move = Math.max(200, Math.round((tdee - base) / 10) * 10);
   const exercise = (ACTIVITY.find((a) => a.key === String(activity))?.ex) || 30;
+  // Клітковина — 14 г на кожні 1000 ккал, як радить більшість настанов.
+  // Цукор — не більше десятої частини калорій (4 ккал на грам).
+  // Натрій — 2300 мг, звична межа для дорослого.
+  const fiber = Math.round((kcal / 1000) * 14);
+  const sugar = Math.round((kcal * 0.1) / 4);
+  const sodium = 2300;
   return {
     bmr: Math.round(base),
     tdee: Math.round(tdee),
     kcal: Math.round(kcal),
     protein, fat, carbs,
     move, exercise, stand: STAND_GOAL,
+    fiber, sugar, sodium,
   };
 }
 
@@ -209,6 +219,12 @@ async function api(path, opts = {}) {
   }
   return data;
 }
+
+/** Клітковина, цукор і натрій масштабуються так само, як решта — на той самий k */
+const EXTRA = ['fiber', 'sugar', 'sodium'];
+const scaleExtra = (src, k) => Object.fromEntries(
+  EXTRA.map((key) => [key, num(src?.[key]) ? String(n1(num(src[key]) * k)) : ''])
+);
 
 const photoSrc = (v) => (v ? '/api/photo?p=' + encodeURIComponent(v) : '');
 
@@ -654,15 +670,17 @@ function StreakBar({ days, today, date, setDate }) {
 }
 
 /** Один показник у картці: підпис, смужка, «скільки з чого» */
-function Metric({ label, value, goal, unit, tone }) {
+function Metric({ label, value, goal, unit, tone, limit }) {
   const v = num(value);
   const gl = num(goal);
   const pct = gl > 0 ? Math.min(100, (v / gl) * 100) : (v > 0 ? 100 : 0);
+  // для цукру й натрію ціль — це стеля, а не мета: перебір має бути помітним
+  const over = limit && gl > 0 && v > gl;
   return (
-    <div className="h-m">
+    <div className={'h-m' + (over ? ' is-over' : '')}>
       <div className="h-m-l">{label}{unit ? `, ${unit}` : ''}</div>
       <div className="h-m-t">
-        <div className="h-m-f" style={{ width: pct + '%', background: tone }} />
+        <div className="h-m-f" style={{ width: pct + '%', background: over ? 'var(--red)' : tone }} />
       </div>
       <div className="h-m-v">
         <b>{n1(v)}</b>
@@ -778,6 +796,12 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
   const g = data.goals || {};
   const kcalGoal = num(g.kcal);
   const eaten = day.kcal;
+
+  // Клітковину, цукор і натрій беремо просто із записів їжі: вони й
+  // складаються тільки з неї. Так вони одразу є і для старих днів, де в
+  // рядку дня цих колонок ще не було.
+  const sumOf = (k) => Math.round(meals.reduce((a, f) => a + num(f[k]), 0) * 10) / 10;
+  const micro = { fiber: sumOf('fiber'), sugar: sumOf('sugar'), sodium: sumOf('sodium') };
   const leftKcal = kcalGoal > 0 ? Math.round(kcalGoal - eaten) : null;
 
   const delFood = async (row) => {
@@ -813,6 +837,18 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
               <Metric label="Кроки" value={day.steps} goal={g.steps} unit="" tone="var(--ring-ex)" />
               <Metric label="Вода" value={day.water} goal={g.water} unit="мл" tone="var(--ring-stand)" />
               <Metric label="Спалено" value={day.burned} goal={g.burned} unit="ккал" tone="var(--ring-move)" />
+            </>
+          ),
+        },
+        // клітковина, цукор і натрій відомі не про кожну їжу — картку
+        // показуємо, лише коли за день щось із цього набралося
+        (micro.fiber > 0 || micro.sugar > 0 || micro.sodium > 0) && {
+          title: 'Клітковина · Цукор · Натрій',
+          items: (
+            <>
+              <Metric label="Клітковина" value={micro.fiber} goal={g.fiber} unit="г" tone="var(--ring-ex)" />
+              <Metric label="Цукор" value={micro.sugar} goal={g.sugar} unit="г" limit tone="var(--red)" />
+              <Metric label="Натрій" value={micro.sodium} goal={g.sodium} unit="мг" limit tone="var(--amber)" />
             </>
           ),
         },
@@ -1081,6 +1117,9 @@ function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, 
   const [protein, setProtein] = useState('');
   const [fat, setFat] = useState('');
   const [carbs, setCarbs] = useState('');
+  // клітковина, цукор і натрій ідуть купкою: їх рідко правлять руками,
+  // здебільшого вони приїжджають із продукту чи страви разом із рештою
+  const [extra, setExtra] = useState({ fiber: '', sugar: '', sodium: '' });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   // коли страва прийшла з бази чи каталогу — рахуємо від грамів, а не вручну
@@ -1112,6 +1151,7 @@ function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, 
     setProtein(String(n1(portionOf.protein * k)));
     setFat(String(n1(portionOf.fat * k)));
     setCarbs(String(n1(portionOf.carbs * k)));
+    setExtra(scaleExtra(portionOf, k));
     setAmount(k === 1 ? '1 порція' : `${n1(k)} порції`);
   }, [portionOf, portions]);
 
@@ -1124,6 +1164,7 @@ function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, 
     setProtein(String(n1(prefill.got.protein)));
     setFat(String(n1(prefill.got.fat)));
     setCarbs(String(n1(prefill.got.carbs)));
+    setExtra(scaleExtra(prefill.got, 1));
     setFound('з підказки «чим добрати»');
   }, [prefill]);
 
@@ -1135,12 +1176,16 @@ function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, 
     setProtein(String(n1(per100.protein * k)));
     setFat(String(n1(per100.fat * k)));
     setCarbs(String(n1(per100.carbs * k)));
+    setExtra(scaleExtra(per100, k));
     setAmount(`${n1(num(grams))} г`);
   }, [per100, grams]);
 
   const takeProduct = (p, note) => {
     setPortionOf(null);
-    setPer100({ kcal: p.kcal, protein: p.protein, fat: p.fat, carbs: p.carbs });
+    setPer100({
+      kcal: p.kcal, protein: p.protein, fat: p.fat, carbs: p.carbs,
+      fiber: p.fiber, sugar: p.sugar, sodium: p.sodium,
+    });
     setName([p.name, p.brand].filter(Boolean).join(' · ') || p.name || 'Без назви');
     setGrams(String(p.serving > 0 ? p.serving : 100));
     setFound(note || '');
@@ -1178,6 +1223,7 @@ function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, 
     setName(f.name); setAmount(f.amount);
     setKcal(String(f.kcal)); setProtein(String(f.protein));
     setFat(String(f.fat)); setCarbs(String(f.carbs));
+    setExtra(scaleExtra(f, 1));
   };
 
   // продукти з власної бази — шукаються за назвою так само, як страви
@@ -1191,7 +1237,10 @@ function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, 
     try {
       await api('/api/health', {
         method: 'POST',
-        body: { action: 'food', entry: { date, meal, name: name.trim(), amount, kcal, protein, fat, carbs } },
+        body: {
+          action: 'food',
+          entry: { date, meal, name: name.trim(), amount, kcal, protein, fat, carbs, ...extra },
+        },
       });
       await onDone();
       onClose();
@@ -1367,6 +1416,16 @@ function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, 
         <div><label>Білки</label><input type="number" inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} /></div>
         <div><label>Жири</label><input type="number" inputMode="decimal" value={fat} onChange={(e) => setFat(e.target.value)} /></div>
         <div><label>Вугл.</label><input type="number" inputMode="decimal" value={carbs} onChange={(e) => setCarbs(e.target.value)} /></div>
+      </div>
+      {/* Три числа, які частіше приїжджають самі — зі штрихкоду чи страви.
+          Лишаються порожніми, якщо про них нічого не відомо. */}
+      <div className="h-row3">
+        <div><label>Клітковина</label><input type="number" inputMode="decimal" value={extra.fiber}
+          onChange={(e) => setExtra((p) => ({ ...p, fiber: e.target.value }))} /></div>
+        <div><label>Цукор</label><input type="number" inputMode="decimal" value={extra.sugar}
+          onChange={(e) => setExtra((p) => ({ ...p, sugar: e.target.value }))} /></div>
+        <div><label>Натрій, мг</label><input type="number" inputMode="decimal" value={extra.sodium}
+          onChange={(e) => setExtra((p) => ({ ...p, sodium: e.target.value }))} /></div>
       </div>
       {scan && <BarcodeScanner onFound={byCode} onClose={() => setScan(false)} />}
     </Modal>
@@ -2974,6 +3033,9 @@ function GoalsTab({ data, reload, setBusy }) {
       burned: String(norm.move),
       exercise: String(norm.exercise),
       stand: String(norm.stand),
+      fiber: String(norm.fiber),
+      sugar: String(norm.sugar),
+      sodium: String(norm.sodium),
     };
     // Воду й кроки формула не рахує — це звичка, а не обмін речовин.
     // Тож лише підказуємо початкове число там, де ще порожньо, і не чіпаємо
@@ -3038,6 +3100,9 @@ function GoalsTab({ data, reload, setBusy }) {
             </div>
             <div className="h-norm-m">
               Кільця: рух {norm.move} ккал · тренування {norm.exercise} хв · розминка {norm.stand} год
+            </div>
+            <div className="h-norm-m">
+              Клітковина {norm.fiber} г · цукор до {norm.sugar} г · натрій до {norm.sodium} мг
             </div>
             <button className="h-btn h-btn-p" onClick={applyNorm}>
               Підставити в цілі й зберегти
