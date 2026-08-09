@@ -1275,7 +1275,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
    Більше нічого — решта поїхала вниз або під «Ще». */
 .h-head {
   display: flex; align-items: center; gap: 10px; flex-wrap: nowrap;
-  padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--line);
+  padding-bottom: 12px; margin-bottom: 18px; border-bottom: 1px solid var(--line);
 }
 .h-back {
   flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
@@ -1380,9 +1380,12 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   text-align: center; padding-top: 10px;
 }
 
+/* Ритм сторінки: між великими блоками 18px, навколо заголовка секції —
+   24 зверху й 12 знизу. Раніше числа були врозбіг (0, 10, 12, 14, 20),
+   і блоки то злипались, то провалювались. */
 .h-sec {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  margin: 20px 0 10px;
+  margin: 24px 0 12px;
 }
 .h-sec h3 {
   margin: 0; font-size: .74rem; text-transform: uppercase;
@@ -1428,7 +1431,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 
 .h-kcal {
   text-align: center; background: var(--panel); border: 1px solid var(--line-soft);
-  border-radius: var(--r); padding: 20px 16px; margin-bottom: 14px;
+  border-radius: var(--r); padding: 22px 16px; margin-bottom: 18px;
 }
 /* Серія: значок у шапці + смужка тижня */
 .h-fire {
@@ -1441,7 +1444,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 
 .h-streak {
   background: var(--panel); border: 1px solid var(--line-soft);
-  border-radius: var(--r); padding: 12px 14px; margin-bottom: 12px;
+  border-radius: var(--r); padding: 12px 14px; margin-bottom: 18px;
 }
 .h-streak-l { font-size: .76rem; color: var(--muted); margin-top: 10px; text-align: center; }
 .h-streak-l b { font-family: var(--mono); color: var(--amber); }
@@ -1466,7 +1469,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 
 /* Підсумки */
-.h-stiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.h-stiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
 .h-stile {
   background: var(--panel); border: 1px solid var(--line-soft);
   border-radius: var(--r); padding: 14px;
@@ -1495,7 +1498,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-kcal-goal b { font-family: var(--mono); color: var(--text-dim); }
 
 /* Картки показників, що гортаються */
-.h-deck { margin-bottom: 14px; }
+.h-deck { margin-bottom: 18px; }
 .h-deck-t {
   display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
   scrollbar-width: none; -webkit-overflow-scrolling: touch; gap: 0;
@@ -1544,7 +1547,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-bar-v { flex: 0 0 auto; font-family: var(--mono); font-size: .76rem; min-width: 92px; text-align: right; }
 .h-bar-v span { color: var(--muted); }
 
-.h-meal { margin-bottom: 12px; }
+.h-meal { margin-bottom: 18px; }
 .h-meal-h {
   display: flex; justify-content: space-between; align-items: baseline;
   font-size: .76rem; color: var(--muted); text-transform: uppercase;
@@ -2034,7 +2037,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-sug {
   background: var(--panel); border: 1px solid var(--line-soft);
   border-left: 3px solid var(--amber); border-radius: var(--r);
-  padding: 14px 16px; margin-top: 14px;
+  padding: 16px; margin-top: 18px;
 }
 .h-sug-h {
   font-size: .7rem; text-transform: uppercase; letter-spacing: .07em;
@@ -2098,7 +2101,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 /* Швидкі кнопки дня */
 .h-quick {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  margin-top: 12px; padding: 10px 12px;
+  margin-top: 18px; padding: 12px;
   background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: var(--r);
 }
 .h-quick-w { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; }
@@ -2138,7 +2141,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-board-rings {
   display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
   background: var(--panel); border: 1px solid var(--line-soft);
-  border-radius: 18px; padding: 18px 20px; margin-bottom: 10px;
+  border-radius: 18px; padding: 18px 20px; margin-bottom: 12px;
 }
 .h-rings { flex: 0 0 auto; display: block; }
 .h-ring-arc { transition: stroke-dasharray .5s cubic-bezier(.2,.7,.3,1); }
@@ -2154,7 +2157,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 
 /* Плитки показників */
 .h-tiles {
-  display: grid; gap: 8px; margin-bottom: 10px;
+  display: grid; gap: 10px; margin-bottom: 12px;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 .h-tile {
@@ -2177,11 +2180,13 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-tile-d.is-bad { color: var(--ring-move); }
 
 /* Тижневі стовпчики */
-.h-weeks { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.h-weeks { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.h-weeks .h-week { margin-bottom: 0; }
 .h-week {
   background: var(--panel); border: 1px solid var(--line-soft);
-  border-radius: 16px; padding: 14px 16px 10px;
+  border-radius: 16px; padding: 16px 16px 12px; margin-bottom: 12px;
 }
+.h-week:last-child { margin-bottom: 0; }
 .h-week-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .h-week-t {
   font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
