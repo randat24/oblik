@@ -1520,6 +1520,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-m-f { height: 100%; border-radius: 3px; transition: width .2s; }
 .h-m-v { margin-top: 7px; font-family: var(--mono); font-size: .78rem; color: var(--muted); }
 .h-m-v b { color: var(--text); font-size: .92rem; }
+.h-m.is-over .h-m-v b { color: var(--red); }
 
 /* Крапки-сторінки. Назва навмисно своя: .h-dot вже зайнятий точками на
    графіку ваги, а той контейнер ще й вимикає натискання. */
@@ -1769,6 +1770,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-modal-a { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 .h-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .h-row4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 8px; }
+.h-row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 8px; }
 
 .h-pills { display: flex; gap: 6px; flex-wrap: wrap; }
 .h-pill {
@@ -2068,8 +2070,8 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 
 /* Поля на самій сторінці — щоб колонки не розповзались за екран */
-.h-row2 > div, .h-row4 > div { min-width: 0; }
-.h-row2 input, .h-row2 select, .h-row4 input,
+.h-row2 > div, .h-row3 > div, .h-row4 > div { min-width: 0; }
+.h-row2 input, .h-row2 select, .h-row3 input, .h-row4 input,
 .h-wrap > input, .h-wrap > select { width: 100%; }
 .h-wrap select { width: 100%; }
 
