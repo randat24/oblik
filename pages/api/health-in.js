@@ -71,6 +71,16 @@ export default async function handler(req, res) {
     if (v !== null) day[k] = v;
   });
 
+  // Дві одиниці, у яких «Здоровʼя» майже завжди розходиться з нами.
+  // Межі взяті із запасом: 0,5 % жиру й 30 мл води за добу не буває, тож
+  // переплутати справжнє значення з чужою одиницею тут неможливо.
+  if (day.bodyFat !== undefined && day.bodyFat > 0 && day.bodyFat <= 1) {
+    day.bodyFat = Math.round(day.bodyFat * 1000) / 10;  // частка → відсотки
+  }
+  if (day.water !== undefined && day.water > 0 && day.water < 50) {
+    day.water = Math.round(day.water * 1000);           // літри → мілілітри
+  }
+
   if (Object.keys(day).length === 1) {
     return res.status(400).json({ error: 'Немає жодного числа' });
   }
