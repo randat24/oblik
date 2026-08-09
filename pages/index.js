@@ -573,7 +573,7 @@ function HomeView({ setState, onOpen, me }) {
 
       <div className="section">
         <h3 className="sec">За категоріями</h3>
-        <div className="table-wrap">
+        <TableWrap>
           <table className="data-table">
             <thead>
               <tr>
@@ -629,7 +629,7 @@ function HomeView({ setState, onOpen, me }) {
               </tr>
             </tbody>
           </table>
-        </div>
+        </TableWrap>
         <div className="totals" style={{ marginTop: 8 }}>
           <span>У «В наявності» для Рибаківки — залишок у штуках, а не кількість позицій</span>
         </div>
@@ -1778,10 +1778,38 @@ function ViewToggle({ mode, onChange }) {
   );
 }
 
+/**
+ * Обгортка широкої таблиці. Підказку показуємо не «про всяк випадок», а лише
+ * коли стовпчики справді не вміщаються: інакше вона брехала б на вузьких
+ * таблицях, які й так видно цілком.
+ */
+function TableWrap({ children }) {
+  const ref = useRef(null);
+  const [wide, setWide] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const check = () => setWide(el.scrollWidth > el.clientWidth + 4);
+    check();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [children]);
+
+  return (
+    <>
+      {wide && <div className="tbl-hint">← гортайте таблицю вбік →</div>}
+      <div className="table-wrap" ref={ref}>{children}</div>
+    </>
+  );
+}
+
 /** Щільна таблиця: колонки задає той, хто її викликає */
 function DataTable({ columns, rows, onPick, pickLabel = 'Картка' }) {
   return (
-    <div className="table-wrap">
+    <TableWrap>
       <table className="data-table">
         <thead>
           <tr>
@@ -1817,7 +1845,7 @@ function DataTable({ columns, rows, onPick, pickLabel = 'Картка' }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </TableWrap>
   );
 }
 
@@ -4921,7 +4949,9 @@ function WarehouseView({ setState, focusCode, onOpen }) {
           {list.map((it) => (
             <div className={'card' + (it.code === highlight ? ' highlight' : '')} key={it.row} id={'box-' + it.code}>
               <div className="card-head">
-                <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* той самий title-line, що й в інших картках: інакше правила
+                    для вузького екрана сюди просто не дістають */}
+                <div className="card-title title-line">
                   <span className="wh-code">{it.code}</span>
                   <input className="ghost big" type="text" defaultValue={it.name} placeholder="Назва"
                     onBlur={(e) => e.target.value !== it.name && save(it.row, 'name', e.target.value, it.name, it.code)} />

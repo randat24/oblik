@@ -340,6 +340,33 @@ function LineChart({ points, goal, unit = '' }) {
   );
 }
 
+/**
+ * Обгортка широкої таблиці. Підказку показуємо не «про всяк випадок», а лише
+ * коли стовпчики справді не вміщаються.
+ */
+function TableWrap({ children }) {
+  const ref = useRef(null);
+  const [wide, setWide] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const check = () => setWide(el.scrollWidth > el.clientWidth + 4);
+    check();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [children]);
+
+  return (
+    <>
+      {wide && <div className="tbl-hint">← гортайте таблицю вбік →</div>}
+      <div className="h-tablewrap" ref={ref}>{children}</div>
+    </>
+  );
+}
+
 /* ---------- Фото ---------- */
 
 /**
@@ -2486,7 +2513,7 @@ function BodyTab({ data, reload }) {
           )}
 
           <div className="h-sec"><h3>Історія<span className="h-count">{rows.length}</span></h3></div>
-          <div className="h-tablewrap">
+          <TableWrap>
             <table className="h-table">
               <thead>
                 <tr>
@@ -2505,7 +2532,7 @@ function BodyTab({ data, reload }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
         </>
       )}
 
