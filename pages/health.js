@@ -226,6 +226,30 @@ const scaleExtra = (src, k) => Object.fromEntries(
   EXTRA.map((key) => [key, num(src?.[key]) ? String(n1(num(src[key]) * k)) : ''])
 );
 
+/**
+ * Який зараз прийом їжі. Форма підставляє його сама: найчастіша помилка —
+ * записати вечерю о сьомій вечора, а вона мовчки лягає в сніданок, бо він
+ * стояв першим у списку.
+ *
+ * Межі свідомо широкі: о пʼятій ранку це вже сніданок, після десятої вечора —
+ * перекус. Кордони — питання звички, тож будь-який вибір лишається за вами.
+ */
+function hourKyiv() {
+  const f = new Intl.DateTimeFormat('uk-UA', {
+    timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const p = {};
+  f.formatToParts(new Date()).forEach((x) => { p[x.type] = x.value; });
+  return { h: Number(p.hour) % 24, hhmm: `${p.hour}:${p.minute}` };
+}
+
+function mealByHour(h) {
+  if (h >= 5 && h < 11) return 'Сніданок';
+  if (h >= 11 && h < 16) return 'Обід';
+  if (h >= 16 && h < 22) return 'Вечеря';
+  return 'Перекус';
+}
+
 const photoSrc = (v) => (v ? '/api/photo?p=' + encodeURIComponent(v) : '');
 
 function today() {
@@ -1110,7 +1134,9 @@ function BarcodeScanner({ onFound, onClose }) {
 }
 
 function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, onDone }) {
-  const [meal, setMeal] = useState(MEALS[0]);
+  // підставляємо за годиною; щойно торкнулись пігулки — далі вирішує людина
+  const [meal, setMeal] = useState(() => mealByHour(hourKyiv().h));
+  const [mealAuto, setMealAuto] = useState(true);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [kcal, setKcal] = useState('');
@@ -1254,9 +1280,20 @@ function FoodModal({ date, known, products = [], dishes = [], prefill, onClose, 
       <label>Прийом їжі</label>
       <div className="h-pills">
         {MEALS.map((m) => (
-          <button key={m} className={'h-pill' + (meal === m ? ' on' : '')} onClick={() => setMeal(m)}>{m}</button>
+          <button
+            key={m}
+            className={'h-pill' + (meal === m ? ' on' : '')}
+            onClick={() => { setMeal(m); setMealAuto(false); }}
+          >
+            {m}
+          </button>
         ))}
       </div>
+      {mealAuto && (
+        <div className="h-hint h-hint-auto">
+          Обрано за часом — зараз {hourKyiv().hhmm}. Якщо не так, натисніть інше.
+        </div>
+      )}
       <div className="h-food-top">
         <button className="h-btn h-btn-scan" onClick={() => setScan(true)} disabled={busy}>
           Сканувати штрихкод
