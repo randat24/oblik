@@ -1388,6 +1388,10 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   background: var(--panel-2); border: 1px solid var(--line);
   padding: 1px 5px; border-radius: 20px; white-space: nowrap;
 }
+/* Крайні підписи не центруємо: половина бульбашки виходила за край графіка
+   й тягла всю сторінку вбік. Притискаємо їх до своїх країв. */
+.h-dot b.is-first { left: 0; transform: none; }
+.h-dot b.is-last { left: auto; right: 0; transform: none; }
 .h-chart-x {
   grid-column: 2; position: relative; height: 18px; margin-top: 4px;
 }
@@ -1395,6 +1399,8 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   position: absolute; transform: translateX(-50%);
   font-family: var(--mono); font-size: .64rem; color: var(--muted); white-space: nowrap;
 }
+.h-chart-x span.is-first { transform: none; }
+.h-chart-x span.is-last { transform: translateX(-100%); }
 
 /* Заміри */
 .h-mgrid {
@@ -1568,7 +1574,56 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-cmp-sum b { font-family: var(--mono); color: var(--text); }
 .h-cmp-sum .is-up b { color: var(--red); }
 .h-cmp-sum .is-down b { color: var(--green); }
+.h-cmp-modes { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 18px 0; }
 .h-cmp-pills { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 18px; }
+
+/* Накладання знімків: шторка і блимання.
+   Обидва спираються на однакову рамку 3:4 з object-fit: cover — інакше
+   знімки різних пропорцій «стрибають» і різницю видно не в тілі, а в кадрі. */
+.h-wipe, .h-blink {
+  position: relative; width: 100%; aspect-ratio: 3 / 4;
+  border-radius: var(--r-sm); overflow: hidden; background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+.h-wipe img, .h-blink img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+/* Обидва знімки лежать на всю рамку, а верхній підрізаємо clip-path.
+   Саме підрізаємо, а не звужуємо: якби верхнє фото стискалось за шторкою,
+   силует поїхав би і різницю було б видно в кадрі, а не в тілі. */
+.h-wipe-b, .h-wipe-a { position: absolute; inset: 0; }
+.h-wipe-line {
+  position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
+  background: var(--amber); box-shadow: 0 0 0 1px rgba(0,0,0,.45);
+  pointer-events: none;
+}
+.h-wipe-line::after {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 26px; height: 26px; margin: -13px 0 0 -13px;
+  border-radius: 50%; background: var(--amber); opacity: .9;
+}
+.h-wipe-t, .h-blink-t {
+  position: absolute; bottom: 8px; font-family: var(--mono); font-size: .72rem;
+  color: #fff; background: rgba(0,0,0,.6); padding: 2px 8px; border-radius: 999px;
+  pointer-events: none;
+}
+.h-wipe-t.is-l { left: 8px; }
+.h-wipe-t.is-r { right: 8px; }
+.h-blink-t { left: 8px; }
+.h-blink-t b { color: var(--amber); }
+.h-wipe-range {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: ew-resize; margin: 0; padding: 0;
+}
+.h-blink { cursor: pointer; }
+/* Лінії-орієнтири: за ними видно, чи справді змінився обхват, чи просто
+   інакше стали. */
+.h-wipe.has-guides::before, .h-blink.has-guides::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  background: repeating-linear-gradient(
+    to bottom, rgba(255,255,255,.28) 0 1px, transparent 1px 10%
+  );
+}
 .h-cmp-body { overflow-y: auto; padding: 0 18px 18px; }
 .h-cmp-pair { margin-bottom: 18px; }
 .h-cmp-t {

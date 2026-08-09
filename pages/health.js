@@ -309,7 +309,11 @@ function LineChart({ points, goal, unit = '' }) {
               title={`${p.d} — ${n1(p.v)}${unit}`}
             >
               {/* число біля кожної точки читається лише коли їх мало */}
-              {(points.length <= 8 || i === 0 || i === points.length - 1) && <b>{n1(p.v)}</b>}
+              {(points.length <= 8 || i === 0 || i === points.length - 1) && (
+                <b className={i === 0 ? 'is-first' : i === points.length - 1 ? 'is-last' : ''}>
+                  {n1(p.v)}
+                </b>
+              )}
             </span>
           ))}
         </div>
@@ -317,7 +321,15 @@ function LineChart({ points, goal, unit = '' }) {
       <div className="h-chart-x">
         {points.map((p, i) => (
           (i % labelStep === 0 || i === points.length - 1)
-            ? <span key={i} style={{ left: `${x(i)}%` }}>{short(p.d)}</span>
+            ? (
+              <span
+                key={i}
+                className={i === 0 ? 'is-first' : i === points.length - 1 ? 'is-last' : ''}
+                style={{ left: `${x(i)}%` }}
+              >
+                {short(p.d)}
+              </span>
+            )
             : null
         ))}
       </div>
@@ -2182,11 +2194,29 @@ function PhotoCompare({ data, onClose }) {
   const [left, setLeft] = useState(withPhotos[0]?.date || '');
   const [right, setRight] = useState(withPhotos[withPhotos.length - 1]?.date || '');
   const [side, setSide] = useState(null); // null — усі ракурси
+  const [mode, setMode] = useState('side');
+  const [pos, setPos] = useState(50);     // де стоїть шторка, %
+  const [blink, setBlink] = useState(false); // яке фото показує «блимання»
+  const [auto, setAuto] = useState(true);
+  const [guides, setGuides] = useState(false);
 
   const a = withPhotos.find((d) => d.date === left);
   const b = withPhotos.find((d) => d.date === right);
   const sides = side ? PHOTO_SIDES.filter((s) => s.key === side) : PHOTO_SIDES;
   const shown = sides.filter((s) => a?.[s.key] || b?.[s.key]);
+
+  // Шторка й блимання накладають знімки один на одного, тож потрібен один
+  // ракурс і обидва фото — інакше накладати нема чого.
+  const pairs = PHOTO_SIDES.filter((s) => a?.[s.key] && b?.[s.key]);
+  const one = pairs.find((s) => s.key === side) || pairs[0] || null;
+  const overlay = mode !== 'side';
+
+  // саме блимання: очей ловить зміну силуету краще, ніж порівняння поруч
+  useEffect(() => {
+    if (mode !== 'blink' || !auto) return;
+    const t = setInterval(() => setBlink((v) => !v), 900);
+    return () => clearInterval(t);
+  }, [mode, auto]);
 
   const dw = a?.weight != null && b?.weight != null ? n1(b.weight - a.weight) : null;
   const days = a && b ? Math.round((stamp(b.date) - stamp(a.date)) / 86400000) : null;
@@ -2203,7 +2233,7 @@ function PhotoCompare({ data, onClose }) {
           <select value={left} onChange={(e) => setLeft(e.target.value)}>
             {withPhotos.map((d) => (
               <option key={d.date} value={d.date}>
-                {d.date}{d.weight != null ? ` · ${n1(d.weight)} кг` : ''}
+                {short(d.date)}{d.weight != null ? ` · ${n1(d.weight)} кг` : ''}
               </option>
             ))}
           </select>
@@ -2211,7 +2241,7 @@ function PhotoCompare({ data, onClose }) {
           <select value={right} onChange={(e) => setRight(e.target.value)}>
             {withPhotos.map((d) => (
               <option key={d.date} value={d.date}>
-                {d.date}{d.weight != null ? ` · ${n1(d.weight)} кг` : ''}
+                {short(d.date)}{d.weight != null ? ` · ${n1(d.weight)} кг` : ''}
               </option>
             ))}
           </select>
@@ -2228,15 +2258,98 @@ function PhotoCompare({ data, onClose }) {
           </div>
         )}
 
-        <div className="h-cmp-pills">
-          <button className={'h-pill' + (side === null ? ' on' : '')} onClick={() => setSide(null)}>Усі</button>
-          {PHOTO_SIDES.map((s) => (
-            <button key={s.key} className={'h-pill' + (side === s.key ? ' on' : '')} onClick={() => setSide(s.key)}>
-              {s.label}
+        <div className="h-cmp-modes">
+          {[
+            { key: 'side', label: 'Поруч' },
+            { key: 'wipe', label: 'Шторка' },
+            { key: 'blink', label: 'Блимання' },
+          ].map((m) => (
+            <button
+              key={m.key}
+              className={'h-pill' + (mode === m.key ? ' on' : '')}
+              onClick={() => setMode(m.key)}
+            >
+              {m.label}
             </button>
           ))}
         </div>
 
+        <div className="h-cmp-pills">
+          {!overlay && (
+            <button className={'h-pill' + (side === null ? ' on' : '')} onClick={() => setSide(null)}>Усі</button>
+          )}
+          {(overlay ? pairs : PHOTO_SIDES).map((s) => (
+            <button
+              key={s.key}
+              className={'h-pill' + ((overlay ? one?.key : side) === s.key ? ' on' : '')}
+              onClick={() => setSide(s.key)}
+            >
+              {s.label}
+            </button>
+          ))}
+          {overlay && (
+            <button className={'h-pill' + (guides ? ' on' : '')} onClick={() => setGuides(!guides)}>
+              лінії
+            </button>
+          )}
+        </div>
+
+        {overlay && (
+          <div className="h-cmp-body">
+            {!one ? (
+              <div className="h-empty">
+                Щоб накласти знімки, потрібне фото одного ракурсу на обидві дати.
+                Поки такого немає — подивіться «Поруч».
+              </div>
+            ) : mode === 'wipe' ? (
+              <>
+                <div className={'h-wipe' + (guides ? ' has-guides' : '')}>
+                  <img className="h-wipe-b" src={photoSrc(b[one.key])} alt={b.date} />
+                  <div className="h-wipe-a" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
+                    <img src={photoSrc(a[one.key])} alt={a.date} />
+                  </div>
+                  <div className="h-wipe-line" style={{ left: pos + '%' }} />
+                  <span className="h-wipe-t is-l">{short(a.date)}</span>
+                  <span className="h-wipe-t is-r">{short(b.date)}</span>
+                  <input
+                    className="h-wipe-range"
+                    type="range" min="0" max="100" step="0.5"
+                    value={pos}
+                    onChange={(e) => setPos(Number(e.target.value))}
+                    aria-label="Пересунути шторку"
+                  />
+                </div>
+                <div className="h-hint">
+                  Тягніть поперек фото: ліворуч від лінії — {a.date}, праворуч — {b.date}.
+                </div>
+              </>
+            ) : (
+              <>
+                <div
+                  className={'h-blink' + (guides ? ' has-guides' : '')}
+                  onClick={() => { setAuto(false); setBlink((v) => !v); }}
+                >
+                  <img src={photoSrc((blink ? b : a)[one.key])} alt={(blink ? b : a).date} />
+                  <span className="h-blink-t">
+                    {(blink ? b : a).date}
+                    {(blink ? b : a).weight != null && <b> {n1((blink ? b : a).weight)} кг</b>}
+                  </span>
+                </div>
+                <div className="h-cmp-modes">
+                  <button className={'h-pill' + (auto ? ' on' : '')} onClick={() => setAuto(!auto)}>
+                    {auto ? 'зупинити' : 'перемикати само'}
+                  </button>
+                </div>
+                <div className="h-hint">
+                  Знімки міняються на одному місці — так зміна силуету помітна
+                  краще, ніж коли вони поруч. Торкніться фото, щоб гортати вручну.
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {!overlay && (
         <div className="h-cmp-body">
           {shown.length === 0 ? (
             <div className="h-empty">На цих датах немає фото для порівняння</div>
@@ -2261,6 +2374,7 @@ function PhotoCompare({ data, onClose }) {
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   );
