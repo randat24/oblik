@@ -1400,6 +1400,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-sec-a { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .h-empty { color: var(--muted); padding: 16px 0; text-align: center; font-size: .86rem; }
 .h-note { color: var(--muted); font-size: .8rem; line-height: 1.55; margin-bottom: 10px; }
+.h-hint-auto { margin-top: -4px; color: var(--green); opacity: .8; }
 .h-err { color: var(--red); font-size: .82rem; margin-top: 8px; }
 .h-ok { color: var(--green); font-size: .82rem; }
 
