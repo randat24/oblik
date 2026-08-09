@@ -2188,36 +2188,53 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .h-week-a { margin-left: auto; font-size: .72rem; color: var(--muted); }
 .h-week-a b { font-family: var(--mono); color: var(--text); }
-.h-week-b {
-  position: relative; display: flex; align-items: flex-end; gap: 6px; height: 108px;
+/* Стовпчики за період.
+   Ліворуч — вісь із трьома підписами, щоб було видно масштаб; горизонтальні
+   лінії сітки; пунктир цілі на всю ширину. Слот є на кожен день періоду,
+   навіть порожній, — інакше три записи розтягувались на всю ширину і
+   виглядали як графік за три дні. */
+.h-week-plot { display: flex; gap: 8px; height: 116px; }
+.h-week-y {
+  flex: 0 0 auto; display: flex; flex-direction: column; justify-content: space-between;
+  font-family: var(--mono); font-size: .6rem; color: var(--muted);
+  text-align: right; min-width: 22px; padding-bottom: 1px;
 }
-.h-week-c { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
-.h-week-bar-wrap {
-  position: relative; flex: 1 1 auto; width: 100%;
-  display: flex; align-items: flex-end; justify-content: center;
+.h-week-area { position: relative; flex: 1 1 auto; min-width: 0; }
+.h-week-grid {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  justify-content: space-between; pointer-events: none;
 }
-.h-week-bar {
-  width: 100%; max-width: 26px; border-radius: 6px; opacity: .45;
-  transition: height .4s cubic-bezier(.2,.7,.3,1);
-}
-.h-week-bar.is-done { opacity: .9; }
-.h-week-bar.is-today { opacity: 1; box-shadow: 0 0 0 1px var(--text); }
-.h-week-v {
-  position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
-  font-family: var(--mono); font-size: .68rem; color: var(--muted); white-space: nowrap;
-}
-.h-week-d {
-  font-family: var(--mono); font-size: .64rem; color: var(--muted); margin-top: 6px;
-}
+.h-week-grid i { display: block; border-top: 1px solid var(--line-soft); }
 .h-week-goal {
-  position: absolute; left: 0; right: 0; border-top: 1px dashed var(--line);
-  pointer-events: none;
+  position: absolute; left: 0; right: 0; border-top: 1px dashed var(--amber);
+  opacity: .75; pointer-events: none;
 }
 .h-week-goal span {
-  position: absolute; right: 0; top: -8px;
-  font-family: var(--mono); font-size: .58rem; color: var(--muted);
-  background: var(--panel); padding: 0 3px;
+  position: absolute; right: 0; top: -7px;
+  font-family: var(--mono); font-size: .55rem; color: var(--amber);
+  background: var(--panel); padding: 0 3px; border-radius: 3px;
 }
+.h-week-bars {
+  position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 4px;
+}
+.h-week-c { flex: 1; min-width: 0; display: flex; justify-content: center; align-items: flex-end; height: 100%; }
+.h-week-bar {
+  width: 100%; max-width: 22px; border-radius: 5px 5px 2px 2px; opacity: .55;
+  transition: height .4s cubic-bezier(.2,.7,.3,1);
+}
+.h-week-bar.is-done { opacity: .95; }
+.h-week-bar.is-today { opacity: 1; }
+.h-week-x {
+  position: relative; height: 13px; margin-top: 6px; margin-left: 30px;
+}
+.h-week-x span {
+  position: absolute; transform: translateX(-50%); white-space: nowrap;
+  font-family: var(--mono); font-size: .58rem; color: var(--muted);
+}
+/* крайні притискаємо до країв, інакше половина підпису виходить за графік */
+.h-week-x span.at-start { transform: none; }
+.h-week-x span.at-end { transform: translateX(-100%); }
+.h-week-x span.is-today { color: var(--text); font-weight: 700; }
 
 @media (max-width: 520px) {
   .h-board-rings { gap: 14px; padding: 16px; }

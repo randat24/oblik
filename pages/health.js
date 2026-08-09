@@ -1535,47 +1535,101 @@ function RingLegend({ rows }) {
  * «Діаграми» у «Здоровʼї». Стовпчик за сьогодні підсвічений.
  */
 function WeekBars({ days, pick, goal, unit = '', label, color = 'var(--ring-move)', span = 7 }) {
-  const rows = days.slice(-span);
-  if (!rows.length) return null;
-  const vals = rows.map((d) => num(pick(d)));
-  // порожня рамка нічого не каже — краще не показувати графік узагалі
-  if (!vals.some((v) => v > 0)) return null;
-  const max = Math.max(...vals, goal || 0, 1);
-  const filled = vals.filter((v) => v > 0);
-  const avg = filled.length ? filled.reduce((a, v) => a + v, 0) / filled.length : 0;
   const now = today();
+  const t0 = stamp(now);
+  const p2 = (x) => String(x).padStart(2, '0');
+  const key = (t) => {
+    const d = new Date(t);
+    return `${p2(d.getUTCDate())}.${p2(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
+  };
+
+  // Ряд будуємо по днях, а не по записах: інакше день без запису просто
+  // зникав, і три стовпчики розтягувались на всю ширину з дірками між ними.
+  const byDate = new Map(days.map((d) => [d.date, d]));
+  const slots = [];
+  for (let i = span - 1; i >= 0; i--) {
+    const k = key(t0 - i * 86400000);
+    slots.push({ k, v: num(pick(byDate.get(k) || {})) });
+  }
+
+  const vals = slots.map((s) => s.v);
+  if (!vals.some((v) => v > 0)) return null;
+
+  const filled = vals.filter((v) => v > 0);
+  const avg = filled.reduce((a, v) => a + v, 0) / filled.length;
+
+  // Верх шкали — рівне число трохи вище за найбільший стовпчик або ціль,
+  // щоб підписи осі не були на кшталт «1387».
+  const top = (() => {
+    const raw = Math.max(...vals, num(goal), 1);
+    const step = Math.pow(10, Math.floor(Math.log10(raw)));
+    return Math.ceil(raw / (step / 2)) * (step / 2);
+  })();
+
+  const fmt = (v) => (v >= 10000 ? Math.round(v / 1000) + 'к'
+    : v >= 1000 ? Math.round(v / 100) / 10 + 'к' : String(Math.round(v)));
+
+  // Підписуємо не кожен день: підпис «28.07» ширший за слот, тож поруч
+  // потрібні порожні. На два тижні виходить пʼять підписів — читається.
+  const everyN = slots.length > 8 ? Math.ceil(slots.length / 5) : 1;
 
   return (
     <div className="h-week">
       <div className="h-week-h">
         <span className="h-week-t">{label}</span>
-        {avg > 0 && (
+        {filled.length > 0 && (
           <span className="h-week-a">
-            у середньому <b>{Math.round(avg)}</b> {unit}
+            у середньому <b>{fmt(avg)}</b> {unit}
           </span>
         )}
       </div>
-      <div className="h-week-b">
-        {goal > 0 && goal <= max && (
-          <div className="h-week-goal" style={{ bottom: `${(goal / max) * 100}%` }}>
-            <span>{goal}</span>
-          </div>
-        )}
-        {rows.map((d, i) => {
-          const v = vals[i];
-          const h = max > 0 ? (v / max) * 100 : 0;
-          const done = goal > 0 && v >= goal;
-          return (
-            <div className="h-week-c" key={d.date}>
-              <div className="h-week-bar-wrap">
-                {v > 0 && <span className="h-week-v">{v >= 1000 ? Math.round(v / 100) / 10 + 'к' : Math.round(v)}</span>}
-                <div
-                  className={'h-week-bar' + (done ? ' is-done' : '') + (d.date === now ? ' is-today' : '')}
-                  style={{ height: `${Math.max(h, v > 0 ? 3 : 0)}%`, background: color }}
-                />
-              </div>
-              <span className="h-week-d">{d.date.slice(0, 2)}</span>
+
+      <div className="h-week-plot">
+        <div className="h-week-y">
+          {[top, top / 2, 0].map((v, i) => <span key={i}>{fmt(v)}</span>)}
+        </div>
+        <div className="h-week-area">
+          <div className="h-week-grid"><i /><i /><i /></div>
+          {num(goal) > 0 && num(goal) <= top && (
+            <div className="h-week-goal" style={{ bottom: `${(num(goal) / top) * 100}%` }}>
+              <span>ціль {fmt(num(goal))}</span>
             </div>
+          )}
+          <div className="h-week-bars">
+            {slots.map((s) => {
+              const done = num(goal) > 0 && s.v >= num(goal);
+              return (
+                <div className="h-week-c" key={s.k}>
+                  {s.v > 0 && (
+                    <div
+                      className={'h-week-bar' + (done ? ' is-done' : '') + (s.k === now ? ' is-today' : '')}
+                      style={{ height: `max(3px, ${(s.v / top) * 100}%)`, background: color }}
+                      title={`${s.k} — ${fmt(s.v)} ${unit}`}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Підписи ставимо по місцю, а не комірками: «28.07» ширше за слот,
+          і в комірці воно б не помістилось. Рахуємо від кінця — сьогодні
+          підписане завжди, решта відступає рівно. */}
+      <div className="h-week-x">
+        {slots.map((s, i) => {
+          if ((slots.length - 1 - i) % everyN !== 0) return null;
+          const at = ((i + 0.5) / slots.length) * 100;
+          const edge = i === 0 ? ' at-start' : i === slots.length - 1 ? ' at-end' : '';
+          return (
+            <span
+              key={s.k}
+              className={(s.k === now ? 'is-today' : '') + edge}
+              style={{ left: at + '%' }}
+            >
+              {s.k.slice(0, 5)}
+            </span>
           );
         })}
       </div>
