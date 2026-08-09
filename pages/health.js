@@ -631,12 +631,6 @@ function StreakBar({ days, today, date, setDate }) {
 
   return (
     <div className="h-streak">
-      <div className="h-streak-h">
-        <span className="h-streak-n">{n}</span>
-        <span className="h-streak-l">
-          {n === 0 ? 'почніть серію — внесіть щось за сьогодні' : `${plural(n)} поспіль`}
-        </span>
-      </div>
       <div className="h-streak-w">
         {week.map((d) => (
           <button
@@ -649,6 +643,11 @@ function StreakBar({ days, today, date, setDate }) {
             <span className="h-streak-dot">{d.on ? '✓' : ''}</span>
           </button>
         ))}
+      </div>
+      <div className="h-streak-l">
+        {n === 0
+          ? 'почніть серію — внесіть щось за сьогодні'
+          : <>серія: <b>{n}</b> {plural(n)} поспіль</>}
       </div>
     </div>
   );
@@ -1393,10 +1392,12 @@ function RingLegend({ rows }) {
  * Стовпчики за останні дні з лінією середнього — так Apple показує
  * «Діаграми» у «Здоровʼї». Стовпчик за сьогодні підсвічений.
  */
-function WeekBars({ days, pick, goal, unit = '', label, color = 'var(--ring-move)' }) {
-  const rows = days.slice(-7);
+function WeekBars({ days, pick, goal, unit = '', label, color = 'var(--ring-move)', span = 7 }) {
+  const rows = days.slice(-span);
   if (!rows.length) return null;
   const vals = rows.map((d) => num(pick(d)));
+  // порожня рамка нічого не каже — краще не показувати графік узагалі
+  if (!vals.some((v) => v > 0)) return null;
   const max = Math.max(...vals, goal || 0, 1);
   const filled = vals.filter((v) => v > 0);
   const avg = filled.length ? filled.reduce((a, v) => a + v, 0) / filled.length : 0;
@@ -3078,11 +3079,98 @@ function GoalsTab({ data, reload, setBusy }) {
 
 /* ---------- Сторінка ---------- */
 
+/* ---------- Вкладка «Підсумки» ---------- */
+
+/**
+ * Не окремі числа за день, а картина за час: скільки днів ведеться облік,
+ * скільки з них у межах норми, яка серія зараз і яка була найдовша. Плюс
+ * стовпчики за два тижні — де провал, видно одразу.
+ */
+function StatsTab({ data }) {
+  const g = data.goals || {};
+  const kcalGoal = num(g.kcal);
+  const days = data.days;
+
+  const logged = days.filter((d) => num(d.kcal) > 0).length;
+  const hit = kcalGoal > 0
+    ? days.filter((d) => num(d.kcal) > 0 && num(d.kcal) <= kcalGoal).length
+    : null;
+
+  const cur = streakOf(days, today()).n;
+
+  // найдовша серія — просто найбільший непереривний відрізок серед усіх днів
+  const best = (() => {
+    const set = new Set(days.filter(filled).map((d) => d.date));
+    let max = 0;
+    set.forEach((date) => {
+      // рахуємо лише від початку відрізка, щоб не міряти той самий двічі
+      const prev = new Date(stamp(date) - 86400000);
+      const p = (x) => String(x).padStart(2, '0');
+      const before = `${p(prev.getUTCDate())}.${p(prev.getUTCMonth() + 1)}.${prev.getUTCFullYear()}`;
+      if (set.has(before)) return;
+      let n = 0;
+      let t = stamp(date);
+      while (true) {
+        const d = new Date(t);
+        const k = `${p(d.getUTCDate())}.${p(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
+        if (!set.has(k)) break;
+        n++; t += 86400000;
+      }
+      if (n > max) max = n;
+    });
+    return max;
+  })();
+
+  return (
+    <>
+      <div className="h-stiles">
+        <div className="h-stile is-dark">
+          <div className="h-stile-l">Днів обліку</div>
+          <div className="h-stile-v">{logged}</div>
+        </div>
+        <div className="h-stile is-dark">
+          <div className="h-stile-l">Днів у межах норми</div>
+          <div className="h-stile-v">
+            {hit === null ? '—' : hit}
+            {hit > 0 && <i> 🏆</i>}
+          </div>
+        </div>
+        <div className="h-stile">
+          <div className="h-stile-l">Серія зараз</div>
+          <div className="h-stile-v">{cur}</div>
+        </div>
+        <div className="h-stile">
+          <div className="h-stile-l">Найдовша серія</div>
+          <div className="h-stile-v">{best}</div>
+        </div>
+      </div>
+      {hit === null && (
+        <div className="h-hint">
+          Щоб рахувати дні в межах норми, задайте норму калорій на вкладці «Цілі».
+        </div>
+      )}
+
+      <div className="h-sec"><h3>За два тижні</h3></div>
+      <WeekBars days={days} span={14} pick={(d) => d.kcal} goal={kcalGoal}
+        unit="ккал" label="Зʼїдено калорій" color="var(--amber)" />
+      <WeekBars days={days} span={14} pick={(d) => d.burned} goal={num(g.burned)}
+        unit="ккал" label="Спалено активністю" color="var(--ring-move)" />
+      <WeekBars days={days} span={14} pick={(d) => d.steps} goal={num(g.steps)}
+        unit="кроків" label="Кроки" color="var(--green)" />
+      <WeekBars days={days} span={14} pick={(d) => d.water} goal={num(g.water)}
+        unit="мл" label="Вода" color="var(--ring-stand)" />
+
+      {days.length === 0 && <div className="h-empty">Ще немає з чого рахувати</div>}
+    </>
+  );
+}
+
 const TABS = [
   { key: 'day', label: 'День' },
   { key: 'weight', label: 'Вага' },
   { key: 'dishes', label: 'Страви' },
   { key: 'body', label: 'Заміри' },
+  { key: 'stats', label: 'Підсумки' },
   { key: 'goals', label: 'Цілі' },
 ];
 
@@ -3164,7 +3252,15 @@ export default function Health() {
           {/* видно, який код зараз відкритий — інакше «змін не бачу»
               нема з чим звірити */}
           {BUILD && <span className="h-build" title="Версія збірки">{BUILD}</span>}
-          <a className="h-back" href="/">← до обліку</a>
+          {/* серія завжди перед очима, як нагорода за ведення */}
+          <button
+            className="h-fire"
+            onClick={() => setTab('stats')}
+            title="Днів поспіль — відкрити підсумки"
+          >
+            ✦ <b>{streakOf(data.days, today()).n}</b>
+          </button>
+          <a className="h-back" href="/" title="До обліку майна">← облік</a>
         </header>
 
         <div className="h-tabs">
@@ -3183,6 +3279,7 @@ export default function Health() {
         {tab === 'weight' && <WeightTab data={data} reload={load} />}
         {tab === 'dishes' && <DishesTab data={data} reload={load} setBusy={setBusy} />}
         {tab === 'body' && <BodyTab data={data} reload={load} />}
+        {tab === 'stats' && <StatsTab data={data} />}
         {tab === 'goals' && <GoalsTab data={data} reload={load} setBusy={setBusy} />}
       </div>
       {note && <div className="h-toast">{note}</div>}
