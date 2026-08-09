@@ -25,6 +25,26 @@ const num = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
+/**
+ * Діапазони, за межами яких число може бути лише помилкою заповнення.
+ * Взяті з великим запасом: мета не «перевірити здоров'я», а зловити
+ * підставлену не ту змінну — коли в вагу прилітають одинадцять тисяч кроків.
+ */
+const SANE = {
+  weight: [20, 400],        // кг
+  bodyFat: [3, 70],         // %
+  pulse: [25, 250],         // уд/хв
+  hrv: [1, 500],            // мс
+  sleep: [0, 24],           // год
+  stand: [0, 24],           // год
+  workout: [0, 1440],       // хв за добу
+  water: [0, 20000],        // мл
+  steps: [0, 200000],
+  burned: [0, 20000],       // ккал
+  restEnergy: [0, 10000],   // ккал
+  distance: [0, 500],       // км
+};
+
 /** Порівняння, що не підказує довжиною збігу, скільки символів угадано */
 function sameToken(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
@@ -88,6 +108,19 @@ export default async function handler(req, res) {
     day.water = Math.round(day.water * 1000);           // літри → мілілітри
   }
 
+  // Межі здорового глузду. У «Командах» результат кожної дії зветься
+  // однаково, тож переплутати змінні легко — і тоді кроки летять у вагу.
+  // Такий запис перекриває справжній, і повертати доводиться руками через
+  // історію Google Таблиць. Дешевше не пустити його всередину.
+  const ignored = [];
+  Object.entries(SANE).forEach(([k, [lo, hi]]) => {
+    if (day[k] === undefined) return;
+    if (day[k] < lo || day[k] > hi) {
+      ignored.push(`${k}=${day[k]} (чекали ${lo}–${hi})`);
+      delete day[k];
+    }
+  });
+
   if (Object.keys(day).length === 1) {
     return res.status(400).json({ error: 'Немає жодного числа' });
   }
@@ -99,7 +132,7 @@ export default async function handler(req, res) {
     // значеннями — а відповідь команди видно одразу на телефоні.
     const saved = { ...day };
     delete saved.date;
-    return res.json({ ok: true, date: day.date, saved });
+    return res.json({ ok: true, date: day.date, saved, ...(ignored.length ? { ignored } : {}) });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: e.message || 'Помилка запису' });
