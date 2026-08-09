@@ -1401,6 +1401,22 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-empty { color: var(--muted); padding: 16px 0; text-align: center; font-size: .86rem; }
 .h-note { color: var(--muted); font-size: .8rem; line-height: 1.55; margin-bottom: 10px; }
 .h-hint-auto { margin-top: -4px; color: var(--green); opacity: .8; }
+
+/* Таблиця в довідці: вузька, з прокруткою на телефоні */
+.h-tbl { overflow-x: auto; margin: 12px 0; }
+.h-tbl table { border-collapse: collapse; width: 100%; font-size: .76rem; }
+.h-tbl th {
+  text-align: left; padding: 7px 10px; white-space: nowrap;
+  font-size: .64rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); border-bottom: 1px solid var(--line);
+}
+.h-tbl td {
+  padding: 7px 10px; border-bottom: 1px solid var(--line-soft);
+  color: var(--text-dim); vertical-align: top;
+}
+.h-tbl tr:last-child td { border-bottom: 0; }
+.h-tbl td:first-child { white-space: nowrap; }
+.h-tbl td:last-child { white-space: nowrap; font-family: var(--mono); font-size: .72rem; }
 .h-err { color: var(--red); font-size: .82rem; margin-top: 8px; }
 .h-ok { color: var(--green); font-size: .82rem; }
 
