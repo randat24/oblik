@@ -1208,6 +1208,10 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   content: ''; display: inline-block; width: 3px; height: 1em;
   background: var(--green); margin-right: 10px; vertical-align: -2px; border-radius: 2px;
 }
+.h-build {
+  font-family: var(--mono); font-size: .62rem; color: var(--muted); opacity: .5;
+  border: 1px solid var(--line); border-radius: 20px; padding: 2px 8px;
+}
 .h-back { margin-left: auto; color: var(--muted); text-decoration: none; font-size: .82rem; }
 .h-back:hover { color: var(--amber); }
 

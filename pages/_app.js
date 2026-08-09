@@ -3,10 +3,13 @@ import { useEffect } from 'react';
 import '../styles/globals.css';
 
 export default function App({ Component, pageProps }) {
-  // без службового робітника сторінка в полі просто не відкриється
+  // Без службового робітника сторінка в полі просто не відкриється. Версію
+  // збірки дописуємо в адресу: інакше браузер лишає старого воркера зі старим
+  // кешем, і нові зміни не доходять, скільки сторінку не перезавантажуй.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    const v = (process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || 'dev').slice(0, 7);
+    navigator.serviceWorker.register('/sw.js?v=' + v).catch(() => {});
   }, []);
 
   return (

@@ -1,5 +1,12 @@
-/* Кеш оболонки застосунку: у полі сторінка має відкриватися й без мережі. */
-const SHELL = 'oblik-shell-v1';
+/* Кеш оболонки застосунку: у полі сторінка має відкриватися й без мережі.
+ *
+ * Ім'я кешу береться з версії, яку дописує сторінка під час реєстрації
+ * (/sw.js?v=<коміт>). Кожна нова збірка — новий воркер і новий кеш, а старі
+ * activate вичищає. Без цього кеш жив вічно: користувач бачив стару збірку
+ * і не мав жодного способу зрозуміти, чому оновлень немає.
+ */
+const V = new URL(self.location.href).searchParams.get('v') || 'dev';
+const SHELL = 'oblik-shell-' + V;
 const PAGES = ['/', '/rybakivka'];
 
 self.addEventListener('install', (e) => {
@@ -16,6 +23,16 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// у кеш кладемо лише те, що справді вдалося: інакше туди потрапляє
+// сторінка помилки й потім видається за застосунок
+const keep = (request, res) => {
+  if (res && res.ok && res.type === 'basic') {
+    const copy = res.clone();
+    caches.open(SHELL).then((c) => c.put(request, copy));
+  }
+  return res;
+};
+
 self.addEventListener('fetch', (e) => {
   const { request } = e;
   if (request.method !== 'GET') return;
@@ -28,22 +45,14 @@ self.addEventListener('fetch', (e) => {
   // збірка має незмінні імена файлів, тож її можна брати з кешу одразу
   if (url.pathname.startsWith('/_next/static/')) {
     e.respondWith(
-      caches.match(request).then((hit) => hit || fetch(request).then((res) => {
-        const copy = res.clone();
-        caches.open(SHELL).then((c) => c.put(request, copy));
-        return res;
-      }))
+      caches.match(request).then((hit) => hit || fetch(request).then((res) => keep(request, res)))
     );
     return;
   }
 
   e.respondWith(
     fetch(request)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(SHELL).then((c) => c.put(request, copy));
-        return res;
-      })
+      .then((res) => keep(request, res))
       .catch(() => caches.match(request).then((hit) => hit || caches.match('/')))
   );
 });
