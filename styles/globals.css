@@ -1350,14 +1350,50 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   text-align: center; background: var(--panel); border: 1px solid var(--line-soft);
   border-radius: var(--r); padding: 20px 16px; margin-bottom: 14px;
 }
-.h-kcal-v { font-family: var(--mono); font-size: 2.6rem; font-weight: 700; line-height: 1; }
-.h-kcal-g { color: var(--muted); font-size: 1.4rem; font-weight: 400; }
-.h-kcal-l {
-  font-size: .7rem; text-transform: uppercase; letter-spacing: .08em;
-  color: var(--muted); margin-top: 8px;
+/* Серія днів */
+.h-streak {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 14px 16px; margin-bottom: 12px;
 }
-.h-kcal-left { margin-top: 10px; font-size: .84rem; color: var(--green); }
-.h-kcal-left.is-over { color: var(--red); }
+.h-streak-h { display: flex; align-items: baseline; gap: 10px; }
+.h-streak-n {
+  font-family: var(--mono); font-size: 1.7rem; font-weight: 700; color: var(--amber);
+  line-height: 1;
+}
+.h-streak-l { font-size: .8rem; color: var(--muted); }
+.h-streak-w { display: flex; gap: 5px; margin-top: 12px; }
+.h-streak-d {
+  flex: 1; min-width: 0; background: none; border: 1px solid transparent;
+  border-radius: var(--r-sm); padding: 5px 2px 7px; cursor: pointer; font: inherit;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+}
+.h-streak-d.cur { border-color: var(--green); background: var(--green-dim); }
+.h-streak-dow {
+  font-size: .62rem; letter-spacing: .04em; color: var(--muted); font-family: var(--mono);
+}
+.h-streak-dot {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--panel-2); border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .8rem; line-height: 1; color: transparent;
+}
+.h-streak-d.on .h-streak-dot {
+  background: var(--green); border-color: var(--green); color: #10140e; font-weight: 700;
+}
+
+.h-kcal-sw {
+  background: none; border: 0; cursor: pointer; font: inherit;
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); padding: 4px 10px; margin-bottom: 4px;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px;
+}
+.h-kcal-sw:disabled { cursor: default; }
+.h-kcal-arr { color: var(--green); font-size: .9rem; }
+.h-kcal-v { font-family: var(--mono); font-size: 2.9rem; font-weight: 700; line-height: 1; }
+.h-kcal-v i { font-style: normal; font-size: 1.1rem; color: var(--muted); margin-left: 6px; }
+.h-kcal-v.is-over { color: var(--red); }
+.h-kcal-goal { margin-top: 10px; font-size: .82rem; color: var(--muted); }
+.h-kcal-goal b { font-family: var(--mono); color: var(--text-dim); }
 
 .h-bars { display: flex; flex-direction: column; gap: 9px; }
 .h-bar { display: flex; align-items: center; gap: 10px; }
@@ -1377,16 +1413,36 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-meal-h b { font-family: var(--mono); color: var(--text); }
 .h-food {
   display: flex; align-items: center; gap: 10px;
-  padding: 8px 0; border-bottom: 1px solid var(--line-soft);
+  padding: 10px 0; border-bottom: 1px solid var(--line-soft);
 }
 .h-food:last-child { border-bottom: 0; }
-.h-food-n { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
-.h-food-n i { color: var(--muted); font-style: normal; font-size: .82rem; }
-.h-food-k { font-family: var(--mono); font-weight: 700; flex: 0 0 auto; }
-.h-food-m { font-family: var(--mono); font-size: .7rem; color: var(--muted); flex: 0 0 auto; }
+.h-food-t { flex: 1 1 auto; min-width: 0; }
+.h-food-n { overflow-wrap: anywhere; font-weight: 600; }
+.h-food-n i { color: var(--muted); font-style: normal; font-size: .82rem; font-weight: 400; }
+.h-food-m {
+  display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 3px;
+  font-family: var(--mono); font-size: .74rem; color: var(--muted);
+}
+.h-food-m b { color: var(--text-dim); }
+
+/* Додати їжу — завжди на екрані */
+.h-addbar {
+  position: sticky; z-index: 20; margin: 16px 0 4px;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  display: flex; justify-content: center; pointer-events: none;
+}
+.h-add {
+  pointer-events: auto; cursor: pointer; font: inherit; font-weight: 700;
+  background: var(--green); color: #10140e; border: 0;
+  border-radius: 999px; padding: 14px 26px; font-size: .92rem;
+  box-shadow: 0 6px 22px rgba(0,0,0,.45);
+}
+.h-add:active { transform: translateY(1px); }
 .h-food-x {
   background: none; border: 0; color: var(--muted); cursor: pointer;
-  font-size: 1.1rem; line-height: 1; padding: 0 2px; flex: 0 0 auto;
+  font-size: 1.1rem; line-height: 1; flex: 0 0 auto;
+  /* прибирають запис пальцем — хрестик у чотирнадцять пікселів для цього замалий */
+  min-width: 34px; min-height: 34px; padding: 0;
 }
 .h-food-x:hover { color: var(--red); }
 

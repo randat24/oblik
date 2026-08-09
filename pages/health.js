@@ -575,6 +575,130 @@ function Bar({ label, value, goal, unit = 'г', tone }) {
 
 /* ---------- Вкладка «День» ---------- */
 
+const DOW = ['НД', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
+
+/** «21 день», «22 дні», «25 днів» — за останньою цифрою, крім підлітків */
+function plural(n) {
+  const t = n % 100;
+  const o = n % 10;
+  if (t >= 11 && t <= 14) return 'днів';
+  if (o === 1) return 'день';
+  if (o >= 2 && o <= 4) return 'дні';
+  return 'днів';
+}
+
+/** Чи є за цей день хоч якийсь запис — саме це й означає «вів щоденник» */
+function filled(d) {
+  if (!d) return false;
+  return num(d.kcal) > 0 || num(d.weight) > 0 || num(d.water) > 0
+    || num(d.steps) > 0 || num(d.burned) > 0;
+}
+
+/**
+ * Скільки днів поспіль ведеться щоденник. Рахуємо назад від сьогодні; якщо
+ * сьогодні ще нічого не внесено, це не обриває серію — день не закінчився.
+ */
+function streakOf(days, today) {
+  const map = new Map(days.map((d) => [d.date, d]));
+  const key = (t) => {
+    const d = new Date(t);
+    const p = (x) => String(x).padStart(2, '0');
+    return `${p(d.getUTCDate())}.${p(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
+  };
+  const t0 = stamp(today);
+  let n = 0;
+  for (let i = filled(map.get(today)) ? 0 : 1; i < 400; i++) {
+    if (!filled(map.get(key(t0 - i * 86400000)))) break;
+    n++;
+  }
+  return { n, map, key, t0 };
+}
+
+/**
+ * Смужка тижня з галочками й лічильником серії. Видно не лише число, а й
+ * які саме дні закриті — і де розрив.
+ */
+function StreakBar({ days, today, date, setDate }) {
+  const { n, map, key, t0 } = streakOf(days, today);
+
+  // сім днів, що закінчуються сьогодні
+  const week = [];
+  for (let i = 6; i >= 0; i--) {
+    const t = t0 - i * 86400000;
+    const k = key(t);
+    week.push({ k, on: filled(map.get(k)), dow: DOW[new Date(t).getUTCDay()] });
+  }
+
+  return (
+    <div className="h-streak">
+      <div className="h-streak-h">
+        <span className="h-streak-n">{n}</span>
+        <span className="h-streak-l">
+          {n === 0 ? 'почніть серію — внесіть щось за сьогодні' : `${plural(n)} поспіль`}
+        </span>
+      </div>
+      <div className="h-streak-w">
+        {week.map((d) => (
+          <button
+            key={d.k}
+            className={'h-streak-d' + (d.on ? ' on' : '') + (d.k === date ? ' cur' : '')}
+            onClick={() => setDate(d.k)}
+            title={d.k}
+          >
+            <span className="h-streak-dow">{d.dow}</span>
+            <span className="h-streak-dot">{d.on ? '✓' : ''}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Головне число дня. За замовчуванням — скільки лишилось, бо саме це питання
+ * виникає, коли вирішуєш, що зʼїсти. Одним дотиком перемикається на «зʼїдено»
+ * — коли цікаво, скільки вже набрав. Вибір памʼятається.
+ */
+function KcalHead({ eaten, goal, left }) {
+  const [mode, setMode] = useState('left');
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('h-kcal-mode');
+      if (v === 'eaten' || v === 'left') setMode(v);
+    } catch { /* приватний режим — просто лишаємо типове */ }
+  }, []);
+
+  const flip = () => {
+    const next = mode === 'left' ? 'eaten' : 'left';
+    setMode(next);
+    try { localStorage.setItem('h-kcal-mode', next); } catch { /* нічого страшного */ }
+  };
+
+  // без цілі показувати «лишилось» нема з чого
+  const showLeft = mode === 'left' && left !== null;
+  const value = showLeft ? Math.abs(left) : Math.round(eaten);
+  const over = showLeft && left < 0;
+
+  return (
+    <div className="h-kcal">
+      <button className="h-kcal-sw" onClick={flip} disabled={left === null}>
+        {showLeft ? (over ? 'Перебір' : 'Залишилось') : 'Зʼїдено'}
+        {left !== null && <span className="h-kcal-arr">⇅</span>}
+      </button>
+      <div className={'h-kcal-v' + (over ? ' is-over' : '')}>
+        {value}<i> ккал</i>
+      </div>
+      {goal > 0 && (
+        <div className="h-kcal-goal">
+          Ціль: <b>{goal}</b> ккал
+          {showLeft && <> · зʼїдено {Math.round(eaten)}</>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DayTab({ data, date, setDate, reload, setBusy, toast }) {
   const [food, setFood] = useState(null);
   const [copy, setCopy] = useState(false);
@@ -615,20 +739,11 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
         <button className="h-nav" onClick={() => shift(1)} disabled={stamp(date) >= stamp(today())}>›</button>
       </div>
 
-      <TodayBoard data={data} day={day} date={date} />
+      <StreakBar days={data.days} today={today()} date={date} setDate={setDate} />
 
-      <div className="h-kcal">
-        <div className="h-kcal-v">
-          {Math.round(eaten)}
-          {kcalGoal > 0 && <span className="h-kcal-g"> / {kcalGoal}</span>}
-        </div>
-        <div className="h-kcal-l">зʼїдено калорій</div>
-        {leftKcal !== null && (
-          <div className={'h-kcal-left' + (leftKcal < 0 ? ' is-over' : '')}>
-            {leftKcal >= 0 ? `лишилось ${leftKcal} ккал` : `перебір на ${-leftKcal} ккал`}
-          </div>
-        )}
-      </div>
+      <KcalHead eaten={eaten} goal={kcalGoal} left={leftKcal} />
+
+      <TodayBoard data={data} day={day} date={date} />
 
       <div className="h-bars">
         <Bar label="Білки" value={day.protein} goal={num(g.protein)} tone="var(--red)" />
@@ -660,7 +775,6 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
         <h3>Що зʼїв<span className="h-count">{meals.length}</span></h3>
         <div className="h-sec-a">
           <button className="h-btn" onClick={() => setCopy(true)}>Скопіювати день</button>
-          <button className="h-btn h-btn-p" onClick={() => setFood({ date })}>+ Додати їжу</button>
         </div>
       </div>
 
@@ -675,15 +789,29 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
             </div>
             {meals.filter((f) => f.meal === m).map((f) => (
               <div className="h-food" key={f.row}>
-                <span className="h-food-n">{f.name}{f.amount ? <i> · {f.amount}</i> : null}</span>
-                <span className="h-food-k">{Math.round(f.kcal)}</span>
-                <span className="h-food-m">{n1(f.protein)}/{n1(f.fat)}/{n1(f.carbs)}</span>
+                <div className="h-food-t">
+                  <div className="h-food-n">{f.name}{f.amount ? <i> · {f.amount}</i> : null}</div>
+                  {/* підписи, а не три числа через дріб: інакше не згадаєш,
+                      котре з них білки, а котре вуглеводи */}
+                  <div className="h-food-m">
+                    <b>{Math.round(f.kcal)}</b> ккал
+                    <span>Б {n1(f.protein)}</span>
+                    <span>Ж {n1(f.fat)}</span>
+                    <span>В {n1(f.carbs)}</span>
+                  </div>
+                </div>
                 <button className="h-food-x" onClick={() => delFood(f.row)} title="Прибрати">×</button>
               </div>
             ))}
           </div>
         ))
       )}
+
+      {/* Кнопка завжди під рукою: раніше по неї треба було прокрутити вниз,
+          а додають їжу разів пʼять на день. */}
+      <div className="h-addbar">
+        <button className="h-add" onClick={() => setFood({ date })}>+ Додати їжу</button>
+      </div>
 
       {food && (
         <FoodModal
