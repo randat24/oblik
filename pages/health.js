@@ -247,7 +247,11 @@ function shrink(file, maxSide = 1600, quality = 0.82) {
         'image/jpeg', quality
       );
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Не вдалося прочитати фото')); };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      // найчастіше це HEIC, який браузер не вміє розібрати
+      reject(new Error('Браузер не прочитав це фото. Спробуйте JPEG або PNG.'));
+    };
     img.src = url;
   });
 }
@@ -323,12 +327,22 @@ function LineChart({ points, goal, unit = '' }) {
 
 /* ---------- Фото ---------- */
 
+/**
+ * Одне фото одного ракурсу. Джерела два і обидва явні: зняти зараз або
+ * взяти готове з телефона. Раніше поле відкривало лише камеру — зробити
+ * вдалий кадр заздалегідь і потім прикріпити було неможливо.
+ */
 function PhotoSlot({ label, value, onChange }) {
-  const ref = useRef(null);
+  const fileRef = useRef(null);
+  const camRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  const pick = async (file) => {
+  const pick = async (input) => {
+    const file = input?.files?.[0];
+    // одразу відпускаємо поле: інакше повторний вибір того самого файлу
+    // не викличе подію і здаватиметься, що кнопка не працює
+    if (input) input.value = '';
     if (!file) return;
     setBusy(true); setErr('');
     try {
@@ -351,19 +365,45 @@ function PhotoSlot({ label, value, onChange }) {
         <div className="h-slot-img">
           <img src={photoSrc(value)} alt={label} />
           <button className="h-slot-x" onClick={() => onChange('')} title="Прибрати">×</button>
+          <button
+            className="h-slot-re"
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+          >
+            {busy ? '…' : 'замінити'}
+          </button>
         </div>
       ) : (
-        <button className="h-slot-add" onClick={() => ref.current?.click()} disabled={busy}>
-          {busy ? '…' : '+ фото'}
-        </button>
+        <div className="h-slot-add">
+          {busy ? (
+            <span className="h-slot-busy">завантаження…</span>
+          ) : (
+            <>
+              <button className="h-slot-b" onClick={() => fileRef.current?.click()}>
+                З телефона
+              </button>
+              <button className="h-slot-b h-slot-b2" onClick={() => camRef.current?.click()}>
+                Зняти зараз
+              </button>
+            </>
+          )}
+        </div>
       )}
+      {/* без capture — системний вибір покаже і галерею, і файли */}
       <input
-        ref={ref}
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => pick(e.target)}
+      />
+      <input
+        ref={camRef}
         type="file"
         accept="image/*"
         capture="environment"
         hidden
-        onChange={(e) => pick(e.target.files?.[0])}
+        onChange={(e) => pick(e.target)}
       />
       {err && <div className="h-err">{err}</div>}
     </div>
@@ -2117,6 +2157,11 @@ function WeightModal({ data, initialDate, onClose, onDone }) {
             onChange={(v) => setPhotos((p) => ({ ...p, [s.key]: v }))}
           />
         ))}
+      </div>
+      <div className="h-hint">
+        Фото можна зняти зараз або взяти вже готове з телефона. Не обов'язково
+        всі три — і не обов'язково сьогодні: додати чи замінити їх можна будь-коли,
+        відкривши цей запис знову.
       </div>
       <label>Примітка</label>
       <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="самопочуття, обставини…" />
