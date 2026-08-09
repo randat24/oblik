@@ -653,6 +653,77 @@ function StreakBar({ days, today, date, setDate }) {
   );
 }
 
+/** Один показник у картці: підпис, смужка, «скільки з чого» */
+function Metric({ label, value, goal, unit, tone }) {
+  const v = num(value);
+  const gl = num(goal);
+  const pct = gl > 0 ? Math.min(100, (v / gl) * 100) : (v > 0 ? 100 : 0);
+  return (
+    <div className="h-m">
+      <div className="h-m-l">{label}{unit ? `, ${unit}` : ''}</div>
+      <div className="h-m-t">
+        <div className="h-m-f" style={{ width: pct + '%', background: tone }} />
+      </div>
+      <div className="h-m-v">
+        <b>{n1(v)}</b>
+        {gl > 0 && <span> / {n1(gl)}</span>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Кілька карток по три показники, які гортаються вбік. Раніше все це стояло
+ * стовпчиком і займало пів екрана; тепер видно одну картку, а решта —
+ * порухом пальця. Крапки знизу показують, скільки їх і де ти зараз.
+ */
+function CardDeck({ cards }) {
+  const ref = useRef(null);
+  const [at, setAt] = useState(0);
+  const list = cards.filter(Boolean);
+
+  const onScroll = () => {
+    const el = ref.current;
+    if (!el) return;
+    setAt(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
+  };
+
+  const go = (i) => {
+    const el = ref.current;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
+  };
+
+  if (!list.length) return null;
+
+  return (
+    <div className="h-deck">
+      <div className="h-deck-t" ref={ref} onScroll={onScroll}>
+        {list.map((c, i) => (
+          <div className="h-deck-c" key={i}>
+            <div className="h-deck-h">{c.title}</div>
+            <div className="h-deck-m">{c.items}</div>
+          </div>
+        ))}
+      </div>
+      {list.length > 1 && (
+        <div className="h-pgs">
+          {list.map((c, i) => (
+            <button
+              key={i}
+              className={'h-pg' + (i === at ? ' on' : '')}
+              onClick={() => go(i)}
+              title={c.title}
+              aria-label={c.title}
+            >
+              <i />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Головне число дня. За замовчуванням — скільки лишилось, бо саме це питання
  * виникає, коли вирішуєш, що зʼїсти. Одним дотиком перемикається на «зʼїдено»
@@ -724,14 +795,44 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
 
       <KcalHead eaten={eaten} goal={kcalGoal} left={leftKcal} />
 
+      <CardDeck cards={[
+        {
+          title: 'Білки · Жири · Вуглеводи',
+          items: (
+            <>
+              <Metric label="Білки" value={day.protein} goal={g.protein} unit="г" tone="var(--red)" />
+              <Metric label="Жири" value={day.fat} goal={g.fat} unit="г" tone="var(--amber)" />
+              <Metric label="Вуглеводи" value={day.carbs} goal={g.carbs} unit="г" tone="var(--green)" />
+            </>
+          ),
+        },
+        {
+          title: 'Рух і вода',
+          items: (
+            <>
+              <Metric label="Кроки" value={day.steps} goal={g.steps} unit="" tone="var(--ring-ex)" />
+              <Metric label="Вода" value={day.water} goal={g.water} unit="мл" tone="var(--ring-stand)" />
+              <Metric label="Спалено" value={day.burned} goal={g.burned} unit="ккал" tone="var(--ring-move)" />
+            </>
+          ),
+        },
+        // третя картка з'являється лише коли є що показати: порожні смужки
+        // сну й пульсу тільки крали б місце
+        (num(day.sleep) > 0 || num(day.workout) > 0 || num(day.pulse) > 0) && {
+          title: 'Відновлення',
+          items: (
+            <>
+              <Metric label="Сон" value={day.sleep} goal={8} unit="год" tone="var(--blue)" />
+              <Metric label="Тренування" value={day.workout} goal={g.exercise} unit="хв" tone="var(--ring-ex)" />
+              <Metric label="Пульс спокою" value={day.pulse} goal={0} unit="уд/хв" tone="var(--red)" />
+            </>
+          ),
+        },
+      ]} />
+
       <TodayBoard data={data} day={day} date={date} />
 
-      <div className="h-bars">
-        <Bar label="Білки" value={day.protein} goal={num(g.protein)} tone="var(--red)" />
-        <Bar label="Жири" value={day.fat} goal={num(g.fat)} tone="var(--amber)" />
-        <Bar label="Вуглеводи" value={day.carbs} goal={num(g.carbs)} tone="var(--green)" />
-        {/* вода й кроки вже є вище — у кільцях, плитках і швидких кнопках */}
-      </div>
+
 
       <DayStats
         day={day}
@@ -1484,31 +1585,16 @@ function TodayBoard({ data, day, date }) {
         </div>
       )}
 
+      {/* Кроки, вода, сон і решта тепер у картках, що гортаються, — тут
+          лишились тільки ті числа, яких там немає. */}
       <div className="h-tiles">
-        {has('steps') && (
-          <Tile label="Кроки" value={Math.round(num(day.steps)).toLocaleString('uk-UA')}
-            delta={dOf('steps')} deltaGood="up"
-            sub={num(g.steps) ? `ціль ${num(g.steps).toLocaleString('uk-UA')}` : null} />
-        )}
         {has('distance') && (
           <Tile label="Дистанція" value={n1(day.distance)} unit="км" delta={dOf('distance')} deltaGood="up" />
-        )}
-        {has('pulse') && (
-          <Tile label="Пульс спокою" value={Math.round(num(day.pulse))} unit="уд/хв"
-            delta={dOf('pulse')} deltaGood="down" tone="var(--ring-move)"
-            sub="нижче — краще" />
         )}
         {has('hrv') && (
           <Tile label="ВСР" value={Math.round(num(day.hrv))} unit="мс"
             delta={dOf('hrv')} deltaGood="up" tone="var(--ring-stand)"
             sub="вище — краще відновлення" />
-        )}
-        {has('sleep') && (
-          <Tile label="Сон" value={n1(day.sleep)} unit="год" delta={dOf('sleep')} deltaGood="up" />
-        )}
-        {has('water') && (
-          <Tile label="Вода" value={Math.round(num(day.water))} unit="мл"
-            sub={num(g.water) ? `ціль ${num(g.water)}` : null} tone="var(--blue)" />
         )}
       </div>
 

@@ -1494,6 +1494,46 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-kcal-goal { margin-top: 10px; font-size: .82rem; color: var(--muted); }
 .h-kcal-goal b { font-family: var(--mono); color: var(--text-dim); }
 
+/* Картки показників, що гортаються */
+.h-deck { margin-bottom: 14px; }
+.h-deck-t {
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch; gap: 0;
+}
+.h-deck-t::-webkit-scrollbar { display: none; }
+.h-deck-c {
+  flex: 0 0 100%; scroll-snap-align: center; box-sizing: border-box;
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 14px 16px;
+}
+.h-deck-h {
+  font-size: .66rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin-bottom: 12px;
+}
+.h-deck-m { display: flex; gap: 12px; }
+.h-m { flex: 1; min-width: 0; }
+.h-m-l {
+  font-size: .72rem; color: var(--text-dim); margin-bottom: 7px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.h-m-t { height: 5px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.h-m-f { height: 100%; border-radius: 3px; transition: width .2s; }
+.h-m-v { margin-top: 7px; font-family: var(--mono); font-size: .78rem; color: var(--muted); }
+.h-m-v b { color: var(--text); font-size: .92rem; }
+
+/* Крапки-сторінки. Назва навмисно своя: .h-dot вже зайнятий точками на
+   графіку ваги, а той контейнер ще й вимикає натискання. */
+.h-pgs { display: flex; justify-content: center; gap: 2px; margin-top: 6px; }
+.h-pg {
+  width: 32px; height: 32px; border: 0; padding: 0; background: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.h-pg i {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--line);
+  transition: background .2s, width .2s;
+}
+.h-pg.on i { background: var(--green); width: 18px; border-radius: 4px; }
+
 .h-bars { display: flex; flex-direction: column; gap: 9px; }
 .h-bar { display: flex; align-items: center; gap: 10px; }
 .h-bar-l { flex: 0 0 80px; font-size: .76rem; color: var(--muted); }
