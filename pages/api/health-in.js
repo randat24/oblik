@@ -94,7 +94,12 @@ export default async function handler(req, res) {
 
   try {
     await saveDay(day);
-    return res.json({ ok: true, date: day.date, saved: Object.keys(day).filter((k) => k !== 'date') });
+    // Віддаємо не лише назви полів, а й числа. Перелік назв каже тільки те,
+    // що щось дійшло; побачити, що кроки опинились у вазі, можна лише за
+    // значеннями — а відповідь команди видно одразу на телефоні.
+    const saved = { ...day };
+    delete saved.date;
+    return res.json({ ok: true, date: day.date, saved });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: e.message || 'Помилка запису' });
