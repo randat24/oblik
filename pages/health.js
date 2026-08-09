@@ -10,6 +10,9 @@ import Head from 'next/head';
 const MEALS = ['Сніданок', 'Обід', 'Вечеря', 'Перекус'];
 const MOODS = ['Чудово', 'Добре', 'Нормально', 'Втома', 'Погано'];
 
+// Vercel підставляє це під час збірки — видно, який код зараз живий
+const BUILD = (process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || '').slice(0, 7);
+
 /*
  * Обхвати всюди в сантиметрах — і на екрані, і в таблиці. Крок 0,1 дозволяє
  * записати півсантиметра, якщо стрічка лягла між поділками.
@@ -3003,6 +3006,9 @@ export default function Health() {
       <div className={'h-wrap' + (busy ? ' is-busy' : '')}>
         <header className="h-head">
           <h1>Здоровʼя</h1>
+          {/* видно, який код зараз відкритий — інакше «змін не бачу»
+              нема з чим звірити */}
+          {BUILD && <span className="h-build" title="Версія збірки">{BUILD}</span>}
           <a className="h-back" href="/">← до обліку</a>
         </header>
 
