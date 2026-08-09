@@ -466,6 +466,58 @@ input:focus, select:focus, textarea:focus {
   overflow-x: auto; border: 1px solid var(--line-soft);
   border-radius: var(--r); background: var(--panel);
 }
+
+/* Широка таблиця на телефоні.
+ *
+ * Раніше вона просто обрізалася по краю: з девʼяти стовпчиків було видно три,
+ * і жодного знаку, що решта існує. Тепер край підсвічений тінню — одразу
+ * зрозуміло, що є куди гортати, — а перший стовпчик лишається на місці, щоб
+ * було видно, до якого рядка належать числа.
+ */
+@media (max-width: 720px) {
+  .table-wrap, .h-tablewrap {
+    position: relative;
+    background-image: linear-gradient(to left, rgba(0,0,0,.55), rgba(0,0,0,0) 28px);
+    background-position: right center; background-repeat: no-repeat;
+    background-size: 28px 100%; background-attachment: local, scroll;
+    scroll-snap-type: none; -webkit-overflow-scrolling: touch;
+  }
+  .h-tablewrap { border-radius: var(--r-sm); }
+
+  .data-table th:first-child, .data-table td:first-child,
+  .h-table th:first-child, .h-table td:first-child {
+    position: sticky; left: 0; z-index: 2;
+    background: var(--panel);
+    box-shadow: 1px 0 0 var(--line-soft);
+  }
+  .data-table th:first-child { background: var(--panel-2); z-index: 3; }
+  .h-table th:first-child { background: var(--bg); }
+  .data-table tbody tr:hover td:first-child { background: var(--panel-2); }
+}
+
+/* Підпис-підказка над широкою таблицею */
+.tbl-hint {
+  display: none; font-size: .7rem; color: var(--muted);
+  margin: 0 0 6px; font-family: var(--mono);
+}
+@media (max-width: 720px) { .tbl-hint { display: block; } }
+
+/* Пальцем важко влучити в напис заввишки вісімнадцять пікселів. На телефоні
+   даємо дрібним посиланням-кнопкам нормальну висоту дотику — вигляд той
+   самий, просто навколо тексту зʼявляється поле, яке ловить палець. */
+@media (max-width: 720px) {
+  .who-out, .h-back, .h-hedit, .h-quick-x, .box-con-add {
+    min-height: 34px; display: inline-flex; align-items: center;
+  }
+  .who-out, .h-hedit { padding: 0 6px; margin: 0 -6px; }
+  .h-back { padding-left: 10px; }
+  .h-quick-x, .box-con-add { padding: 0 12px; }
+
+  /* Статус міняють щодня, а поле було заввишки з двадцять чотири пікселі —
+     влучити пальцем важко. Те саме для полів, які правлять прямо в картці. */
+  .pill, select.pill { min-height: 34px; }
+  .ghost, input.ghost, select.ghost, textarea.ghost { min-height: 34px; }
+}
 /* min-width: max-content не дає таблиці стискатися до нечитабельних стовпчиків —
    замість цього обгортка прокручується вбік */
 .data-table { width: 100%; min-width: max-content; border-collapse: collapse; font-size: .86rem; }
@@ -1020,6 +1072,29 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   .log-when { flex-direction: row; gap: 8px; }
   .modal { width: 100%; max-height: 92vh; }
   .drow-k { flex-basis: 38%; }
+}
+
+/* Шапка на вузькому екрані.
+   Була в три рядки й займала чверть екрана ще до вмісту. Складаємо у два:
+   зверху назва і хто зайшов, знизу стан і дві кнопки. Значок «v2.0» ховаємо —
+   версію збірки видно поруч, а він лише крав місце. */
+@media (max-width: 560px) {
+  header { gap: 8px 10px; padding-bottom: 10px; margin-bottom: 12px; }
+  h1 { font-size: .95rem; letter-spacing: .1em; flex: 0 1 auto; min-width: 0; }
+  h1::before { margin-right: 7px; }
+  .ver { display: none; }
+  .who { order: 2; margin-left: auto; flex: 0 0 auto; gap: 6px; }
+  .state { order: 3; flex: 0 1 auto; min-width: 0; }
+  .scan-open { order: 4; }
+  .cmd-open:not(.scan-open) { order: 5; flex: 1 1 auto; }
+
+  /* Назва в картці не влазила між номером і статусом і обрізалася на пів
+     слові: «Ящик медич». Віддаємо їй окремий рядок на всю ширину, а номер і
+     статус лишаються поруч зверху — саме там їх і шукаєш очима. */
+  .card-head { align-items: flex-start; }
+  .title-line { flex-wrap: wrap; }
+  .title-line > .big,
+  .title-line > input.ghost.big { flex: 1 1 100%; min-width: 0; }
 }
 
 /* ---------- Вміст ящика ---------- */
@@ -1932,7 +2007,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-week-bar.is-today { opacity: 1; box-shadow: 0 0 0 1px var(--text); }
 .h-week-v {
   position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
-  font-family: var(--mono); font-size: .6rem; color: var(--muted); white-space: nowrap;
+  font-family: var(--mono); font-size: .68rem; color: var(--muted); white-space: nowrap;
 }
 .h-week-d {
   font-family: var(--mono); font-size: .64rem; color: var(--muted); margin-top: 6px;
