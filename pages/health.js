@@ -718,26 +718,8 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
     } finally { setBusy(false); }
   };
 
-  const shift = (days) => {
-    const t = stamp(date) + days * 86400000;
-    const d = new Date(t);
-    const p = (x) => String(x).padStart(2, '0');
-    setDate(`${p(d.getUTCDate())}.${p(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`);
-  };
-
   return (
     <>
-      <div className="h-daybar">
-        <button className="h-nav" onClick={() => shift(-1)}>‹</button>
-        <div className="h-daybar-d">
-          {date}
-          {date !== today() && (
-            <button className="h-today" onClick={() => setDate(today())}>сьогодні</button>
-          )}
-        </div>
-        <button className="h-nav" onClick={() => shift(1)} disabled={stamp(date) >= stamp(today())}>›</button>
-      </div>
-
       <StreakBar days={data.days} today={today()} date={date} setDate={setDate} />
 
       <KcalHead eaten={eaten} goal={kcalGoal} left={leftKcal} />
@@ -3174,6 +3156,46 @@ const TABS = [
   { key: 'goals', label: 'Цілі' },
 ];
 
+/* Прості значки для нижньої панелі — без бібліотек, щоб сторінка лишалась
+   самодостатньою. Обведення успадковує колір, тож активна вкладка
+   підсвічується сама. */
+const Ico = ({ d, fill }) => (
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"
+    fill={fill ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round">
+    {d}
+  </svg>
+);
+const IcoDay = <Ico d={<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>} />;
+const IcoWeight = <Ico d={<><circle cx="12" cy="13" r="8" /><path d="M12 13l3-4" /><path d="M9 5h6" /></>} />;
+const IcoStats = <Ico d={<><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></>} />;
+const IcoMore = <Ico d={<><path d="M4 7h16M4 12h16M4 17h16" /></>} />;
+
+// Унизу — тільки те, куди заходять щодня. Решта за «Ще»: шість дрібних
+// кнопок в один ряд на телефоні не натиснеш.
+const BNAV = [
+  { key: 'day', label: 'День', icon: IcoDay },
+  { key: 'weight', label: 'Вага', icon: IcoWeight },
+  { key: 'stats', label: 'Підсумки', icon: IcoStats },
+];
+const MORE = [
+  { key: 'dishes', label: 'Свої страви' },
+  { key: 'body', label: 'Заміри тіла' },
+  { key: 'goals', label: 'Цілі й профіль' },
+];
+
+const MONTHS = [
+  'січ', 'лют', 'бер', 'кві', 'тра', 'чер',
+  'лип', 'сер', 'вер', 'жов', 'лис', 'гру',
+];
+
+/** «09.08.2026» → «9 сер» — у шапці важлива не точність запису, а читабельність */
+function longDate(d) {
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec((d || '').trim());
+  if (!m) return d;
+  return `${Number(m[1])} ${MONTHS[Number(m[2]) - 1] || m[2]}`;
+}
+
 export default function Health() {
   const [data, setData] = useState(null);
   const [note, setNote] = useState('');
@@ -3181,6 +3203,14 @@ export default function Health() {
   const [date, setDate] = useState(today());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [more, setMore] = useState(false);
+
+  // гортання днів переїхало в шапку, тож і зсув дати тепер тут
+  const shiftDate = (days) => {
+    const d = new Date(stamp(date) + days * 86400000);
+    const p = (x) => String(x).padStart(2, '0');
+    setDate(`${p(d.getUTCDate())}.${p(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`);
+  };
 
   const [slow, setSlow] = useState(false);
 
@@ -3247,11 +3277,33 @@ export default function Health() {
     <>
       <Head><title>Здоровʼя</title></Head>
       <div className={'h-wrap' + (busy ? ' is-busy' : '')}>
+        {/* Угорі лише те, без чого не обійтися: вихід, який день дивимось і
+            серія. Назва сторінки, номер збірки й перелік вкладок звідси
+            прибрані — вкладки живуть унизу, під великим пальцем. */}
         <header className="h-head">
-          <h1>Здоровʼя</h1>
-          {/* видно, який код зараз відкритий — інакше «змін не бачу»
-              нема з чим звірити */}
-          {BUILD && <span className="h-build" title="Версія збірки">{BUILD}</span>}
+          <a className="h-back" href="/" title="До обліку майна">←</a>
+          {tab === 'day' ? (
+            <div className="h-hdate">
+              <button className="h-hnav" onClick={() => shiftDate(-1)} title="Попередній день">‹</button>
+              <button
+                className="h-hday"
+                onClick={() => setDate(today())}
+                title={date === today() ? 'Сьогодні' : 'Повернутись на сьогодні'}
+              >
+                {date === today() ? 'Сьогодні' : longDate(date)}
+              </button>
+              <button
+                className="h-hnav"
+                onClick={() => shiftDate(1)}
+                disabled={stamp(date) >= stamp(today())}
+                title="Наступний день"
+              >
+                ›
+              </button>
+            </div>
+          ) : (
+            <div className="h-htitle">{TABS.find((t) => t.key === tab)?.label || 'Здоровʼя'}</div>
+          )}
           {/* серія завжди перед очима, як нагорода за ведення */}
           <button
             className="h-fire"
@@ -3260,9 +3312,9 @@ export default function Health() {
           >
             ✦ <b>{streakOf(data.days, today()).n}</b>
           </button>
-          <a className="h-back" href="/" title="До обліку майна">← облік</a>
         </header>
 
+        {/* на широкому екрані нижньої панелі немає — лишаються вкладки вгорі */}
         <div className="h-tabs">
           {TABS.map((t) => (
             <button
@@ -3282,6 +3334,48 @@ export default function Health() {
         {tab === 'stats' && <StatsTab data={data} />}
         {tab === 'goals' && <GoalsTab data={data} reload={load} setBusy={setBusy} />}
       </div>
+
+      {/* Нижня панель на телефоні: щоденне — окремими кнопками, рідке —
+          під «Ще», щоб не було шести дрібних цілей в один ряд. */}
+      <nav className="h-bnav">
+        {BNAV.map((t) => (
+          <button
+            key={t.key}
+            className={'h-bnav-b' + (tab === t.key ? ' on' : '')}
+            onClick={() => setTab(t.key)}
+          >
+            <span className="h-bnav-i">{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+        <button
+          className={'h-bnav-b' + (MORE.some((m) => m.key === tab) ? ' on' : '')}
+          onClick={() => setMore(true)}
+        >
+          <span className="h-bnav-i">{IcoMore}</span>
+          Ще
+        </button>
+      </nav>
+
+      {more && (
+        <div className="h-sheet-bg" onClick={() => setMore(false)}>
+          <div className="h-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="h-sheet-g" />
+            {MORE.map((m) => (
+              <button
+                key={m.key}
+                className={'h-sheet-b' + (tab === m.key ? ' on' : '')}
+                onClick={() => { setTab(m.key); setMore(false); }}
+              >
+                {m.label}
+              </button>
+            ))}
+            <a className="h-sheet-b" href="/">← До обліку майна</a>
+            {BUILD && <div className="h-sheet-v">збірка {BUILD}</div>}
+          </div>
+        </div>
+      )}
+
       {note && <div className="h-toast">{note}</div>}
     </>
   );

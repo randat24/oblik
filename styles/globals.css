@@ -1271,28 +1271,40 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-gate-slow { font-size: .84rem; color: var(--muted) !important; }
 .h-gate .h-btn { margin: 0 4px; }
 
+/* Верхня панель: вихід ліворуч, який день дивимось по центру, серія праворуч.
+   Більше нічого — решта поїхала вниз або під «Ще». */
 .h-head {
-  display: flex; align-items: center; gap: 12px; flex-wrap: nowrap;
+  display: flex; align-items: center; gap: 10px; flex-wrap: nowrap;
   padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--line);
 }
-@media (max-width: 560px) {
-  .h-head { gap: 8px; }
-  .h-head h1 { font-size: .95rem; letter-spacing: .1em; }
+.h-back {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--panel); border: 1px solid var(--line-soft);
+  color: var(--text-dim); text-decoration: none; font-size: 1.1rem;
 }
+.h-back:hover { color: var(--amber); border-color: var(--line); }
+.h-hdate, .h-htitle { flex: 1 1 auto; min-width: 0; text-align: center; }
+.h-htitle {
+  font-size: .92rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+}
+.h-hdate { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.h-hnav {
+  background: none; border: 0; color: var(--muted); cursor: pointer;
+  font: inherit; font-size: 1.2rem; line-height: 1;
+  width: 34px; height: 34px; border-radius: 50%;
+}
+.h-hnav:hover:not(:disabled) { color: var(--text); background: var(--panel); }
+.h-hnav:disabled { opacity: .25; cursor: default; }
+.h-hday {
+  background: none; border: 0; cursor: pointer; font: inherit;
+  font-weight: 700; color: var(--text); padding: 0 6px; min-height: 34px;
+  white-space: nowrap;
+}
+.h-hday:hover { color: var(--amber); }
 /* На зовсім вузьких прибираємо номер збірки: серія й вихід потрібніші,
    а номер видно на головній сторінці обліку. */
-@media (max-width: 419px) { .h-build { display: none; } }
 
-/* Шість вкладок на телефон не влазять — рядок гортається вбік, а підписи
-   лишаються цілими. Розтягувати їх порівну можна лише коли є куди. */
-@media (max-width: 560px) {
-  .h-tabs {
-    overflow-x: auto; scrollbar-width: none;
-    margin-left: -2px; margin-right: -2px;
-  }
-  .h-tabs::-webkit-scrollbar { display: none; }
-  .h-tab { flex: 0 0 auto; padding: 9px 13px; }
-}
 .h-head h1 {
   font-size: 1.05rem; font-weight: 700; margin: 0;
   letter-spacing: .14em; text-transform: uppercase;
@@ -1317,6 +1329,56 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   color: var(--muted); padding: 9px 6px; border-radius: var(--r-sm);
 }
 .h-tab.on { background: var(--panel-3); color: var(--text); font-weight: 600; }
+
+/* Нижня панель — тільки на телефоні. На широкому екрані вкладки лишаються
+   вгорі: там до них однаково зручно, а низ екрана далеко. */
+.h-bnav { display: none; }
+@media (max-width: 720px) {
+  .h-tabs { display: none; }
+  .h-bnav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    display: flex; background: var(--bg);
+    border-top: 1px solid var(--line);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  }
+  .h-bnav-b {
+    flex: 1; min-width: 0; background: none; border: 0; cursor: pointer; font: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 6px 2px; color: var(--muted); font-size: .68rem;
+  }
+  .h-bnav-i { display: flex; line-height: 0; }
+  .h-bnav-b.on { color: var(--green); }
+  /* місце під панель, інакше вона накриває останній запис */
+  .h-wrap { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+  /* кнопка додавання сідає над панеллю, а не під нею */
+  .h-addbar { bottom: calc(84px + env(safe-area-inset-bottom)); }
+}
+
+/* Аркуш «Ще» */
+.h-sheet-bg {
+  position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.55);
+  display: flex; align-items: flex-end;
+}
+.h-sheet {
+  width: 100%; background: var(--panel); border-top: 1px solid var(--line);
+  border-radius: var(--r) var(--r) 0 0; padding: 8px 14px;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom));
+}
+.h-sheet-g {
+  width: 38px; height: 4px; border-radius: 2px; background: var(--line);
+  margin: 4px auto 12px;
+}
+.h-sheet-b {
+  display: block; width: 100%; text-align: left; background: none;
+  border: 0; border-bottom: 1px solid var(--line-soft); cursor: pointer;
+  font: inherit; color: var(--text-dim); padding: 15px 4px; text-decoration: none;
+}
+.h-sheet-b:last-of-type { border-bottom: 0; }
+.h-sheet-b.on { color: var(--green); font-weight: 600; }
+.h-sheet-v {
+  font-family: var(--mono); font-size: .68rem; color: var(--muted);
+  text-align: center; padding-top: 10px;
+}
 
 .h-sec {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
