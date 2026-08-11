@@ -2292,3 +2292,132 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
   border-radius: var(--r-sm); padding: 10px 11px; font-family: var(--sans);
 }
+
+/* ---------- Ліки ---------- */
+
+/* Зведення за добу: скільки доз лишилось прийняти. Велика цифра — та сама
+   логіка, що й на «Дні»: головне число видно з відстані витягнутої руки. */
+.h-med-sum {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 16px 18px; margin-bottom: 18px;
+  display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 1.4fr); gap: 18px;
+  align-items: start;
+}
+.h-med-sum-l { min-width: 0; }
+.h-med-sum-r {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; min-width: 0;
+}
+.h-med-sum-r > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.h-cap {
+  display: block; font-size: .64rem; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--muted); line-height: 1.3;
+}
+.h-med-stat {
+  font-family: var(--mono); font-size: .86rem; font-weight: 700; color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.h-med-stat.is-bad { color: var(--red); }
+.h-med-stat.is-warn { color: var(--amber); }
+
+.h-med-big {
+  font-family: var(--mono); font-size: 2.1rem; font-weight: 700;
+  line-height: 1.05; letter-spacing: -.02em; margin-top: 4px;
+}
+.h-med-big.is-text { font-size: 1.1rem; font-weight: 600; letter-spacing: 0; line-height: 1.35; }
+.h-med-of { color: var(--muted); font-size: .5em; font-weight: 400; }
+.h-med-unit { color: var(--muted); font-size: .78rem; margin-top: 4px; min-height: 1.2em; }
+
+.h-med-bar {
+  height: 5px; border-radius: 999px; background: var(--panel-3);
+  overflow: hidden; margin-top: 10px;
+}
+.h-med-bar > i { display: block; height: 100%; background: var(--amber); border-radius: 999px; }
+.h-med-bar.is-ok > i { background: var(--green); }
+
+/* Картка курсу */
+.h-med-list { display: grid; gap: 12px; }
+.h-med {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 16px 18px;
+}
+.h-med.is-done { border-color: var(--green-dim); }
+.h-med.is-late { border-color: var(--red); }
+.h-med.is-fin { opacity: .55; }
+
+.h-med-head { display: flex; align-items: center; gap: 10px; }
+.h-med-name { font-size: 1rem; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.h-med-flag {
+  margin-left: auto; flex: 0 0 auto; font-family: var(--mono);
+  font-size: .6rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--red); background: var(--red-dim); border-radius: 999px; padding: 3px 9px;
+}
+
+.h-med-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-family: var(--mono); font-size: .72rem; color: var(--muted); margin-top: 12px;
+}
+.h-med-row b { color: var(--text); }
+.h-med-row .is-bad, .h-med-row .is-bad b { color: var(--red); }
+.h-med-course .h-med-row { margin-bottom: 0; }
+.h-med-course .h-med-bar { margin-top: 7px; }
+.h-med-note { color: var(--muted); font-size: .82rem; line-height: 1.5; margin-top: 12px; }
+
+/* Перемикачі прийому. Мінімум 44 px заввишки — щоб влучати пальцем,
+   а не третьою спробою. */
+.h-doses { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.h-dose {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: inherit; font-family: var(--mono); font-size: .76rem;
+  min-height: 44px; padding: 0 15px 0 10px; border-radius: 999px; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim);
+}
+.h-dose:disabled { opacity: .45; cursor: default; }
+.h-dose-m {
+  width: 18px; height: 18px; border-radius: 50%; border: 1px solid currentColor;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .62rem; line-height: 1; flex: 0 0 auto;
+}
+.h-dose-t { font-size: .66rem; color: var(--muted); }
+.h-dose.is-on { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+.h-dose.is-on .h-dose-m { background: var(--green); border-color: var(--green); color: #10140e; font-weight: 700; }
+.h-dose.is-on .h-dose-t { color: var(--green); opacity: .8; }
+.h-dose.is-late { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+.h-dose.is-late .h-dose-t { color: var(--red); opacity: .8; }
+.h-dose.is-sel { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+.h-dose.is-sel .h-dose-m { background: var(--amber); border-color: var(--amber); color: #181a13; font-weight: 700; }
+.h-dose.is-sel .h-dose-t { color: var(--amber); opacity: .8; }
+
+/* Тиждень позаду — крапка на кожен прийом */
+.h-med-week {
+  display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px;
+  padding-top: 13px; border-top: 1px solid var(--line-soft);
+}
+.h-med-week > div { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.h-med-wd { font-family: var(--mono); font-size: .6rem; color: var(--muted); }
+.h-med-dots { display: flex; gap: 3px; }
+.h-med-dots i {
+  width: 6px; height: 6px; border-radius: 50%; display: block;
+  background: var(--panel-3); border: 1px solid var(--line);
+}
+.h-med-dots i.is-on { background: var(--green); border-color: var(--green); }
+
+.h-med-acts {
+  display: flex; gap: 18px; margin-top: 14px;
+  padding-top: 13px; border-top: 1px solid var(--line-soft);
+}
+.h-link.is-danger { color: var(--muted); }
+.h-link.is-danger:hover { color: var(--red); }
+
+/* Текстові кнопки в картці — теж цілі для пальця, а не лише для миші.
+   Візуально лишаються посиланням, але площа дотику доходить до 44 px. */
+.h-med-acts .h-link, .h-med-row .h-link {
+  display: inline-flex; align-items: center;
+  min-height: 44px; padding: 0 2px;
+}
+.h-med-acts { margin-top: 6px; padding-top: 5px; }
+.h-med-row .h-link { margin: -12px 0; }
+
+@media (max-width: 560px) {
+  /* на вузькому екрані два стовпці зведення злипаються — розкладаємо в один */
+  .h-med-sum { grid-template-columns: 1fr; gap: 16px; }
+}

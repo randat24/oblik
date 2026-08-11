@@ -2,6 +2,7 @@ import { withAuth, currentActor } from '../../lib/auth';
 import {
   readAll, saveDay, addFood, delFood, recalcDay, saveBody, saveGoals,
   saveProduct, lookupBarcode, saveDish, delDish, copyDay,
+  saveMed, takeMed, restockMed, delMed,
   isOwner, healthOwner, todayKyiv,
 } from '../../lib/health';
 
@@ -77,6 +78,27 @@ export default withAuth(async (req, res) => {
 
     if (action === 'goals') {
       await saveGoals(req.body.goals || {});
+      return res.json(await readAll());
+    }
+
+    if (action === 'med') {
+      await saveMed(req.body.med || {});
+      return res.json(await readAll());
+    }
+
+    if (action === 'takeMed') {
+      const { row, slot, date } = req.body;
+      await takeMed({ row, slot, date: date || todayKyiv() });
+      return res.json(await readAll());
+    }
+
+    if (action === 'restockMed') {
+      await restockMed({ row: req.body.row, qty: req.body.qty });
+      return res.json(await readAll());
+    }
+
+    if (action === 'delMed') {
+      await delMed(req.body.row);
       return res.json(await readAll());
     }
 
