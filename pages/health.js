@@ -3403,6 +3403,456 @@ function GoalsTab({ data, reload, setBusy }) {
   );
 }
 
+/* ---------- Вкладка «Ліки» ---------- */
+
+/** Українська множина для довільних форм */
+function plur(n, [one, few, many]) {
+  const a = Math.abs(Math.round(n));
+  const t = a % 100;
+  const o = a % 10;
+  if (t >= 11 && t <= 14) return many;
+  if (o === 1) return one;
+  if (o >= 2 && o <= 4) return few;
+  return many;
+}
+
+const minutesOf = (t) => {
+  const [h, m] = (t || '00:00').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+
+/** «дд.мм.рррр» → «рррр-мм-дд» для <input type="date"> і навпаки */
+const toInputDate = (s) => {
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec((s || '').trim());
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+};
+const fromInputDate = (s) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((s || '').trim());
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : '';
+};
+
+/** Де ми в межах курсу: день N з M, ще не почався чи вже завершений */
+function courseInfo(m, todayStamp) {
+  const start = stamp(m.start);
+  const total = m.days && m.days > 0 ? Math.round(m.days) : null;
+  const dayIndex = start ? Math.round((todayStamp - start) / 86400000) + 1 : null;
+  const notStarted = dayIndex !== null && dayIndex < 1;
+  const finished = total !== null && dayIndex !== null && dayIndex > total;
+  const progress = total && dayIndex !== null
+    ? Math.max(0, Math.min(100, Math.round((Math.min(dayIndex, total) / total) * 100)))
+    : null;
+  return { total, dayIndex, notStarted, finished, progress, active: !finished && !notStarted };
+}
+
+/** «2000 МО» → { value: '2000', unit: 'МО' } — щоб цифра йшла великим кеглем */
+function splitDose(dose) {
+  const m = /^\s*(\d+(?:[.,]\d+)?(?:\s*[–—-]\s*\d+(?:[.,]\d+)?)?)\s*(.*)$/.exec(dose || '');
+  if (m) return { value: m[1].replace(/\s+/g, ''), unit: (m[2] || '').trim() };
+  return { value: '', unit: (dose || '').trim() };
+}
+
+/** Хвилини від початку доби за київським часом — за ними «прострочено» */
+function nowMinKyiv() {
+  const fmt = new Intl.DateTimeFormat('uk-UA', {
+    timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const p = {};
+  fmt.formatToParts(new Date()).forEach((x) => (p[x.type] = x.value));
+  return Number(p.hour) * 60 + Number(p.minute);
+}
+
+function MedsTab({ data, reload, setBusy, toast }) {
+  const [edit, setEdit] = useState(null);      // { med } або { med: null } для нового
+  const [restock, setRestock] = useState(null);
+  const [nowMin, setNowMin] = useState(() => nowMinKyiv());
+
+  // «прострочено» й «наступний прийом» залежать від часу — оновлюємо щохвилини
+  useEffect(() => {
+    const t = setInterval(() => setNowMin(nowMinKyiv()), 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  const slots = data.slots || [];
+  const slotMap = Object.fromEntries(slots.map((s) => [s.key, s]));
+  const td = today();
+  const ts = stamp(td);
+
+  const meds = (data.meds || []).map((m) => {
+    const info = courseInfo(m, ts);
+    const taken = m.log[td] || [];
+    const pending = info.active ? m.slots.filter((s) => !taken.includes(s)) : [];
+    const late = pending.filter((s) => slotMap[s] && minutesOf(slotMap[s].time) < nowMin);
+    // «мало» — коли лишилось менше ніж на два дні прийому
+    const low = m.stock !== null && m.slots.length > 0 && m.stock <= m.slots.length * 2;
+    return { ...m, info, taken, pending, late, low };
+  });
+
+  const active = meds.filter((m) => m.info.active);
+  const dosesTotal = active.reduce((n, m) => n + m.slots.length, 0);
+  const dosesTaken = active.reduce((n, m) => n + m.taken.length, 0);
+  const lateTotal = active.reduce((n, m) => n + m.late.length, 0);
+  const lowTotal = active.filter((m) => m.low).length;
+  const pct = dosesTotal ? Math.round((dosesTaken / dosesTotal) * 100) : 0;
+
+  // найближчий за часом прийом, який ще попереду
+  let next = null;
+  active.forEach((m) => m.pending.forEach((s) => {
+    const meta = slotMap[s];
+    if (!meta) return;
+    const min = minutesOf(meta.time);
+    if (min >= nowMin && (!next || min < next.min)) next = { min, meta, drug: m.drug };
+  }));
+
+  const nextLabel = dosesTotal === 0 ? '—'
+    : dosesTaken >= dosesTotal ? 'усе прийнято'
+    : next ? `${next.meta.key} · ${next.meta.time}`
+    : 'на сьогодні все';
+
+  const send = async (body) => {
+    setBusy(true);
+    try {
+      await api('/api/health', { method: 'POST', body });
+      await reload();
+    } catch (e) {
+      toast(e.message);
+    } finally { setBusy(false); }
+  };
+
+  const toggle = (m, slot) => send({ action: 'takeMed', row: m.row, slot, date: td });
+
+  const byName = (a, b) => a.drug.localeCompare(b.drug, 'uk');
+  const groups = [
+    {
+      title: 'Приймати сьогодні',
+      // Тільки за назвою. Спокуса підняти неприйняті вгору є, але тоді
+      // картка їде з-під пальця одразу після відмітки — а що прийнято,
+      // видно й так: галочка, рамка, лічильник угорі.
+      items: active.sort(byName),
+    },
+    { title: 'Ще не почались', items: meds.filter((m) => m.info.notStarted).sort(byName) },
+    { title: 'Курс завершено', items: meds.filter((m) => m.info.finished).sort(byName) },
+  ].filter((g) => g.items.length);
+
+  return (
+    <>
+      <div className="h-med-sum">
+        <div className="h-med-sum-l">
+          <div className="h-cap">Прийнято сьогодні</div>
+          <div className="h-med-big">
+            {dosesTaken}<span className="h-med-of">/{dosesTotal}</span>
+          </div>
+          <div className="h-med-unit">{plur(dosesTotal, ['доза', 'дози', 'доз'])} за день</div>
+          <div className={'h-med-bar' + (dosesTotal && dosesTaken >= dosesTotal ? ' is-ok' : '')}>
+            <i style={{ width: pct + '%' }} />
+          </div>
+        </div>
+        <div className="h-med-sum-r">
+          {[
+            ['Наступний', nextLabel, ''],
+            ['Прострочено', lateTotal || '—', lateTotal ? ' is-bad' : ''],
+            ['Курсів', active.length || '—', ''],
+            ['Закінчуються', lowTotal || '—', lowTotal ? ' is-warn' : ''],
+          ].map(([cap, val, cls]) => (
+            <div key={cap}>
+              <span className="h-cap">{cap}</span>
+              <span className={'h-med-stat' + cls}>{val}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {groups.length === 0 && (
+        <div className="h-empty">
+          Порожньо. Додайте препарат — і сторінка щодня питатиме, чи прийняли.
+        </div>
+      )}
+
+      {groups.map((g) => (
+        <section key={g.title}>
+          <div className="h-sec"><h3>{g.title}</h3></div>
+          <div className="h-med-list">
+            {g.items.map((m) => (
+              <MedCard
+                key={m.row}
+                med={m}
+                slotMap={slotMap}
+                today={td}
+                onToggle={toggle}
+                onEdit={() => setEdit({ med: m })}
+                onRestock={() => setRestock(m)}
+                onDelete={async () => {
+                  if (!confirm(`Видалити «${m.drug}»? Журнал прийомів теж зникне.`)) return;
+                  await send({ action: 'delMed', row: m.row });
+                }}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
+
+      <div className="h-addbar">
+        <button className="h-add" onClick={() => setEdit({ med: null })}>+ Препарат</button>
+      </div>
+
+      {edit && (
+        <MedModal
+          med={edit.med}
+          slots={slots}
+          onClose={() => setEdit(null)}
+          onSave={async (body) => {
+            await send({ action: 'med', med: edit.med ? { ...body, row: edit.med.row } : body });
+            setEdit(null);
+          }}
+        />
+      )}
+
+      {restock && (
+        <RestockModal
+          med={restock}
+          onClose={() => setRestock(null)}
+          onSave={async (qty) => {
+            await send({ action: 'restockMed', row: restock.row, qty });
+            setRestock(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function MedCard({ med, slotMap, today: td, onToggle, onEdit, onRestock, onDelete }) {
+  const { value, unit } = splitDose(med.dose);
+  const done = med.info.active && med.slots.length > 0 && med.pending.length === 0;
+  const cls = med.info.finished ? ' is-fin'
+    : med.info.notStarted ? ' is-soon'
+    : med.late.length ? ' is-late'
+    : done ? ' is-done' : '';
+
+  const n = med.slots.length;
+  const perDay = n
+    ? `${n} ${plur(n, ['прийом', 'прийоми', 'прийомів'])} на добу`
+    : 'розклад не заданий';
+
+  // Велика цифра — доза. Якщо дози не вказали, її місце займає кількість
+  // прийомів, і тоді підпис іде без числа: інакше «2» стояло б двічі.
+  let big = value;
+  let asText = false;
+  let sub = [unit, n ? perDay : ''].filter(Boolean).join(' · ');
+  if (!value && unit) { big = unit; asText = true; sub = perDay; }
+  else if (!value) {
+    big = n || '—';
+    asText = !n;
+    sub = n ? plur(n, ['прийом на добу', 'прийоми на добу', 'прийомів на добу']) : perDay;
+  }
+
+  // тиждень позаду: крапка на кожен прийом, зелена — відмічений
+  const week = [...Array(7)].map((_, i) => {
+    const d = new Date(stamp(td) - (6 - i) * 86400000);
+    const p = (x) => String(x).padStart(2, '0');
+    const key = `${p(d.getUTCDate())}.${p(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
+    return { key, short: `${Number(p(d.getUTCDate()))}`, taken: med.log[key] || [] };
+  });
+
+  return (
+    <div className={'h-med' + cls}>
+      <div className="h-med-head">
+        <span className="h-med-name">{med.drug || 'Без назви'}</span>
+        {med.late.length > 0 && <span className="h-med-flag">прострочено</span>}
+      </div>
+
+      <div className={'h-med-big' + (asText ? ' is-text' : '')}>{big}</div>
+      <div className="h-med-unit">{sub || ' '}</div>
+
+      {med.slots.length > 0 && (
+        <div className="h-doses">
+          {med.slots.map((s) => {
+            const meta = slotMap[s] || { key: s, time: '' };
+            const on = med.taken.includes(s);
+            const late = med.late.includes(s);
+            return (
+              <button
+                key={s}
+                type="button"
+                className={'h-dose' + (on ? ' is-on' : '') + (late ? ' is-late' : '')}
+                onClick={() => onToggle(med, s)}
+                disabled={!med.info.active}
+                title={on ? 'Зняти відмітку' : 'Відмітити прийом'}
+              >
+                <span className="h-dose-m">{on ? '✓' : ''}</span>
+                <span>{meta.key}</span>
+                <span className="h-dose-t">{meta.time}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {med.info.total && med.info.dayIndex !== null ? (
+        <div className="h-med-course">
+          <div className="h-med-row">
+            <span>День {Math.min(Math.max(med.info.dayIndex, 0), med.info.total)} з {med.info.total}</span>
+            <span>
+              {med.info.finished ? 'завершено'
+                : med.info.notStarted ? `старт ${med.start}`
+                : `лишилось ${med.info.total - med.info.dayIndex + 1} ${plur(med.info.total - med.info.dayIndex + 1, ['день', 'дні', 'днів'])}`}
+            </span>
+          </div>
+          <div className={'h-med-bar' + (med.info.finished ? ' is-ok' : '')}>
+            <i style={{ width: (med.info.progress || 0) + '%' }} />
+          </div>
+        </div>
+      ) : med.start ? (
+        <div className="h-med-row">
+          <span>{med.info.notStarted ? 'Старт' : 'Від'} {med.start}</span>
+          <span>{med.info.notStarted ? 'ще не почався' : 'без обмеження'}</span>
+        </div>
+      ) : null}
+
+      {med.stock !== null && (
+        <div className="h-med-row">
+          <span className={med.low ? 'is-bad' : ''}>
+            Залишок <b>{med.stock}</b> {plur(med.stock, ['таблетка', 'таблетки', 'таблеток'])}
+          </span>
+          <button className="h-link" onClick={onRestock}>поповнити</button>
+        </div>
+      )}
+
+      {med.note && <div className="h-med-note">{med.note}</div>}
+
+      <div className="h-med-week">
+        {week.map((d) => (
+          <div key={d.key} title={`${d.key}: ${d.taken.join(', ') || 'пропущено'}`}>
+            <span className="h-med-wd">{d.short}</span>
+            <span className="h-med-dots">
+              {(med.slots.length ? med.slots : ['—']).map((s) => (
+                <i key={s} className={d.taken.includes(s) ? 'is-on' : ''} />
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="h-med-acts">
+        <button className="h-link" onClick={onEdit}>Редагувати</button>
+        <button className="h-link is-danger" onClick={onDelete}>Видалити</button>
+      </div>
+    </div>
+  );
+}
+
+function MedModal({ med, slots, onClose, onSave }) {
+  const [f, setF] = useState(() => ({
+    drug: med?.drug || '',
+    dose: med?.dose || '',
+    slots: med?.slots?.length ? med.slots : ['Ранок'],
+    start: med ? toInputDate(med.start) : toInputDate(today()),
+    days: med?.days ?? '',
+    stock: med?.stock ?? '',
+    note: med?.note || '',
+  }));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const up = (k, v) => setF((p) => ({ ...p, [k]: v }));
+
+  return (
+    <Modal
+      title={med ? 'Редагувати курс' : 'Новий препарат'}
+      onClose={onClose}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        if (!f.drug.trim()) return setErr('Вкажіть назву препарату');
+        setBusy(true); setErr('');
+        try {
+          await onSave({ ...f, drug: f.drug.trim(), start: fromInputDate(f.start) });
+        } catch (e) {
+          setErr(e.message);
+        } finally { setBusy(false); }
+      }}
+    >
+      <label>Препарат</label>
+      <input type="text" value={f.drug} onChange={(e) => up('drug', e.target.value)}
+        placeholder="Напр. Вітамін D3" />
+
+      <label>Дозування</label>
+      <input type="text" value={f.dose} onChange={(e) => up('dose', e.target.value)}
+        placeholder="2000 МО · 1 табл." />
+
+      <label>Коли приймати</label>
+      <div className="h-doses">
+        {slots.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            className={'h-dose' + (f.slots.includes(s.key) ? ' is-sel' : '')}
+            onClick={() => up('slots', f.slots.includes(s.key)
+              ? f.slots.filter((x) => x !== s.key)
+              : [...f.slots, s.key])}
+          >
+            <span className="h-dose-m">{f.slots.includes(s.key) ? '✓' : ''}</span>
+            <span>{s.key}</span>
+            <span className="h-dose-t">{s.time}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="h-row2">
+        <div>
+          <label>Початок</label>
+          <input type="date" value={f.start} onChange={(e) => up('start', e.target.value)} />
+        </div>
+        <div>
+          <label>Днів курсу</label>
+          <input type="number" min="0" inputMode="numeric" value={f.days}
+            onChange={(e) => up('days', e.target.value)} placeholder="без обмеження" />
+        </div>
+      </div>
+
+      <label>Залишок таблеток</label>
+      <input type="number" min="0" inputMode="numeric" value={f.stock}
+        onChange={(e) => up('stock', e.target.value)} placeholder="не рахувати" />
+
+      <label>Нотатка</label>
+      <input type="text" value={f.note} onChange={(e) => up('note', e.target.value)}
+        placeholder="після їжі, запивати водою…" />
+
+      <div className="h-hint">
+        Залишок зменшується сам із кожною відміткою про прийом. Зняли
+        відмітку — таблетка повертається назад.
+      </div>
+    </Modal>
+  );
+}
+
+function RestockModal({ med, onClose, onSave }) {
+  const [qty, setQty] = useState('10');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  return (
+    <Modal
+      title={'Поповнити: ' + med.drug}
+      saveLabel="Додати"
+      onClose={onClose}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        if (num(qty) <= 0) return setErr('Вкажіть кількість більшу за нуль');
+        setBusy(true); setErr('');
+        try {
+          await onSave(num(qty));
+        } catch (e) {
+          setErr(e.message);
+        } finally { setBusy(false); }
+      }}
+    >
+      <label>Скільки таблеток додати</label>
+      <input type="number" min="1" inputMode="numeric" value={qty}
+        onChange={(e) => setQty(e.target.value)} />
+      <div className="h-hint">Зараз на руках: {med.stock} шт.</div>
+    </Modal>
+  );
+}
+
 /* ---------- Сторінка ---------- */
 
 /* ---------- Вкладка «Підсумки» ---------- */
@@ -3496,6 +3946,7 @@ const TABS = [
   { key: 'weight', label: 'Вага' },
   { key: 'dishes', label: 'Страви' },
   { key: 'body', label: 'Заміри' },
+  { key: 'meds', label: 'Ліки' },
   { key: 'stats', label: 'Підсумки' },
   { key: 'goals', label: 'Цілі' },
 ];
@@ -3523,6 +3974,7 @@ const BNAV = [
   { key: 'stats', label: 'Підсумки', icon: IcoStats },
 ];
 const MORE = [
+  { key: 'meds', label: 'Ліки й курси' },
   { key: 'dishes', label: 'Свої страви' },
   { key: 'body', label: 'Заміри тіла' },
   { key: 'goals', label: 'Цілі й профіль' },
@@ -3675,6 +4127,7 @@ export default function Health() {
         {tab === 'weight' && <WeightTab data={data} reload={load} />}
         {tab === 'dishes' && <DishesTab data={data} reload={load} setBusy={setBusy} />}
         {tab === 'body' && <BodyTab data={data} reload={load} />}
+        {tab === 'meds' && <MedsTab data={data} reload={load} setBusy={setBusy} toast={toast} />}
         {tab === 'stats' && <StatsTab data={data} />}
         {tab === 'goals' && <GoalsTab data={data} reload={load} setBusy={setBusy} />}
       </div>
