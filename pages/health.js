@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
+// Чиста логіка тренажера — без звернень до таблиць, тому їде і в браузер
+import {
+  STEPS, FACTS, LEARNED, MAX_LEVEL,
+  stepFacts, newInStep, stepProgress, unlockedSteps, buildSession, applyResults,
+} from '../lib/mult';
 
 /*
  * Особистий розділ здоров'я. Свідомо окрема сторінка з власним кодом:
@@ -3853,6 +3858,375 @@ function RestockModal({ med, onClose, onSave }) {
   );
 }
 
+/* ---------- Вкладка «Множення» ---------- */
+
+/**
+ * Тренажер таблиці множення й ділення.
+ *
+ * Три екрани в одній вкладці: список кроків, сторінка вивчення й саме
+ * тренування. Розділені навмисно — спершу подивитись і зрозуміти, і лише
+ * потім відповідати. Тренажер, який одразу питає незнайоме, вчить не
+ * таблиці, а тому, що математика — це коли ти помиляєшся.
+ */
+function MultTab({ data, reload, toast }) {
+  const [prog, setProg] = useState(() => data.mult || {});
+  const [screen, setScreen] = useState('steps');   // steps | learn | drill
+  const [step, setStep] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  // прогрес міг оновитись іншим пристроєм — підхоплюємо після перезавантаження
+  useEffect(() => { setProg(data.mult || {}); }, [data.mult]);
+
+  const open = unlockedSteps(prog);
+
+  const done = FACTS.reduce((n, f) => n
+    + ((prog[f.key]?.mul || 0) >= LEARNED ? 1 : 0)
+    + ((prog[f.key]?.div || 0) >= LEARNED ? 1 : 0), 0);
+  const total = FACTS.length * 2;
+
+  const finish = async (results) => {
+    const next = applyResults(prog, results, today());
+    setProg(next);
+    setScreen('steps');
+    // Один запит у кінці підходу, а не після кожної відповіді: інакше
+    // хвилинна квота Google скінчиться на третьому прикладі.
+    setSaving(true);
+    try {
+      await api('/api/health', { method: 'POST', body: { action: 'mult', mult: next } });
+      await reload();
+    } catch (e) {
+      toast('Не вдалося зберегти прогрес: ' + e.message);
+    } finally { setSaving(false); }
+  };
+
+  if (screen === 'learn' && step) {
+    return <MultLearn step={step} onStart={() => setScreen('drill')} onBack={() => setScreen('steps')} />;
+  }
+  if (screen === 'drill' && step) {
+    return <MultDrill step={step} prog={prog} onDone={finish} onBack={() => setScreen('steps')} />;
+  }
+
+  return (
+    <>
+      <div className="h-mt-top">
+        <div className="h-cap">Вивчено прикладів</div>
+        <div className="h-mt-big">{done}<span className="h-mt-of">/{total}</span></div>
+        <div className="h-mt-bar"><i style={{ width: (total ? (done / total) * 100 : 0) + '%' }} /></div>
+        <div className="h-mt-sub">
+          {done === 0 ? 'Почніть з першого кроку — там найлегше.'
+            : done >= total ? 'Уся таблиця вивчена. Заходьте раз на тиждень, щоб не забулось.'
+            : 'Кожен крок відкриває наступний, коли пройдено три чверті.'}
+        </div>
+      </div>
+
+      <div className="h-sec"><h3>Кроки</h3></div>
+      <div className="h-mt-steps">
+        {STEPS.map((s, i) => {
+          const pct = Math.round(stepProgress(s, prog) * 100);
+          const locked = !open[i];
+          const fresh = newInStep(s);
+          return (
+            <div key={s.key} className={'h-mt-step' + (locked ? ' is-lock' : '') + (pct === 100 ? ' is-done' : '')}>
+              <div className="h-mt-step-h">
+                <span className="h-mt-n">{pct === 100 ? '✓' : i + 1}</span>
+                <span className="h-mt-title">{s.title}</span>
+                <span className="h-mt-pct">{locked ? 'закрито' : pct + '%'}</span>
+              </div>
+              <div className="h-mt-lead">{s.lead}</div>
+              <div className="h-mt-bar"><i style={{ width: pct + '%' }} /></div>
+              <div className="h-mt-step-f">
+                <span className="h-mt-meta">
+                  {stepFacts(s).length} {plur(stepFacts(s).length, ['приклад', 'приклади', 'прикладів'])}
+                  {fresh > 0 && s.tables.length ? ` · ${fresh} ${plur(fresh, ['новий', 'нових', 'нових'])}` : ''}
+                </span>
+                {locked ? (
+                  <span className="h-mt-lockw">Пройдіть попередній крок</span>
+                ) : (
+                  <span className="h-mt-acts">
+                    {s.hint && (
+                      <button className="h-btn" onClick={() => { setStep(s); setScreen('learn'); }}>Вчити</button>
+                    )}
+                    <button className="h-btn h-btn-p" onClick={() => { setStep(s); setScreen('drill'); }}>
+                      Тренувати
+                    </button>
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="h-sec"><h3>Що вже знаю</h3></div>
+      <MultGrid prog={prog} />
+      {saving && <div className="h-hint">Зберігаю прогрес…</div>}
+    </>
+  );
+}
+
+/**
+ * Уся таблиця однією картинкою: видно, де діри. Колір клітинки — рівень
+ * множення, бо саме воно вчиться першим; ділення показане крапкою в кутку.
+ */
+function MultGrid({ prog }) {
+  const nums = [2, 3, 4, 5, 6, 7, 8, 9];
+  return (
+    <div className="h-mt-grid-w">
+      <table className="h-mt-grid">
+        <thead>
+          <tr><th />{nums.map((n) => <th key={n}>{n}</th>)}</tr>
+        </thead>
+        <tbody>
+          {nums.map((a) => (
+            <tr key={a}>
+              <th>{a}</th>
+              {nums.map((b) => {
+                const k = a <= b ? `${a}×${b}` : `${b}×${a}`;
+                const p = prog[k] || {};
+                const lvl = p.mul || 0;
+                return (
+                  <td
+                    key={b}
+                    className={'lv' + lvl + ((p.div || 0) >= LEARNED ? ' has-div' : '')}
+                    title={`${a} × ${b} = ${a * b}\nмноження: ${lvl}/${MAX_LEVEL}\nділення: ${p.div || 0}/${MAX_LEVEL}`}
+                  >
+                    {a * b}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="h-mt-leg">
+        <span><i className="lv0" /> не вчили</span>
+        <span><i className="lv2" /> вчимо</span>
+        <span><i className="lv4" /> знаю</span>
+        <span><i className="lv4 has-div" /> і ділення</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Сторінка вивчення. Спершу правило, потім сама таблиця, і лише тоді
+ * кнопка тренування. Рядок можна розкрити — приклад показується крапками,
+ * бо «6×4» стає зрозумілим, коли видно чотири ряди по шість.
+ */
+function MultLearn({ step, onStart, onBack }) {
+  const [openRow, setOpenRow] = useState(null);
+  const tables = step.tables.length ? step.tables : [];
+
+  return (
+    <>
+      <div className="h-mt-learn-h">
+        <button className="h-link" onClick={onBack}>← Кроки</button>
+        <h2>{step.title}</h2>
+      </div>
+
+      {step.hint && <div className="h-mt-rule"><b>Правило</b>{step.hint}</div>}
+
+      {tables.map((t) => (
+        <section key={t}>
+          <div className="h-sec"><h3>Таблиця на {t}</h3></div>
+          <div className="h-mt-rows">
+            {[2, 3, 4, 5, 6, 7, 8, 9].map((b) => {
+              const id = `${t}-${b}`;
+              const isOpen = openRow === id;
+              return (
+                <div key={b}>
+                  <button
+                    className={'h-mt-row' + (isOpen ? ' is-open' : '')}
+                    onClick={() => setOpenRow(isOpen ? null : id)}
+                  >
+                    <span className="h-mt-eq">{t} × {b}</span>
+                    <span className="h-mt-res">{t * b}</span>
+                  </button>
+                  {isOpen && <DotGrid rows={b} cols={t} />}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+
+      <div className="h-addbar">
+        <button className="h-add" onClick={onStart}>Тренувати →</button>
+      </div>
+    </>
+  );
+}
+
+/** Приклад крапками: скільки рядів по скільки штук */
+function DotGrid({ rows, cols }) {
+  return (
+    <div className="h-mt-dots">
+      {[...Array(rows)].map((_, r) => (
+        <div key={r}>
+          {[...Array(cols)].map((__, c) => <i key={c} />)}
+        </div>
+      ))}
+      <span className="h-mt-dots-t">{rows} {plur(rows, ['ряд', 'ряди', 'рядів'])} по {cols}</span>
+    </div>
+  );
+}
+
+const SESSION = 12;
+
+/**
+ * Саме тренування.
+ *
+ * Клавіатура своя, а не системна: та займає пів екрана, з'їжджає й ховає
+ * питання, а тут потрібні лише десять цифр. Відповідь зараховується, щойно
+ * набрано стільки цифр, скільки їх у правильній — зайве натискання «готово»
+ * на двадцяти прикладах перетворюється на двадцять зайвих дотиків.
+ */
+function MultDrill({ step, prog, onDone, onBack }) {
+  const [queue] = useState(() => buildSession(step, prog, SESSION));
+  const [i, setI] = useState(0);
+  const [typed, setTyped] = useState('');
+  const [state, setState] = useState('ask');   // ask | right | wrong
+  const [results, setResults] = useState([]);
+  const started = useRef(Date.now());
+
+  const q = queue[i];
+
+  useEffect(() => { started.current = Date.now(); }, [i]);
+
+  // фізична клавіатура на комп'ютері — щоб тренуватись можна було й за столом
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!queue[i]) return;
+      if (state !== 'ask') { if (e.key === 'Enter' || e.key === ' ') next(); return; }
+      if (/^[0-9]$/.test(e.key)) press(e.key);
+      if (e.key === 'Backspace') setTyped((t) => t.slice(0, -1));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  if (queue.length === 0) {
+    return (
+      <div className="h-empty">
+        У цьому кроці ще немає прикладів. <button className="h-link" onClick={onBack}>Назад</button>
+      </div>
+    );
+  }
+  if (i >= queue.length) {
+    return <MultResult step={step} results={results} onDone={onDone} onBack={onBack} />;
+  }
+
+  // Правильну відповідь пропускаємо самі — пауза рівно щоб побачити
+  // галочку. Помилку не пропускаємо: правильне число має бути прочитане.
+  const press = (d) => {
+    if (state !== 'ask' || !q) return;
+    const t = (typed + d).slice(0, 3);
+    setTyped(t);
+    if (t.length >= String(q.answer).length) {
+      // перевірка на наступному кадрі, щоб цифра встигла з'явитись на екрані
+      setTimeout(() => {
+        const ms = Date.now() - started.current;
+        const right = Number(t) === q.answer;
+        setResults((r) => [...r, { key: q.key, mode: q.mode, right, ms, text: q.text, answer: q.answer }]);
+        setState(right ? 'right' : 'wrong');
+        if (right) setTimeout(next, 450);
+      }, 60);
+    }
+  };
+
+  function next() {
+    setTyped('');
+    setState('ask');
+    setI((x) => x + 1);
+  }
+
+  return (
+    <div className="h-mt-drill">
+      <div className="h-mt-drill-h">
+        <button className="h-link" onClick={onBack}>← Вийти</button>
+        <div className="h-mt-pips">
+          {queue.map((_, n) => (
+            <i key={n} className={n < results.length ? (results[n].right ? 'is-ok' : 'is-bad') : (n === i ? 'is-now' : '')} />
+          ))}
+        </div>
+      </div>
+
+      <div className={'h-mt-q' + (state === 'right' ? ' is-right' : state === 'wrong' ? ' is-wrong' : '')}>
+        <div className="h-mt-qt">{q.text}</div>
+        <div className="h-mt-ans">
+          {state === 'wrong' ? (
+            <><s>{typed || '—'}</s> <b>{q.answer}</b></>
+          ) : (
+            typed || <span className="h-mt-caret">?</span>
+          )}
+        </div>
+      </div>
+
+      {state === 'wrong' ? (
+        <div className="h-mt-again">
+          <div className="h-mt-fix">{q.text} = <b>{q.answer}</b></div>
+          <button className="h-add" onClick={next}>Далі →</button>
+        </div>
+      ) : (
+        <div className="h-mt-pad">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
+            <button key={d} onClick={() => press(String(d))} disabled={state !== 'ask'}>{d}</button>
+          ))}
+          <button className="is-soft" onClick={() => setTyped('')} disabled={state !== 'ask'}>С</button>
+          <button onClick={() => press('0')} disabled={state !== 'ask'}>0</button>
+          <button className="is-soft" onClick={() => setTyped((t) => t.slice(0, -1))} disabled={state !== 'ask'}>⌫</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Підсумок підходу: що вийшло, що ні і скільки часу пішло на приклад */
+function MultResult({ step, results, onDone, onBack }) {
+  const right = results.filter((r) => r.right).length;
+  const avg = results.length
+    ? results.reduce((s, r) => s + r.ms, 0) / results.length / 1000
+    : 0;
+  // той самий приклад міг завалитись двічі за підхід — у списку він один
+  const bad = results.filter((r) => !r.right)
+    .filter((r, n, all) => all.findIndex((x) => x.text === r.text) === n);
+  const pct = results.length ? Math.round((right / results.length) * 100) : 0;
+
+  return (
+    <div className="h-mt-res-w">
+      <div className="h-mt-top">
+        <div className="h-cap">{step.title}</div>
+        <div className="h-mt-big">{right}<span className="h-mt-of">/{results.length}</span></div>
+        <div className="h-mt-bar"><i className={pct >= 80 ? 'is-ok' : ''} style={{ width: pct + '%' }} /></div>
+        <div className="h-mt-sub">
+          {pct === 100 ? 'Жодної помилки.'
+            : pct >= 80 ? 'Добре. Ще підхід — і крок закриється.'
+            : 'Нормально для початку. Помилки повернуться в наступному підході.'}
+          {' '}Середній час — {avg.toFixed(1)} с на приклад.
+        </div>
+      </div>
+
+      {bad.length > 0 && (
+        <>
+          <div className="h-sec"><h3>Повторити</h3></div>
+          <div className="h-mt-badlist">
+            {bad.map((r, n) => (
+              <div key={n}><span>{r.text}</span><b>{r.answer}</b></div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="h-addbar">
+        <button className="h-add" onClick={() => onDone(results)}>Зберегти й вийти</button>
+      </div>
+      <div className="h-mt-res-a">
+        <button className="h-link" onClick={onBack}>Вийти без збереження</button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Сторінка ---------- */
 
 /* ---------- Вкладка «Підсумки» ---------- */
@@ -3947,6 +4321,7 @@ const TABS = [
   { key: 'dishes', label: 'Страви' },
   { key: 'body', label: 'Заміри' },
   { key: 'meds', label: 'Ліки' },
+  { key: 'mult', label: 'Множення' },
   { key: 'stats', label: 'Підсумки' },
   { key: 'goals', label: 'Цілі' },
 ];
@@ -3975,6 +4350,7 @@ const BNAV = [
 ];
 const MORE = [
   { key: 'meds', label: 'Ліки й курси' },
+  { key: 'mult', label: 'Таблиця множення' },
   { key: 'dishes', label: 'Свої страви' },
   { key: 'body', label: 'Заміри тіла' },
   { key: 'goals', label: 'Цілі й профіль' },
@@ -4128,6 +4504,7 @@ export default function Health() {
         {tab === 'dishes' && <DishesTab data={data} reload={load} setBusy={setBusy} />}
         {tab === 'body' && <BodyTab data={data} reload={load} />}
         {tab === 'meds' && <MedsTab data={data} reload={load} setBusy={setBusy} toast={toast} />}
+        {tab === 'mult' && <MultTab data={data} reload={load} toast={toast} />}
         {tab === 'stats' && <StatsTab data={data} />}
         {tab === 'goals' && <GoalsTab data={data} reload={load} setBusy={setBusy} />}
       </div>
