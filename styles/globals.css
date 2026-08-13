@@ -1837,8 +1837,6 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   .h-hdate { font-size: .68rem; }
 }
 /* Вкладка особистого розділу — інший акцент, щоб не плутати з обліком */
-.tab-health { text-decoration: none; color: var(--green); }
-.tab-health:hover { background: var(--green-dim); color: var(--green); }
 
 /* Додати фото до вже створеного запису */
 .h-hshot-add {
