@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 // Чиста логіка тренажера — без звернень до таблиць, тому їде і в браузер
 import {
-  STEPS, FACTS, LEARNED, MAX_LEVEL,
-  stepFacts, newInStep, stepProgress, unlockedSteps, buildSession, applyResults,
+  LESSONS, FACTS, RUN, keyOf, known, runOf, tipFor, options, question,
+  lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
+  lessonProgress, partProgress, unlockedLessons,
+  buildSession, partQueue, quizQueue, applyResults,
 } from '../lib/mult';
 
 /*
@@ -3863,47 +3865,95 @@ function RestockModal({ med, onClose, onSave }) {
 /**
  * Тренажер таблиці множення й ділення.
  *
- * Три екрани в одній вкладці: список кроків, сторінка вивчення й саме
- * тренування. Розділені навмисно — спершу подивитись і зрозуміти, і лише
- * потім відповідати. Тренажер, який одразу питає незнайоме, вчить не
- * таблиці, а тому, що математика — це коли ти помиляєшся.
+ * Урок — це одна таблиця, розбита на частини по три приклади. Частина
+ * закривається за хвилину, і між ними видно рух; вісім прикладів за
+ * підхід — це вже стіна, об яку розбивається бажання вчити.
+ *
+ * Приклад вважається вивченим, коли дався три рази поспіль. Умова навмисно
+ * така, щоб її розумів той, хто вчить: «три зірочки» замість «рівень 4 з 5».
  */
 function MultTab({ data, reload, toast }) {
   const [prog, setProg] = useState(() => data.mult || {});
-  const [screen, setScreen] = useState('steps');   // steps | learn | drill
-  const [step, setStep] = useState(null);
+  const [view, setView] = useState({ s: 'lessons' });
   const [saving, setSaving] = useState(false);
 
-  // прогрес міг оновитись іншим пристроєм — підхоплюємо після перезавантаження
   useEffect(() => { setProg(data.mult || {}); }, [data.mult]);
 
-  const open = unlockedSteps(prog);
+  const open = unlockedLessons(prog);
+  const best = num(data.goals?.quizBest);
 
   const done = FACTS.reduce((n, f) => n
-    + ((prog[f.key]?.mul || 0) >= LEARNED ? 1 : 0)
-    + ((prog[f.key]?.div || 0) >= LEARNED ? 1 : 0), 0);
+    + (known(prog, f.key, 'mul') ? 1 : 0)
+    + (known(prog, f.key, 'div') ? 1 : 0), 0);
   const total = FACTS.length * 2;
 
-  const finish = async (results) => {
+  /*
+   * Один запит у кінці підходу, а не після кожної відповіді: інакше
+   * хвилинна квота Google скінчилась би на третьому прикладі.
+   */
+  const save = async (results, extra) => {
     const next = applyResults(prog, results, today());
     setProg(next);
-    setScreen('steps');
-    // Один запит у кінці підходу, а не після кожної відповіді: інакше
-    // хвилинна квота Google скінчиться на третьому прикладі.
     setSaving(true);
     try {
       await api('/api/health', { method: 'POST', body: { action: 'mult', mult: next } });
+      if (extra) await api('/api/health', { method: 'POST', body: { action: 'goals', goals: extra } });
       await reload();
     } catch (e) {
-      toast('Не вдалося зберегти прогрес: ' + e.message);
+      toast('Не вдалося зберегти: ' + e.message);
     } finally { setSaving(false); }
+    return next;
   };
 
-  if (screen === 'learn' && step) {
-    return <MultLearn step={step} onStart={() => setScreen('drill')} onBack={() => setScreen('steps')} />;
+  if (view.s === 'lesson') {
+    return (
+      <MultLesson
+        lesson={view.lesson} prog={prog}
+        onBack={() => setView({ s: 'lessons' })}
+        onLook={(part, n) => setView({ s: 'look', lesson: view.lesson, part, n })}
+        onDrill={(part, n) => setView({ s: 'drill', lesson: view.lesson, part, n })}
+        onSession={() => setView({ s: 'drill', lesson: view.lesson, part: null })}
+      />
+    );
   }
-  if (screen === 'drill' && step) {
-    return <MultDrill step={step} prog={prog} onDone={finish} onBack={() => setScreen('steps')} />;
+  if (view.s === 'look') {
+    return (
+      <MultLook
+        lesson={view.lesson} part={view.part} n={view.n}
+        onStart={() => setView({ s: 'drill', lesson: view.lesson, part: view.part, n: view.n })}
+        onBack={() => setView({ s: 'lesson', lesson: view.lesson })}
+      />
+    );
+  }
+  if (view.s === 'drill') {
+    return (
+      <MultDrill
+        lesson={view.lesson} part={view.part} n={view.n} prog={prog}
+        onBack={() => setView({ s: view.part ? 'lesson' : 'lessons', lesson: view.lesson })}
+        onDone={async (results) => {
+          const next = await save(results);
+          const whole = lessonProgress(view.lesson, next) >= 1;
+          setView(whole
+            ? { s: 'win', lesson: view.lesson }
+            : { s: view.part ? 'lesson' : 'lessons', lesson: view.lesson });
+        }}
+      />
+    );
+  }
+  if (view.s === 'win') {
+    return <MultWin lesson={view.lesson} onBack={() => setView({ s: 'lessons' })} />;
+  }
+  if (view.s === 'quiz') {
+    return (
+      <MultQuiz
+        prog={prog} best={best}
+        onBack={() => setView({ s: 'lessons' })}
+        onDone={async (results, score) => {
+          await save(results, score > best ? { ...(data.goals || {}), quizBest: score } : null);
+          setView({ s: 'lessons' });
+        }}
+      />
+    );
   }
 
   return (
@@ -3913,46 +3963,47 @@ function MultTab({ data, reload, toast }) {
         <div className="h-mt-big">{done}<span className="h-mt-of">/{total}</span></div>
         <div className="h-mt-bar"><i style={{ width: (total ? (done / total) * 100 : 0) + '%' }} /></div>
         <div className="h-mt-sub">
-          {done === 0 ? 'Почніть з першого кроку — там найлегше.'
+          {done === 0 ? 'Починайте з таблиці на 2 — далі кожен урок буде легшим за попередній.'
             : done >= total ? 'Уся таблиця вивчена. Заходьте раз на тиждень, щоб не забулось.'
-            : 'Кожен крок відкриває наступний, коли пройдено три чверті.'}
+            : 'Приклад вивчений, коли дався три рази поспіль.'}
         </div>
       </div>
 
-      <div className="h-sec"><h3>Кроки</h3></div>
+      {done > 0 && (
+        <button className="h-mt-quiz" onClick={() => setView({ s: 'quiz' })}>
+          <span>Вікторина на час</span>
+          <span className="h-mt-quiz-b">{best ? `рекорд ${best}` : 'хвилина на швидкість'}</span>
+        </button>
+      )}
+
+      <div className="h-sec"><h3>Уроки</h3></div>
       <div className="h-mt-steps">
-        {STEPS.map((s, i) => {
-          const pct = Math.round(stepProgress(s, prog) * 100);
+        {LESSONS.map((l, i) => {
+          const pct = Math.round(lessonProgress(l, prog) * 100);
           const locked = !open[i];
-          const fresh = newInStep(s);
+          const all = lessonFacts(l).length;
+          const fresh = freshFacts(l).filter((f) => !known(prog, f.key, modesOf(l)[0])).length;
           return (
-            <div key={s.key} className={'h-mt-step' + (locked ? ' is-lock' : '') + (pct === 100 ? ' is-done' : '')}>
-              <div className="h-mt-step-h">
+            <button
+              key={l.key}
+              className={'h-mt-step' + (locked ? ' is-lock' : '') + (pct === 100 ? ' is-done' : '')}
+              disabled={locked}
+              onClick={() => setView({ s: 'lesson', lesson: l })}
+            >
+              <span className="h-mt-step-h">
                 <span className="h-mt-n">{pct === 100 ? '✓' : i + 1}</span>
-                <span className="h-mt-title">{s.title}</span>
-                <span className="h-mt-pct">{locked ? 'закрито' : pct + '%'}</span>
-              </div>
-              <div className="h-mt-lead">{s.lead}</div>
-              <div className="h-mt-bar"><i style={{ width: pct + '%' }} /></div>
-              <div className="h-mt-step-f">
-                <span className="h-mt-meta">
-                  {stepFacts(s).length} {plur(stepFacts(s).length, ['приклад', 'приклади', 'прикладів'])}
-                  {fresh > 0 && s.tables.length ? ` · ${fresh} ${plur(fresh, ['новий', 'нових', 'нових'])}` : ''}
-                </span>
-                {locked ? (
-                  <span className="h-mt-lockw">Пройдіть попередній крок</span>
-                ) : (
-                  <span className="h-mt-acts">
-                    {s.hint && (
-                      <button className="h-btn" onClick={() => { setStep(s); setScreen('learn'); }}>Вчити</button>
-                    )}
-                    <button className="h-btn h-btn-p" onClick={() => { setStep(s); setScreen('drill'); }}>
-                      Тренувати
-                    </button>
-                  </span>
-                )}
-              </div>
-            </div>
+                <span className="h-mt-title">{l.title}</span>
+                <span className="h-mt-pct">{locked ? '🔒' : pct + '%'}</span>
+              </span>
+              <span className="h-mt-bar"><i style={{ width: pct + '%' }} /></span>
+              <span className="h-mt-meta">
+                {locked ? 'Спершу пройдіть попередній урок'
+                  : l.kind !== 'table' ? `${all} прикладів`
+                  : fresh > 0
+                    ? `${fresh} ${plur(fresh, ['новий', 'нові', 'нових'])} · ${all - fresh} на повторення`
+                    : `${all} прикладів на повторення`}
+              </span>
+            </button>
           );
         })}
       </div>
@@ -3964,10 +4015,7 @@ function MultTab({ data, reload, toast }) {
   );
 }
 
-/**
- * Уся таблиця однією картинкою: видно, де діри. Колір клітинки — рівень
- * множення, бо саме воно вчиться першим; ділення показане крапкою в кутку.
- */
+/** Уся таблиця однією картинкою: видно, де діри */
 function MultGrid({ prog }) {
   const nums = [2, 3, 4, 5, 6, 7, 8, 9];
   return (
@@ -3981,14 +4029,14 @@ function MultGrid({ prog }) {
             <tr key={a}>
               <th>{a}</th>
               {nums.map((b) => {
-                const k = a <= b ? `${a}×${b}` : `${b}×${a}`;
-                const p = prog[k] || {};
-                const lvl = p.mul || 0;
+                const k = keyOf(a, b);
+                const run = runOf(prog, k, 'mul');
+                const cls = known(prog, k, 'mul') ? 'is-known' : run > 0 ? 'is-now' : '';
                 return (
                   <td
                     key={b}
-                    className={'lv' + lvl + ((p.div || 0) >= LEARNED ? ' has-div' : '')}
-                    title={`${a} × ${b} = ${a * b}\nмноження: ${lvl}/${MAX_LEVEL}\nділення: ${p.div || 0}/${MAX_LEVEL}`}
+                    className={cls + (known(prog, k, 'div') ? ' has-div' : '')}
+                    title={`${a} × ${b} = ${a * b}\nмноження: ${run}/${RUN} поспіль\nділення: ${runOf(prog, k, 'div')}/${RUN}`}
                   >
                     {a * b}
                   </td>
@@ -3999,229 +4047,389 @@ function MultGrid({ prog }) {
         </tbody>
       </table>
       <div className="h-mt-leg">
-        <span><i className="lv0" /> не вчили</span>
-        <span><i className="lv2" /> вчимо</span>
-        <span><i className="lv4" /> знаю</span>
-        <span><i className="lv4 has-div" /> і ділення</span>
+        <span><i /> не вчили</span>
+        <span><i className="is-now" /> вчимо</span>
+        <span><i className="is-known" /> знаю</span>
+        <span><i className="is-known has-div" /> і ділення</span>
       </div>
     </div>
   );
 }
 
-/**
- * Сторінка вивчення. Спершу правило, потім сама таблиця, і лише тоді
- * кнопка тренування. Рядок можна розкрити — приклад показується крапками,
- * бо «6×4» стає зрозумілим, коли видно чотири ряди по шість.
- */
-function MultLearn({ step, onStart, onBack }) {
-  const [openRow, setOpenRow] = useState(null);
-  const tables = step.tables.length ? step.tables : [];
+/** Урок: правило й список частин по три приклади */
+function MultLesson({ lesson, prog, onBack, onLook, onDrill, onSession }) {
+  const parts = partsOf(lesson);
+  const table = lesson.kind === 'table';
 
   return (
     <>
       <div className="h-mt-learn-h">
-        <button className="h-link" onClick={onBack}>← Кроки</button>
-        <h2>{step.title}</h2>
+        <button className="h-link" onClick={onBack}>← Уроки</button>
+        <h2>{lesson.title}</h2>
       </div>
 
-      {step.hint && <div className="h-mt-rule"><b>Правило</b>{step.hint}</div>}
+      <div className="h-mt-rule"><b>Правило</b>{lesson.rule}</div>
 
-      {tables.map((t) => (
-        <section key={t}>
-          <div className="h-sec"><h3>Таблиця на {t}</h3></div>
-          <div className="h-mt-rows">
-            {[2, 3, 4, 5, 6, 7, 8, 9].map((b) => {
-              const id = `${t}-${b}`;
-              const isOpen = openRow === id;
+      {!table ? (
+        <div className="h-addbar">
+          <button className="h-add" onClick={onSession}>Тренувати →</button>
+        </div>
+      ) : (
+        <>
+          <div className="h-sec"><h3>Частини</h3></div>
+          <div className="h-mt-parts">
+            {parts.map((part, n) => {
+              const pct = Math.round(partProgress(lesson, part, prog) * 100);
+              const ready = pct === 100;
               return (
-                <div key={b}>
-                  <button
-                    className={'h-mt-row' + (isOpen ? ' is-open' : '')}
-                    onClick={() => setOpenRow(isOpen ? null : id)}
-                  >
-                    <span className="h-mt-eq">{t} × {b}</span>
-                    <span className="h-mt-res">{t * b}</span>
-                  </button>
-                  {isOpen && <DotGrid rows={b} cols={t} />}
+                <div key={n} className={'h-mt-part' + (ready ? ' is-done' : '')}>
+                  <span className="h-mt-part-i">{ready ? '✓' : n + 1}</span>
+                  <span className="h-mt-part-t">
+                    <b>Частина {n + 1} з {parts.length}</b>
+                    <i>{part.map((f) => `${lesson.table}×${f.a === lesson.table ? f.b : f.a}`).join(' · ')}</i>
+                  </span>
+                  <span className="h-mt-part-a">
+                    <button className="h-btn" onClick={() => onLook(part, n)}>Подивись</button>
+                    <button className={'h-btn' + (ready ? '' : ' h-btn-p')} onClick={() => onDrill(part, n)}>
+                      {ready ? 'Повторити' : 'Відповідати'}
+                    </button>
+                  </span>
                 </div>
               );
             })}
           </div>
-        </section>
-      ))}
-
-      <div className="h-addbar">
-        <button className="h-add" onClick={onStart}>Тренувати →</button>
-      </div>
+        </>
+      )}
     </>
   );
 }
 
-/** Приклад крапками: скільки рядів по скільки штук */
-function DotGrid({ rows, cols }) {
+/**
+ * «Подивись»: приклад показаний крапками й числовою стрічкою. Множення —
+ * це повторне додавання, і поки це видно очима, запам'ятовувати доводиться
+ * набагато менше.
+ */
+function MultLook({ lesson, part, n, onStart, onBack }) {
+  const mults = partMultipliers(lesson, part);
+  const [i, setI] = useState(0);
+  const b = mults[i];
+  const t = lesson.table;
+
   return (
-    <div className="h-mt-dots">
-      {[...Array(rows)].map((_, r) => (
-        <div key={r}>
-          {[...Array(cols)].map((__, c) => <i key={c} />)}
+    <div className="h-mt-look">
+      <div className="h-mt-learn-h">
+        <button className="h-link" onClick={onBack}>← Частини</button>
+        <h2>Частина {n + 1}</h2>
+      </div>
+
+      <div className="h-mt-shot">
+        <div className="h-mt-eqbig">{t} × {b} = <b>{t * b}</b></div>
+
+        <div className="h-mt-groups">
+          {[...Array(b)].map((_, g) => (
+            <span key={g}>{[...Array(t)].map((__, d) => <i key={d} />)}</span>
+          ))}
         </div>
-      ))}
-      <span className="h-mt-dots-t">{rows} {plur(rows, ['ряд', 'ряди', 'рядів'])} по {cols}</span>
+
+        <div className="h-mt-line">
+          <div className="h-cap">Додавай по {t}</div>
+          <div className="h-mt-chips">
+            {[...Array(9)].map((_, k) => {
+              const v = t * (k + 1);
+              return (
+                <span key={k} className={k + 1 === b ? 'is-now' : k + 1 < b ? 'is-past' : ''}>{v}</span>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="h-mt-look-a">
+        {i > 0 && <button className="h-btn" onClick={() => setI(i - 1)}>← Назад</button>}
+        {i < mults.length - 1
+          ? <button className="h-add" onClick={() => setI(i + 1)}>Далі →</button>
+          : <button className="h-add" onClick={onStart}>Твоя черга →</button>}
+      </div>
     </div>
   );
 }
 
-const SESSION = 12;
-
 /**
- * Саме тренування.
+ * Відповіді.
  *
- * Клавіатура своя, а не системна: та займає пів екрана, з'їжджає й ховає
- * питання, а тут потрібні лише десять цифр. Відповідь зараховується, щойно
- * набрано стільки цифр, скільки їх у правильній — зайве натискання «готово»
- * на двадцяти прикладах перетворюється на двадцять зайвих дотиків.
+ * У частині питаємо, доки кожен приклад не дасться тричі поспіль — саме це
+ * й означає «вивчив». Помилка обнуляє серію: «знаю» — це коли не
+ * помиляєшся, а не коли вгадав більше разів, ніж не вгадав.
+ *
+ * Варіантів три, і всі з тієї ж таблиці. Іноді пропуск стоїть ліворуч:
+ * «▢ = 2 × 8». Це ламає звичку читати зліва направо й писати відповідь у
+ * кінці — знак «дорівнює» означає «стільки ж», а не «зараз буде результат».
  */
-function MultDrill({ step, prog, onDone, onBack }) {
-  const [queue] = useState(() => buildSession(step, prog, SESSION));
+function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
+  const mode = part ? 'part' : 'session';
+  const [pool] = useState(() => (part ? partQueue(lesson, part) : null));
+  const [queue] = useState(() => (part ? null : buildSession(lesson, prog, 12)));
+
+  const [runs, setRuns] = useState(() => {
+    const r = {};
+    if (pool) pool.forEach((x) => { r[x.fact.key + x.mode] = 0; });
+    return r;
+  });
+  /*
+   * Відповіді й серії живуть у ref, а не лише в стані. Правильну відповідь
+   * гортає setTimeout, а він тримає значення з того рендера, коли на неї
+   * натиснули — тобто без неї самої. Через це остання відповідь підходу
+   * губилась, і частина не закривалась, хоча всі приклади вже дались.
+   */
+  const resRef = useRef([]);
+  const runRef = useRef(null);
+  if (runRef.current === null) {
+    runRef.current = {};
+    if (pool) pool.forEach((x) => { runRef.current[x.fact.key + x.mode] = 0; });
+  }
+  const [q, setQ] = useState(() => (part ? nextFrom(pool, {}, null) : null));
   const [i, setI] = useState(0);
-  const [typed, setTyped] = useState('');
-  const [state, setState] = useState('ask');   // ask | right | wrong
+  const [opts, setOpts] = useState([]);
+  const [picked, setPicked] = useState(null);
   const [results, setResults] = useState([]);
   const started = useRef(Date.now());
 
-  const q = queue[i];
+  // перше питання й кожне наступне: варіанти рахуються один раз на питання
+  const cur = part ? q : queue?.[i];
 
-  useEffect(() => { started.current = Date.now(); }, [i]);
-
-  // фізична клавіатура на комп'ютері — щоб тренуватись можна було й за столом
   useEffect(() => {
-    const onKey = (e) => {
-      if (!queue[i]) return;
-      if (state !== 'ask') { if (e.key === 'Enter' || e.key === ' ') next(); return; }
-      if (/^[0-9]$/.test(e.key)) press(e.key);
-      if (e.key === 'Backspace') setTyped((t) => t.slice(0, -1));
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
+    if (!cur) return;
+    setOpts(options(cur, lesson.kind === 'table' ? lesson.table : 0));
+    setPicked(null);
+    started.current = Date.now();
+  }, [cur]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (queue.length === 0) {
+  const total = part ? pool.length * RUN : queue.length;
+  const doneRuns = part ? Object.values(runs).reduce((s, v) => s + Math.min(v, RUN), 0) : i;
+
+  if (!cur) {
     return (
-      <div className="h-empty">
-        У цьому кроці ще немає прикладів. <button className="h-link" onClick={onBack}>Назад</button>
+      <div className="h-mt-drill">
+        <div className="h-mt-drill-h"><button className="h-link" onClick={onBack}>← Вийти</button></div>
+        <div className="h-empty">Тут поки нема чого питати.</div>
       </div>
     );
   }
-  if (i >= queue.length) {
-    return <MultResult step={step} results={results} onDone={onDone} onBack={onBack} />;
-  }
 
-  // Правильну відповідь пропускаємо самі — пауза рівно щоб побачити
-  // галочку. Помилку не пропускаємо: правильне число має бути прочитане.
-  const press = (d) => {
-    if (state !== 'ask' || !q) return;
-    const t = (typed + d).slice(0, 3);
-    setTyped(t);
-    if (t.length >= String(q.answer).length) {
-      // перевірка на наступному кадрі, щоб цифра встигла з'явитись на екрані
-      setTimeout(() => {
-        const ms = Date.now() - started.current;
-        const right = Number(t) === q.answer;
-        setResults((r) => [...r, { key: q.key, mode: q.mode, right, ms, text: q.text, answer: q.answer }]);
-        setState(right ? 'right' : 'wrong');
-        if (right) setTimeout(next, 450);
-      }, 60);
-    }
+  const answer = (v) => {
+    if (picked !== null) return;
+    const right = v === cur.answer;
+    const k = cur.key + cur.mode;
+    resRef.current = [...resRef.current, {
+      key: cur.key, mode: cur.mode, right, ms: Date.now() - started.current,
+      text: cur.text, answer: cur.answer,
+    }];
+    if (part) runRef.current = { ...runRef.current, [k]: right ? (runRef.current[k] || 0) + 1 : 0 };
+    setPicked(v);
+    setResults(resRef.current);
+    setRuns(runRef.current);
+    // Правильну пропускаємо самі — пауза рівно щоб побачити зелене.
+    // Помилку не пропускаємо: правильне число має бути прочитане.
+    if (right) setTimeout(step, 500);
   };
 
-  function next() {
-    setTyped('');
-    setState('ask');
-    setI((x) => x + 1);
+  function step() {
+    if (part) {
+      const nxt = nextFrom(pool, runRef.current, cur.key);
+      if (!nxt) return onDone(resRef.current);
+      setQ(nxt);
+    } else {
+      if (i + 1 >= queue.length) return onDone(resRef.current);
+      setI(i + 1);
+    }
   }
 
   return (
     <div className="h-mt-drill">
       <div className="h-mt-drill-h">
         <button className="h-link" onClick={onBack}>← Вийти</button>
-        <div className="h-mt-pips">
-          {queue.map((_, n) => (
-            <i key={n} className={n < results.length ? (results[n].right ? 'is-ok' : 'is-bad') : (n === i ? 'is-now' : '')} />
+        <span className="h-mt-where">
+          {part ? `Частина ${n + 1}` : lesson.title}
+        </span>
+      </div>
+
+      <div className="h-mt-bar"><i style={{ width: Math.min(100, (doneRuns / total) * 100) + '%' }} /></div>
+
+      {part && (
+        <div className="h-mt-stars">
+          {[...Array(RUN)].map((_, k) => (
+            <i key={k} className={k < (runs[cur.key + cur.mode] || 0) ? 'is-on' : ''}>★</i>
           ))}
+        </div>
+      )}
+
+      <div className="h-mt-qbox">
+        <div className="h-mt-q2">
+          <span className={'h-mt-blank' + (picked !== null ? (picked === cur.answer ? ' is-ok' : ' is-bad') : '')}>
+            {picked === null ? '' : picked}
+          </span>
+          <span className="h-mt-eqs">=</span>
+          <span className="h-mt-nums">{cur.a} {cur.mode === 'div' ? '÷' : '×'} {cur.b}</span>
         </div>
       </div>
 
-      <div className={'h-mt-q' + (state === 'right' ? ' is-right' : state === 'wrong' ? ' is-wrong' : '')}>
-        <div className="h-mt-qt">{q.text}</div>
-        <div className="h-mt-ans">
-          {state === 'wrong' ? (
-            <><s>{typed || '—'}</s> <b>{q.answer}</b></>
-          ) : (
-            typed || <span className="h-mt-caret">?</span>
+      <div className="h-mt-opts">
+        {opts.map((o) => (
+          <button
+            key={o}
+            className={'h-mt-opt'
+              + (picked === null ? '' : o === cur.answer ? ' is-ok' : o === picked ? ' is-bad' : ' is-dim')}
+            onClick={() => answer(o)}
+            disabled={picked !== null}
+          >
+            {o}
+          </button>
+        ))}
+      </div>
+
+      {picked !== null && picked !== cur.answer && (
+        <div className="h-mt-fb">
+          <div className="h-mt-fb-t">Не так. Правильно: <b>{cur.answer}</b></div>
+          {lesson.kind === 'table' && cur.mode === 'mul' && (
+            <div className="h-mt-fb-h">💡 {tipFor(lesson.table, cur.a === lesson.table ? cur.b : cur.a)}</div>
           )}
-        </div>
-      </div>
-
-      {state === 'wrong' ? (
-        <div className="h-mt-again">
-          <div className="h-mt-fix">{q.text} = <b>{q.answer}</b></div>
-          <button className="h-add" onClick={next}>Далі →</button>
-        </div>
-      ) : (
-        <div className="h-mt-pad">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
-            <button key={d} onClick={() => press(String(d))} disabled={state !== 'ask'}>{d}</button>
-          ))}
-          <button className="is-soft" onClick={() => setTyped('')} disabled={state !== 'ask'}>С</button>
-          <button onClick={() => press('0')} disabled={state !== 'ask'}>0</button>
-          <button className="is-soft" onClick={() => setTyped((t) => t.slice(0, -1))} disabled={state !== 'ask'}>⌫</button>
+          <button className="h-add" onClick={() => step()}>Далі →</button>
         </div>
       )}
     </div>
   );
 }
 
-/** Підсумок підходу: що вийшло, що ні і скільки часу пішло на приклад */
-function MultResult({ step, results, onDone, onBack }) {
-  const right = results.filter((r) => r.right).length;
-  const avg = results.length
-    ? results.reduce((s, r) => s + r.ms, 0) / results.length / 1000
-    : 0;
-  // той самий приклад міг завалитись двічі за підхід — у списку він один
-  const bad = results.filter((r) => !r.right)
-    .filter((r, n, all) => all.findIndex((x) => x.text === r.text) === n);
-  const pct = results.length ? Math.round((right / results.length) * 100) : 0;
+/**
+ * Наступний приклад частини: той, у якого серія найкоротша, і не той
+ * самий, що щойно був — інакше відповідь просто списується з екрана.
+ */
+function nextFrom(pool, runs, prevKey) {
+  const left = pool.filter((x) => (runs[x.fact.key + x.mode] || 0) < RUN);
+  if (!left.length) return null;
+  const other = left.filter((x) => x.fact.key !== prevKey);
+  const from = other.length ? other : left;
+  const min = Math.min(...from.map((x) => runs[x.fact.key + x.mode] || 0));
+  const cand = from.filter((x) => (runs[x.fact.key + x.mode] || 0) === min);
+  const pick = cand[Math.floor(Math.random() * cand.length)];
+  return question(pick.fact, pick.mode);
+}
+
+/** Кубок за таблицю — урок має мати кінець, і кінець має бути видно */
+function MultWin({ lesson, onBack }) {
+  return (
+    <div className="h-mt-win">
+      <div className="h-mt-cup">🏆</div>
+      <h2>{lesson.kind === 'table' ? `Таблиця на ${lesson.table} вивчена!` : lesson.title + ' — пройдено!'}</h2>
+      <p>
+        {lesson.kind === 'table'
+          ? 'Наступний урок буде легшим: частина прикладів у ньому вже ваша.'
+          : 'Спробуйте вікторину на час — там усе разом і на швидкість.'}
+      </p>
+      <button className="h-add" onClick={onBack}>Далі →</button>
+    </div>
+  );
+}
+
+const QUIZ_SEC = 60;
+
+/** Вікторина: хвилина, лише вивчене, рахунок і рекорд */
+function MultQuiz({ prog, best, onBack, onDone }) {
+  const [queue] = useState(() => quizQueue(prog));
+  const [i, setI] = useState(0);
+  const [opts, setOpts] = useState([]);
+  const [picked, setPicked] = useState(null);
+  const [results, setResults] = useState([]);
+  const [score, setScore] = useState(0);
+  const [left, setLeft] = useState(QUIZ_SEC);
+  const [over, setOver] = useState(false);
+  const started = useRef(Date.now());
+
+  const cur = queue[i];
+
+  useEffect(() => {
+    if (!cur || over) return;
+    setOpts(options(cur));
+    setPicked(null);
+    started.current = Date.now();
+  }, [cur, over]);
+
+  useEffect(() => {
+    if (over) return;
+    const t = setInterval(() => setLeft((s) => {
+      if (s <= 1) { setOver(true); return 0; }
+      return s - 1;
+    }), 1000);
+    return () => clearInterval(t);
+  }, [over]);
+
+  if (!queue.length) {
+    return (
+      <div className="h-empty">
+        Спершу вивчіть хоч один урок — у вікторині трапляється лише вивчене.{' '}
+        <button className="h-link" onClick={onBack}>Назад</button>
+      </div>
+    );
+  }
+
+  if (over) {
+    return (
+      <div className="h-mt-win">
+        <div className="h-mt-cup">{score > best ? '🏆' : '⏱'}</div>
+        <h2>{score} {plur(score, ['правильна', 'правильні', 'правильних'])}</h2>
+        <p>
+          {score > best ? `Новий рекорд — попередній був ${best || 0}.` : `Рекорд поки ${best}. Ще підхід?`}
+        </p>
+        <button className="h-add" onClick={() => onDone(results, score)}>Зберегти й вийти</button>
+      </div>
+    );
+  }
+
+  const answer = (v) => {
+    if (picked !== null) return;
+    const right = v === cur.answer;
+    setPicked(v);
+    if (right) setScore((s) => s + 1);
+    setResults((r) => [...r, {
+      key: cur.key, mode: cur.mode, right, ms: Date.now() - started.current,
+      text: cur.text, answer: cur.answer,
+    }]);
+    // На час — без зупинок: помилку видно кольором, але потік не рветься.
+    setTimeout(() => setI((x) => x + 1), right ? 260 : 700);
+  };
 
   return (
-    <div className="h-mt-res-w">
-      <div className="h-mt-top">
-        <div className="h-cap">{step.title}</div>
-        <div className="h-mt-big">{right}<span className="h-mt-of">/{results.length}</span></div>
-        <div className="h-mt-bar"><i className={pct >= 80 ? 'is-ok' : ''} style={{ width: pct + '%' }} /></div>
-        <div className="h-mt-sub">
-          {pct === 100 ? 'Жодної помилки.'
-            : pct >= 80 ? 'Добре. Ще підхід — і крок закриється.'
-            : 'Нормально для початку. Помилки повернуться в наступному підході.'}
-          {' '}Середній час — {avg.toFixed(1)} с на приклад.
+    <div className="h-mt-drill">
+      <div className="h-mt-drill-h">
+        <button className="h-link" onClick={onBack}>← Вийти</button>
+        <span className="h-mt-where">{score} · рекорд {best || 0}</span>
+      </div>
+
+      <div className="h-mt-bar"><i className={left <= 10 ? 'is-hot' : ''} style={{ width: (left / QUIZ_SEC) * 100 + '%' }} /></div>
+      <div className="h-mt-clock">{left} с</div>
+
+      <div className="h-mt-qbox">
+        <div className="h-mt-q2">
+          <span className={'h-mt-blank' + (picked !== null ? (picked === cur.answer ? ' is-ok' : ' is-bad') : '')}>
+            {picked === null ? '' : picked}
+          </span>
+          <span className="h-mt-eqs">=</span>
+          <span className="h-mt-nums">{cur.a} {cur.mode === 'div' ? '÷' : '×'} {cur.b}</span>
         </div>
       </div>
 
-      {bad.length > 0 && (
-        <>
-          <div className="h-sec"><h3>Повторити</h3></div>
-          <div className="h-mt-badlist">
-            {bad.map((r, n) => (
-              <div key={n}><span>{r.text}</span><b>{r.answer}</b></div>
-            ))}
-          </div>
-        </>
-      )}
-
-      <div className="h-addbar">
-        <button className="h-add" onClick={() => onDone(results)}>Зберегти й вийти</button>
-      </div>
-      <div className="h-mt-res-a">
-        <button className="h-link" onClick={onBack}>Вийти без збереження</button>
+      <div className="h-mt-opts">
+        {opts.map((o) => (
+          <button
+            key={o}
+            className={'h-mt-opt'
+              + (picked === null ? '' : o === cur.answer ? ' is-ok' : o === picked ? ' is-bad' : ' is-dim')}
+            onClick={() => answer(o)}
+            disabled={picked !== null}
+          >
+            {o}
+          </button>
+        ))}
       </div>
     </div>
   );
