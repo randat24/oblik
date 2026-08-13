@@ -3,7 +3,7 @@ import Head from 'next/head';
 // Чиста логіка тренажера — без звернень до таблиць, тому їде і в браузер
 import {
   LESSONS, FACTS, RUN, FAST_SEC, keyOf, known, auto, runOf, tipFor, options, question,
-  problems, slows, listQueue, daily, dayStreak,
+  problems, slows, listQueue, daily, dayStreak, hardest, hookFor, practiceDays,
   lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
   lessonProgress, partProgress, unlockedLessons,
   buildSession, partQueue, quizQueue, applyResults,
@@ -3891,6 +3891,7 @@ function MultTab({ data, reload, toast }) {
     + (auto(prog, f.key, 'mul') ? 1 : 0)
     + (auto(prog, f.key, 'div') ? 1 : 0), 0);
   const day = daily(prog, stamp(today()));
+  const hard = hardest(prog, 5);
   const streak = dayStreak(prog, today());
 
   /*
@@ -3963,8 +3964,13 @@ function MultTab({ data, reload, toast }) {
       <MultQuiz
         prog={prog} best={best}
         onBack={() => setView({ s: 'lessons' })}
+        prev={num(data.goals?.quizPrev)}
         onDone={async (results, score) => {
-          await save(results, score > best ? { ...(data.goals || {}), quizBest: score } : null);
+          await save(results, {
+            ...(data.goals || {}),
+            quizBest: Math.max(best, score),
+            quizPrev: score,
+          });
           setView({ s: 'lessons' });
         }}
       />
@@ -3973,6 +3979,14 @@ function MultTab({ data, reload, toast }) {
 
   return (
     <>
+      {/* Вісім медалей за вісім таблиць. Кубок у кінці уроку зникає, а це
+          лишається — видно і скільки пройдено, і скільки попереду. */}
+      <div className="h-mt-medals">
+        {LESSONS.filter((l) => l.kind === 'table').map((l) => (
+          <span key={l.key} className={lessonProgress(l, prog) >= 1 ? 'is-on' : ''}>{l.table}</span>
+        ))}
+      </div>
+
       <div className="h-mt-top">
         <div className="h-cap">Вивчено прикладів</div>
         <div className="h-mt-big">{done}<span className="h-mt-of">/{total}</span></div>
@@ -3983,10 +3997,25 @@ function MultTab({ data, reload, toast }) {
             : 'Приклад вивчений, коли дався три рази поспіль.'}
         </div>
         {done > 0 && (
-          <div className="h-mt-two">
-            <span><i>{fastN}</i> автоматом</span>
-            {streak > 0 && <span><i>{streak}</i> {plur(streak, ['день', 'дні', 'днів'])} поспіль</span>}
-          </div>
+          <>
+            <div className="h-mt-two">
+              <span><i>{fastN}</i> автоматом</span>
+              {streak > 0 && <span><i>{streak}</i> {plur(streak, ['день', 'дні', 'днів'])} поспіль</span>}
+            </div>
+            {/* Два тижні крапками: пропуск видно одразу, і його не хочеться
+                робити — це працює краще за будь-яке нагадування. */}
+            <div className="h-mt-cal">
+              {(() => {
+                const was = new Set(practiceDays(prog));
+                const p2 = (x) => String(x).padStart(2, '0');
+                return [...Array(14)].map((_, k) => {
+                  const d = new Date(stamp(today()) - (13 - k) * 86400000);
+                  const key = `${p2(d.getUTCDate())}.${p2(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
+                  return <i key={key} className={was.has(key) ? 'is-on' : ''} title={key} />;
+                });
+              })()}
+            </div>
+          </>
         )}
       </div>
 
@@ -4018,7 +4047,9 @@ function MultTab({ data, reload, toast }) {
       {done > 0 && (
         <button className="h-mt-quiz" onClick={() => setView({ s: 'quiz' })}>
           <span>Вікторина на час</span>
-          <span className="h-mt-quiz-b">{best ? `рекорд ${best}` : 'хвилина на швидкість'}</span>
+          <span className="h-mt-quiz-b">
+            {best ? `рекорд ${best}${num(data.goals?.quizPrev) ? ` · минулого разу ${num(data.goals.quizPrev)}` : ''}` : 'хвилина на швидкість'}
+          </span>
         </button>
       )}
 
@@ -4053,6 +4084,27 @@ function MultTab({ data, reload, toast }) {
           );
         })}
       </div>
+
+      {hard.length > 0 && (
+        <>
+          <div className="h-sec"><h3>Найважче саме вам</h3></div>
+          <div className="h-mt-hard">
+            {hard.map((h) => (
+              <div key={h.fact.key + h.mode} className={h.done ? 'is-done' : ''}>
+                <span className="h-mt-hard-q">
+                  {h.mode === 'div'
+                    ? `${h.fact.a * h.fact.b} ÷ ${h.fact.a} = ${h.fact.b}`
+                    : `${h.fact.a} × ${h.fact.b} = ${h.fact.a * h.fact.b}`}
+                </span>
+                <span className="h-mt-hard-n">
+                  {h.done ? 'закрито' : `${h.bad} ${plur(h.bad, ['промах', 'промахи', 'промахів'])}`}
+                </span>
+                {hookFor(h.fact.key) && <span className="h-mt-hard-h">{hookFor(h.fact.key)}</span>}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="h-sec"><h3>Що вже знаю</h3></div>
       <MultGrid prog={prog} />
@@ -4343,13 +4395,8 @@ function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
       )}
 
       <div className="h-mt-qbox">
-        <div className="h-mt-q2">
-          <span className={'h-mt-blank' + (picked !== null ? (picked === cur.answer ? ' is-ok' : ' is-bad') : '')}>
-            {picked === null ? '' : picked}
-          </span>
-          <span className="h-mt-eqs">=</span>
-          <span className="h-mt-nums">{cur.a} {cur.mode === 'div' ? '÷' : '×'} {cur.b}</span>
-        </div>
+        <QLine q={cur} shown={picked === null ? '' : picked}
+          state={picked === null ? '' : picked === cur.answer ? 'ok' : 'bad'} />
       </div>
 
       <div className="h-mt-opts">
@@ -4369,12 +4416,35 @@ function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
       {picked !== null && picked !== cur.answer && (
         <div className="h-mt-fb">
           <div className="h-mt-fb-t">Не так. Правильно: <b>{cur.answer}</b></div>
-          {lesson.kind === 'table' && cur.mode === 'mul' && (
-            <div className="h-mt-fb-h">💡 {tipFor(lesson.table, cur.a === lesson.table ? cur.b : cur.a)}</div>
-          )}
+          {(() => {
+            // Зачіпка краща за обчислення: поки приклад рахують, його не
+            // памʼятають. Якщо зачіпки немає — показуємо, як порахувати.
+            const hook = hookFor(cur.key);
+            if (hook) return <div className="h-mt-fb-h">💡 {hook}</div>;
+            if (lesson.kind === 'table' && cur.mode === 'mul') {
+              const [x, y] = cur.key.split('×').map(Number);
+              return <div className="h-mt-fb-h">💡 {tipFor(lesson.table, x === lesson.table ? y : x)}</div>;
+            }
+            return null;
+          })()}
           <button className="h-add" onClick={() => step()}>Далі →</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Рядок питання. Пропуск стоїть або на місці відповіді («▢ = 6 × 7»), або
+ * посередині («6 × ▢ = 42»). Друга форма питає не «порахуй», а «добери» —
+ * це інша дія, вона ж наступний крок до ділення й до рівнянь.
+ */
+function QLine({ q, shown, state }) {
+  return (
+    <div className="h-mt-q2">
+      {q.pre && <span className="h-mt-nums">{q.pre}</span>}
+      <span className={'h-mt-blank' + (state ? ' is-' + state : '')}>{shown || ''}</span>
+      <span className="h-mt-nums">{q.post}</span>
     </div>
   );
 }
@@ -4488,18 +4558,14 @@ function MultSpeed({ prog, items, onBack, onDone }) {
       <div className="h-mt-bar"><i style={{ width: (i / queue.length) * 100 + '%' }} /></div>
 
       <div className={'h-mt-qbox' + (state === 'right' ? ' is-right' : state === 'wrong' ? ' is-wrong' : '')}>
-        <div className="h-mt-q2">
-          <span className={'h-mt-blank' + (state === 'right' ? ' is-ok' : state === 'wrong' ? ' is-bad' : '')}>
-            {typed || ''}
-          </span>
-          <span className="h-mt-eqs">=</span>
-          <span className="h-mt-nums">{cur.a} {cur.mode === 'div' ? '÷' : '×'} {cur.b}</span>
-        </div>
+        <QLine q={cur} shown={typed}
+          state={state === 'right' ? 'ok' : state === 'wrong' ? 'bad' : ''} />
       </div>
 
       {state === 'wrong' ? (
         <div className="h-mt-fb">
           <div className="h-mt-fb-t">Не так. Правильно: <b>{cur.answer}</b></div>
+          {hookFor(cur.key) && <div className="h-mt-fb-h">💡 {hookFor(cur.key)}</div>}
           <button className="h-add" onClick={() => setI(i + 1)}>Далі →</button>
         </div>
       ) : (
@@ -4519,7 +4585,7 @@ function MultSpeed({ prog, items, onBack, onDone }) {
 const QUIZ_SEC = 60;
 
 /** Вікторина: хвилина, лише вивчене, рахунок і рекорд */
-function MultQuiz({ prog, best, onBack, onDone }) {
+function MultQuiz({ prog, best, prev, onBack, onDone }) {
   const [queue] = useState(() => quizQueue(prog));
   const [i, setI] = useState(0);
   const [opts, setOpts] = useState([]);
@@ -4563,7 +4629,11 @@ function MultQuiz({ prog, best, onBack, onDone }) {
         <div className="h-mt-cup">{score > best ? '🏆' : '⏱'}</div>
         <h2>{score} {plur(score, ['правильна', 'правильні', 'правильних'])}</h2>
         <p>
-          {score > best ? `Новий рекорд — попередній був ${best || 0}.` : `Рекорд поки ${best}. Ще підхід?`}
+          {score > best
+            ? `Новий рекорд — попередній був ${best || 0}.`
+            : prev
+              ? `Минулого разу ${prev}. ${score > prev ? 'Швидше.' : score === prev ? 'Так само.' : 'Трохи повільніше.'} Рекорд ${best}.`
+              : `Рекорд поки ${best}. Ще підхід?`}
         </p>
         <button className="h-add" onClick={() => onDone(results, score)}>Зберегти й вийти</button>
       </div>
@@ -4594,13 +4664,8 @@ function MultQuiz({ prog, best, onBack, onDone }) {
       <div className="h-mt-clock">{left} с</div>
 
       <div className="h-mt-qbox">
-        <div className="h-mt-q2">
-          <span className={'h-mt-blank' + (picked !== null ? (picked === cur.answer ? ' is-ok' : ' is-bad') : '')}>
-            {picked === null ? '' : picked}
-          </span>
-          <span className="h-mt-eqs">=</span>
-          <span className="h-mt-nums">{cur.a} {cur.mode === 'div' ? '÷' : '×'} {cur.b}</span>
-        </div>
+        <QLine q={cur} shown={picked === null ? '' : picked}
+          state={picked === null ? '' : picked === cur.answer ? 'ok' : 'bad'} />
       </div>
 
       <div className="h-mt-opts">
