@@ -2625,3 +2625,42 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   .h-mt-nums { font-size: 1.8rem; }
   .h-mt-opt { min-height: 56px; font-size: 1.3rem; }
 }
+
+/* Розгін і робота над помилками */
+.h-mt-two {
+  display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px;
+  font-family: var(--mono); font-size: .72rem; color: var(--muted);
+}
+.h-mt-two i { font-style: normal; font-weight: 700; color: var(--text-dim); margin-right: 4px; }
+.h-mt-two i.is-bad { color: var(--red); }
+.h-mt-card {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; min-height: 56px; padding: 0 18px; cursor: pointer; font: inherit;
+  background: var(--panel-2); border: 1px solid var(--blue);
+  border-radius: var(--r); color: var(--blue); font-weight: 600; margin-bottom: 10px;
+}
+.h-mt-card.is-bad { border-color: var(--red); color: var(--red); }
+.h-mt-card-b { font-family: var(--mono); font-size: .7rem; color: var(--muted); font-weight: 400; }
+
+/* Своя клавіатура: системна ховає питання й гальмує */
+.h-mt-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.h-mt-pad button {
+  min-height: 62px; font: inherit; font-family: var(--mono);
+  font-size: 1.5rem; font-weight: 600; cursor: pointer;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r);
+}
+.h-mt-pad button:active { background: var(--panel-3); }
+.h-mt-pad button.is-soft { font-size: 1.1rem; color: var(--muted); background: var(--panel); }
+.h-mt-pad button:disabled { opacity: .5; }
+.h-mt-qbox.is-right { border-color: var(--green); }
+.h-mt-qbox.is-wrong { border-color: var(--red); }
+
+@media (max-width: 420px) {
+  .h-mt-pad button { min-height: 54px; font-size: 1.35rem; }
+}
+.h-mt-clean {
+  background: var(--panel-2); border: 1px solid var(--green-dim);
+  border-radius: var(--r); padding: 14px 16px; margin-bottom: 10px;
+  color: var(--text-dim); font-size: .84rem; line-height: 1.55;
+}
