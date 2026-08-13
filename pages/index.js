@@ -2183,7 +2183,6 @@ export default function Home({ startView }) {
   const [me, setMe] = useState({ callsign: '', role: 'admin', callsigns: [], expires: 0 });
   const [expired, setExpired] = useState(false);
   const [sheets, setSheets] = useState([]);
-  const [health, setHealth] = useState(false); // особистий розділ бачить лише власник
   const [view, setView] = useState(startView || { kind: 'home', name: null });
   const [state, setState] = useState('');
   const [palette, setPalette] = useState(false);
@@ -2257,7 +2256,7 @@ export default function Home({ startView }) {
   useEffect(() => {
     if (!authed) return;
     api('/api/sheet')
-      .then((d) => { setSheets(d.sheets); setHealth(!!d.health); })
+      .then((d) => setSheets(d.sheets))
       .catch((e) => setState('помилка: ' + e.message));
   }, [authed]);
 
@@ -2378,11 +2377,6 @@ export default function Home({ startView }) {
               Люди
             </div>
           )}
-          {health && (
-            <a className="tab tab-health" href="/health" title="Особистий розділ">
-              Здоровʼя
-            </a>
-          )}
         </div>
 
         {view.kind === 'home' && (
@@ -2427,9 +2421,6 @@ export default function Home({ startView }) {
           { label: 'Журнал змін', kind: 'log', run: () => setView({ kind: 'log', name: null }) },
           ...(me.role === 'admin'
             ? [{ label: 'Люди', kind: 'people', run: () => setView({ kind: 'people', name: null }) }]
-            : []),
-          ...(health
-            ? [{ label: 'Здоровʼя', kind: 'health', run: () => { window.location.href = '/health'; } }]
             : []),
         ]}
       />

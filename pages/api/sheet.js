@@ -1,7 +1,5 @@
 import { withAuth } from '../../lib/auth';
 import { readAudits, STATUS as AUDIT_STATUS } from '../../lib/audit';
-import { isOwner } from '../../lib/health';
-import { currentActor } from '../../lib/auth';
 import {
   SHEET_CONFIGS,
   DEFAULT_STATUS_OPTIONS,
@@ -39,7 +37,6 @@ export default withAuth(async (req, res) => {
         hideStatus: !!c.hideStatus,
       })),
       // вкладку «Здоровʼя» бачить лише її власник; решті її просто немає
-      health: isOwner(currentActor()),
     });
   }
 
