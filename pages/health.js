@@ -4,10 +4,10 @@ import Head from 'next/head';
 import {
   LESSONS, FACTS, RUN, FAST_SEC, keyOf, known, auto, runOf, tipFor, options, question,
   problems, slows, listQueue, daily, dayStreak, hardest, hookFor, practiceDays, DAY_SIZE,
-  arcadeLevel, arcadeNext, ARCADE_LIVES, ARCADE_PER_LEVEL,
+  arcadeLevel, arcadeNext, ARCADE_LIVES, ARCADE_PER_LEVEL, ask, formFor,
   lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
   lessonProgress, partProgress, unlockedLessons,
-  buildSession, partQueue, quizQueue, applyResults,
+  buildSession, partQueue, applyResults,
 } from '../lib/mult';
 
 /*
@@ -3882,7 +3882,6 @@ function MultTab({ data, reload, toast }) {
   useEffect(() => { setProg(data.mult || {}); }, [data.mult]);
 
   const open = unlockedLessons(prog);
-  const best = num(data.goals?.quizBest);
 
   const done = FACTS.reduce((n, f) => n
     + (known(prog, f.key, 'mul') ? 1 : 0)
@@ -3975,23 +3974,6 @@ function MultTab({ data, reload, toast }) {
       />
     );
   }
-  if (view.s === 'quiz') {
-    return (
-      <MultQuiz
-        prog={prog} best={best}
-        onBack={() => setView({ s: 'lessons' })}
-        prev={num(data.goals?.quizPrev)}
-        onDone={async (results, score) => {
-          await save(results, {
-            ...(data.goals || {}),
-            quizBest: Math.max(best, score),
-            quizPrev: score,
-          });
-          setView({ s: 'lessons' });
-        }}
-      />
-    );
-  }
 
   return (
     <>
@@ -4068,15 +4050,6 @@ function MultTab({ data, reload, toast }) {
             {num(data.goals?.arcadeBest)
               ? `дійшли до ${num(data.goals.arcadeBest)}-го · три життя, далі — швидше`
               : 'три життя, з кожним рівнем швидше'}
-          </span>
-        </button>
-      )}
-
-      {done > 0 && (
-        <button className="h-mt-quiz" onClick={() => setView({ s: 'quiz' })}>
-          <span>Вікторина на час</span>
-          <span className="h-mt-quiz-b">
-            {best ? `рекорд ${best}${num(data.goals?.quizPrev) ? ` · минулого разу ${num(data.goals.quizPrev)}` : ''}` : 'хвилина на швидкість'}
           </span>
         </button>
       )}
@@ -4463,6 +4436,63 @@ function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
 }
 
 /**
+ * Питання будь-якого виду — одним компонентом.
+ *
+ * Раніше кожен режим малював свій екран, і додати новий вид питання
+ * означало правити три місця. Тепер вид описується в даних, а показує його
+ * одне місце: і в тренуванні дня, і в аркаді питання виглядають однаково,
+ * бо це буквально той самий код.
+ */
+function AskBox({ q, state, typed, opts, onAnswer, disabled }) {
+  if (q.kind === 'tf') {
+    return (
+      <>
+        <div className={'h-mt-qbox' + (state ? ' is-' + state : '')}>
+          <div className="h-mt-tf-q">{q.shown}</div>
+          <div className="h-mt-tf-c">Це правда?</div>
+        </div>
+        <div className="h-mt-tf">
+          <button className="h-mt-tf-b is-no" onClick={() => onAnswer(false)} disabled={disabled}>✗</button>
+          <button className="h-mt-tf-b is-yes" onClick={() => onAnswer(true)} disabled={disabled}>✓</button>
+        </div>
+      </>
+    );
+  }
+
+  if (q.kind === 'cmp') {
+    return (
+      <>
+        <div className={'h-mt-qbox' + (state ? ' is-' + state : '')}>
+          <div className="h-mt-tf-c">Що більше?</div>
+        </div>
+        <div className="h-mt-opts">
+          <button className="h-mt-opt" onClick={() => onAnswer('left')} disabled={disabled}>{q.left}</button>
+          <button className="h-mt-opt is-eq" onClick={() => onAnswer('eq')} disabled={disabled}>порівну</button>
+          <button className="h-mt-opt" onClick={() => onAnswer('right')} disabled={disabled}>{q.right}</button>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className={'h-mt-qbox' + (state ? ' is-' + state : '')}>
+        <QLine q={q} shown={typed} state={state === 'right' ? 'ok' : state === 'wrong' ? 'bad' : ''} />
+      </div>
+      {opts && (
+        <div className="h-mt-opts">
+          {opts.map((o) => (
+            <button key={o}
+              className={'h-mt-opt' + (state ? (o === q.answer ? ' is-ok' : String(o) === String(typed) ? ' is-bad' : ' is-dim') : '')}
+              onClick={() => onAnswer(o)} disabled={disabled}>{o}</button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
  * Рядок питання. Пропуск стоїть або на місці відповіді («▢ = 6 × 7»), або
  * посередині («6 × ▢ = 42»). Друга форма питає не «порахуй», а «добери» —
  * це інша дія, вона ж наступний крок до ділення й до рівнянь.
@@ -4557,8 +4587,9 @@ function MultSpeed({ prog, items, onBack, onDone }) {
   }
 
   const commit = (t) => {
+    if (state !== 'ask') return;
     const ms = Date.now() - started.current;
-    const right = Number(t) === cur.answer;
+    const right = cur.kind === 'pick' ? Number(t) === cur.answer : t === cur.answer;
     resRef.current = [...resRef.current, {
       key: cur.key, mode: cur.mode, right, ms, text: cur.text, answer: cur.answer,
     }];
@@ -4577,6 +4608,13 @@ function MultSpeed({ prog, items, onBack, onDone }) {
     if (t.length >= String(cur.answer).length) setTimeout(() => commit(t), 50);
   };
 
+  /** Що показати як правильну відповідь — залежить від виду питання */
+  const answerLabel = (q) => {
+    if (q.kind === 'tf') return q.answer ? 'правда' : 'неправда';
+    if (q.kind === 'cmp') return q.answer === 'eq' ? 'порівну' : q.answer === 'left' ? q.left : q.right;
+    return q.answer;
+  };
+
   return (
     <div className="h-mt-drill">
       <div className="h-mt-drill-h">
@@ -4585,18 +4623,18 @@ function MultSpeed({ prog, items, onBack, onDone }) {
       </div>
       <div className="h-mt-bar"><i style={{ width: (i / queue.length) * 100 + '%' }} /></div>
 
-      <div className={'h-mt-qbox' + (state === 'right' ? ' is-right' : state === 'wrong' ? ' is-wrong' : '')}>
-        <QLine q={cur} shown={typed}
-          state={state === 'right' ? 'ok' : state === 'wrong' ? 'bad' : ''} />
-      </div>
+      <AskBox q={cur} state={state === 'right' ? 'right' : state === 'wrong' ? 'wrong' : ''}
+        typed={typed} onAnswer={(v) => commit(v)} disabled={state !== 'ask'} />
 
       {state === 'wrong' ? (
         <div className="h-mt-fb">
-          <div className="h-mt-fb-t">Не так. Правильно: <b>{cur.answer}</b></div>
+          <div className="h-mt-fb-t">
+            Не так. {cur.kind === 'pick' ? 'Правильно:' : 'Тут'} <b>{answerLabel(cur)}</b>
+          </div>
           {hookFor(cur.key) && <div className="h-mt-fb-h">💡 {hookFor(cur.key)}</div>}
           <button className="h-add" onClick={() => setI(i + 1)}>Далі →</button>
         </div>
-      ) : (
+      ) : cur.kind === 'pick' ? (
         <div className="h-mt-pad">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
             <button key={d} onClick={() => press(String(d))} disabled={state !== 'ask'}>{d}</button>
@@ -4605,7 +4643,7 @@ function MultSpeed({ prog, items, onBack, onDone }) {
           <button onClick={() => press('0')} disabled={state !== 'ask'}>0</button>
           <button className="is-soft" onClick={() => setTyped((t) => t.slice(0, -1))} disabled={state !== 'ask'}>⌫</button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -4646,7 +4684,7 @@ function MultArcade({ prog, best, onBack, onDone }) {
    */
   useEffect(() => {
     if (!q) return;
-    setOpts(options(q));
+    setOpts(q.kind === 'pick' ? options(q) : []);
     setTyped('');
     setLeft(q.seconds);
     started.current = Date.now();
@@ -4720,6 +4758,12 @@ function MultArcade({ prog, best, onBack, onDone }) {
     if (v === q.answer) hit(); else miss(v);
   };
 
+  const arcAnswer = (x) => {
+    if (x.kind === 'tf') return x.answer ? 'правда' : 'неправда';
+    if (x.kind === 'cmp') return x.answer === 'eq' ? 'порівну' : x.answer === 'left' ? x.left : x.right;
+    return x.answer;
+  };
+
   const press = (d) => {
     if (state !== 'ask') return;
     const t = (typed + d).slice(0, 3);
@@ -4790,20 +4834,20 @@ function MultArcade({ prog, best, onBack, onDone }) {
         {q.fresh && <b> · новий</b>}
       </div>
 
-      <div className={'h-mt-qbox' + (state === 'right' ? ' is-right' : state === 'wrong' ? ' is-wrong' : '')}>
-        <QLine q={q} shown={state === 'wrong' && !typed ? '—' : typed}
-          state={state === 'right' ? 'ok' : state === 'wrong' ? 'bad' : ''} />
-      </div>
+      <AskBox q={q} state={state === 'right' ? 'right' : state === 'wrong' ? 'wrong' : ''}
+        typed={state === 'wrong' && !typed ? '—' : typed}
+        opts={q.kind === 'pick' && !q.typed ? opts : null}
+        onAnswer={answer} disabled={state !== 'ask'} />
 
       {state === 'wrong' ? (
         <div className="h-mt-fb">
           <div className="h-mt-fb-t">
-            {typed ? 'Не так.' : 'Час вийшов.'} Правильно: <b>{q.answer}</b>
+            {typed ? 'Не так.' : 'Час вийшов.'} Правильно: <b>{arcAnswer(q)}</b>
           </div>
           {hookFor(q.key) && <div className="h-mt-fb-h">💡 {hookFor(q.key)}</div>}
           {lives > 0 && <button className="h-add" onClick={next}>Далі →</button>}
         </div>
-      ) : q.typed ? (
+      ) : q.kind === 'pick' && q.typed ? (
         <div className="h-mt-pad">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
             <button key={d} onClick={() => press(String(d))} disabled={state !== 'ask'}>{d}</button>
@@ -4812,123 +4856,10 @@ function MultArcade({ prog, best, onBack, onDone }) {
           <button onClick={() => press('0')} disabled={state !== 'ask'}>0</button>
           <button className="is-soft" onClick={() => setTyped((t) => t.slice(0, -1))} disabled={state !== 'ask'}>⌫</button>
         </div>
-      ) : (
-        <div className="h-mt-opts">
-          {opts.map((o) => (
-            <button key={o}
-              className={'h-mt-opt' + (state === 'ask' ? '' : o === q.answer ? ' is-ok' : ' is-dim')}
-              onClick={() => answer(o)} disabled={state !== 'ask'}>{o}</button>
-          ))}
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }
-
-const QUIZ_SEC = 60;
-
-/** Вікторина: хвилина, лише вивчене, рахунок і рекорд */
-function MultQuiz({ prog, best, prev, onBack, onDone }) {
-  const [queue] = useState(() => quizQueue(prog));
-  const [i, setI] = useState(0);
-  const [opts, setOpts] = useState([]);
-  const [picked, setPicked] = useState(null);
-  const [results, setResults] = useState([]);
-  const [score, setScore] = useState(0);
-  const [left, setLeft] = useState(QUIZ_SEC);
-  const [over, setOver] = useState(false);
-  const started = useRef(Date.now());
-
-  const cur = queue[i];
-
-  useEffect(() => {
-    if (!cur || over) return;
-    setOpts(options(cur));
-    setPicked(null);
-    started.current = Date.now();
-  }, [cur, over]);
-
-  useEffect(() => {
-    if (over) return;
-    const t = setInterval(() => setLeft((s) => {
-      if (s <= 1) { setOver(true); return 0; }
-      return s - 1;
-    }), 1000);
-    return () => clearInterval(t);
-  }, [over]);
-
-  if (!queue.length) {
-    return (
-      <div className="h-empty">
-        Спершу вивчіть хоч один урок — у вікторині трапляється лише вивчене.{' '}
-        <button className="h-link" onClick={onBack}>Назад</button>
-      </div>
-    );
-  }
-
-  if (over) {
-    return (
-      <div className="h-mt-win">
-        <div className="h-mt-cup">{score > best ? '🏆' : '⏱'}</div>
-        <h2>{score} {plur(score, ['правильна', 'правильні', 'правильних'])}</h2>
-        <p>
-          {score > best
-            ? `Новий рекорд — попередній був ${best || 0}.`
-            : prev
-              ? `Минулого разу ${prev}. ${score > prev ? 'Швидше.' : score === prev ? 'Так само.' : 'Трохи повільніше.'} Рекорд ${best}.`
-              : `Рекорд поки ${best}. Ще підхід?`}
-        </p>
-        <button className="h-add" onClick={() => onDone(results, score)}>Зберегти й вийти</button>
-      </div>
-    );
-  }
-
-  const answer = (v) => {
-    if (picked !== null) return;
-    const right = v === cur.answer;
-    setPicked(v);
-    if (right) setScore((s) => s + 1);
-    setResults((r) => [...r, {
-      key: cur.key, mode: cur.mode, right, ms: Date.now() - started.current,
-      text: cur.text, answer: cur.answer,
-    }]);
-    // На час — без зупинок: помилку видно кольором, але потік не рветься.
-    setTimeout(() => setI((x) => x + 1), right ? 260 : 700);
-  };
-
-  return (
-    <div className="h-mt-drill">
-      <div className="h-mt-drill-h">
-        <button className="h-link" onClick={onBack}>← Вийти</button>
-        <span className="h-mt-where">{score} · рекорд {best || 0}</span>
-      </div>
-
-      <div className="h-mt-bar"><i className={left <= 10 ? 'is-hot' : ''} style={{ width: (left / QUIZ_SEC) * 100 + '%' }} /></div>
-      <div className="h-mt-clock">{left} с</div>
-
-      <div className="h-mt-qbox">
-        <QLine q={cur} shown={picked === null ? '' : picked}
-          state={picked === null ? '' : picked === cur.answer ? 'ok' : 'bad'} />
-      </div>
-
-      <div className="h-mt-opts">
-        {opts.map((o) => (
-          <button
-            key={o}
-            className={'h-mt-opt'
-              + (picked === null ? '' : o === cur.answer ? ' is-ok' : o === picked ? ' is-bad' : ' is-dim')}
-            onClick={() => answer(o)}
-            disabled={picked !== null}
-          >
-            {o}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- Сторінка ---------- */
 
 /* ---------- Вкладка «Підсумки» ---------- */
 

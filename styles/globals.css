@@ -2716,3 +2716,23 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   text-align: right; margin-top: -6px;
 }
 .h-mt-arc-n b { color: var(--amber); font-weight: 400; }
+
+/* Правда / неправда */
+.h-mt-tf-q {
+  font-family: var(--mono); font-size: 2rem; font-weight: 300;
+  text-align: center; letter-spacing: .03em;
+}
+.h-mt-tf-c {
+  text-align: center; font-size: .8rem; color: var(--muted); margin-top: 10px;
+}
+.h-mt-tf { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.h-mt-tf-b {
+  min-height: 74px; font: inherit; font-size: 1.9rem; cursor: pointer;
+  border-radius: var(--r); border: 1px solid var(--line); background: var(--panel-2);
+}
+.h-mt-tf-b.is-no { color: var(--red); border-color: var(--red); background: var(--red-dim); }
+.h-mt-tf-b.is-yes { color: var(--green); border-color: var(--green); background: var(--green-dim); }
+.h-mt-tf-b:disabled { opacity: .5; }
+.h-mt-opt.is-eq { font-size: 1rem; font-weight: 600; color: var(--muted); }
+.h-mt-qbox.is-right { border-color: var(--green); }
+.h-mt-qbox.is-wrong { border-color: var(--red); }
