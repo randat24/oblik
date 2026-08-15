@@ -3,7 +3,7 @@ import Head from 'next/head';
 // Чиста логіка тренажера — без звернень до таблиць, тому їде і в браузер
 import {
   LESSONS, FACTS, RUN, FAST_SEC, keyOf, known, auto, runOf, tipFor, options, question,
-  problems, slows, listQueue, daily, dayStreak, hardest, hookFor, practiceDays,
+  problems, slows, listQueue, daily, dayStreak, hardest, hookFor, practiceDays, DAY_SIZE,
   lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
   lessonProgress, partProgress, unlockedLessons,
   buildSession, partQueue, quizQueue, applyResults,
@@ -3870,7 +3870,7 @@ function RestockModal({ med, onClose, onSave }) {
  * закривається за хвилину, і між ними видно рух; вісім прикладів за
  * підхід — це вже стіна, об яку розбивається бажання вчити.
  *
- * Приклад вважається вивченим, коли дався три рази поспіль. Умова навмисно
+ * Приклад вважається вивченим, коли дався чотири рази поспіль. Умова навмисно
  * така, щоб її розумів той, хто вчить: «три зірочки» замість «рівень 4 з 5».
  */
 function MultTab({ data, reload, toast }) {
@@ -3994,7 +3994,7 @@ function MultTab({ data, reload, toast }) {
         <div className="h-mt-sub">
           {done === 0 ? 'Починайте з таблиці на 2 — далі кожен урок буде легшим за попередній.'
             : done >= total ? 'Уся таблиця вивчена. Лишилось довести до автоматизму.'
-            : 'Приклад вивчений, коли дався три рази поспіль.'}
+            : `Приклад вивчений, коли дався ${RUN} рази поспіль.`}
         </div>
         {done > 0 && (
           <>
@@ -4033,13 +4033,14 @@ function MultTab({ data, reload, toast }) {
                 day.bad.length ? `${day.bad.length} з помилками` : '',
                 day.rep.length ? `${day.rep.length} повторити` : '',
                 day.slow.length ? `${day.slow.length} розігнати` : '',
+                day.keep.length ? `${day.keep.length} закріпити` : '',
               ].filter(Boolean).join(' · ')}
             </span>
           </button>
         ) : (
           <div className="h-mt-clean">
-            Сьогодні чисто: помилок немає, повторювати нічого, усе вивчене —
-            автоматом. Наступне повторення спливе саме.
+            Поки нема чого повторювати — вивчіть перший урок, і тренування
+            дня почне збиратись саме.
           </div>
         )
       )}
@@ -4255,7 +4256,7 @@ function MultLook({ lesson, part, n, onStart, onBack }) {
 /**
  * Відповіді.
  *
- * У частині питаємо, доки кожен приклад не дасться тричі поспіль — саме це
+ * У частині питаємо, доки кожен приклад не дасться чотири рази поспіль — це
  * й означає «вивчив». Помилка обнуляє серію: «знаю» — це коли не
  * помиляєшся, а не коли вгадав більше разів, ніж не вгадав.
  *
@@ -4449,8 +4450,8 @@ function QLine({ q, shown, state }) {
   );
 }
 
-/** У колі доробки вистачає двох поспіль: приклад уже знайомий, це не вивчення */
-const FIXRUN = 2;
+/** У колі доробки трохи менше, ніж при вивченні: приклад уже знайомий */
+const FIXRUN = 3;
 
 /**
  * Наступний приклад частини: той, у якого серія найкоротша, і не той
@@ -4492,7 +4493,7 @@ function MultWin({ lesson, onBack }) {
  * автоматизму, коли відповідь приходить швидше ніж за три секунди.
  */
 function MultSpeed({ prog, items, onBack, onDone }) {
-  const [queue] = useState(() => listQueue(items, 12));
+  const [queue] = useState(() => listQueue(items, DAY_SIZE));
   const [i, setI] = useState(0);
   const [typed, setTyped] = useState('');
   const [state, setState] = useState('ask');
