@@ -4,6 +4,7 @@ import Head from 'next/head';
 import {
   LESSONS, FACTS, RUN, FAST_SEC, keyOf, known, auto, runOf, tipFor, options, question,
   problems, slows, listQueue, daily, dayStreak, hardest, hookFor, practiceDays, DAY_SIZE,
+  arcadeLevel, arcadeNext, ARCADE_LIVES, ARCADE_PER_LEVEL,
   lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
   lessonProgress, partProgress, unlockedLessons,
   buildSession, partQueue, quizQueue, applyResults,
@@ -3959,6 +3960,21 @@ function MultTab({ data, reload, toast }) {
       />
     );
   }
+  if (view.s === 'arcade') {
+    return (
+      <MultArcade
+        prog={prog} best={num(data.goals?.arcadeBest)}
+        onBack={() => setView({ s: 'lessons' })}
+        onDone={async (results, level) => {
+          await save(results, {
+            ...(data.goals || {}),
+            arcadeBest: Math.max(num(data.goals?.arcadeBest), level),
+          });
+          setView({ s: 'lessons' });
+        }}
+      />
+    );
+  }
   if (view.s === 'quiz') {
     return (
       <MultQuiz
@@ -4043,6 +4059,17 @@ function MultTab({ data, reload, toast }) {
             дня почне збиратись саме.
           </div>
         )
+      )}
+
+      {done > 0 && (
+        <button className="h-mt-arcade" onClick={() => setView({ s: 'arcade' })}>
+          <span>🎮 Рівні</span>
+          <span className="h-mt-quiz-b">
+            {num(data.goals?.arcadeBest)
+              ? `дійшли до ${num(data.goals.arcadeBest)}-го · три життя, далі — швидше`
+              : 'три життя, з кожним рівнем швидше'}
+          </span>
+        </button>
       )}
 
       {done > 0 && (
@@ -4577,6 +4604,221 @@ function MultSpeed({ prog, items, onBack, onDone }) {
           <button className="is-soft" onClick={() => setTyped('')} disabled={state !== 'ask'}>С</button>
           <button onClick={() => press('0')} disabled={state !== 'ask'}>0</button>
           <button className="is-soft" onClick={() => setTyped((t) => t.slice(0, -1))} disabled={state !== 'ask'}>⌫</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Аркада: гра «доки не програєш».
+ *
+ * Три життя, рівень із десяти правильних, і з кожним рівнем менше часу на
+ * відповідь. Сенс не в змаганні: у звичайному підході людина сама вирішує,
+ * коли їй досить, і зупиняється рівно там, де стало трохи важко. Тут
+ * зупиняє гра — і тому повторів виходить утричі більше, ніж збирався
+ * зробити той, хто заходив «просто повторити».
+ *
+ * Матеріал — вивчене, кожне п'яте питання нове, але лише з відкритих
+ * уроків: кидати 8×8 тому, хто дійшов до п'ятірки, нечесно.
+ */
+function MultArcade({ prog, best, onBack, onDone }) {
+  const [lvl, setLvl] = useState(1);
+  const [idx, setIdx] = useState(0);          // питань на цьому рівні
+  const [lives, setLives] = useState(ARCADE_LIVES);
+  const [score, setScore] = useState(0);
+  const [q, setQ] = useState(() => arcadeNext(prog, 1, 0));
+  const [opts, setOpts] = useState([]);
+  const [typed, setTyped] = useState('');
+  const [state, setState] = useState('ask');  // ask | right | wrong | levelup | over
+  const [left, setLeft] = useState(0);
+  const started = useRef(Date.now());
+  const resRef = useRef([]);
+  const dead = useRef(false);
+
+  const cfg = arcadeLevel(lvl);
+
+  /*
+   * Скидання прив'язане саме до нового питання, а не до будь-якої зміни
+   * стану. Інакше воно спрацьовувало й на екрані промаху: набране число
+   * стиралось, і натиснутий неправильний варіант виглядав так, ніби час
+   * вийшов, а годинник тим часом починався заново.
+   */
+  useEffect(() => {
+    if (!q) return;
+    setOpts(options(q));
+    setTyped('');
+    setLeft(q.seconds);
+    started.current = Date.now();
+  }, [q]);
+
+  // Годинник спільний для всіх рівнів: смуга тане, і коли скінчилась —
+  // це така сама помилка, як неправильна відповідь. Інакше на важкому
+  // прикладі можна сидіти скільки завгодно, і швидкість не тренується.
+  useEffect(() => {
+    if (state !== 'ask' || !q) return;
+    const t = setInterval(() => {
+      const gone = (Date.now() - started.current) / 1000;
+      const rest = q.seconds - gone;
+      setLeft(rest);
+      if (rest <= 0) { clearInterval(t); miss(null); }
+    }, 100);
+    return () => clearInterval(t);
+  }, [state, q]);
+
+  if (!q) {
+    return (
+      <div className="h-empty">
+        Спершу вивчіть хоч одну частину — в аркаді трапляється те, що вже знайоме.{' '}
+        <button className="h-link" onClick={onBack}>Назад</button>
+      </div>
+    );
+  }
+
+  function record(right) {
+    resRef.current = [...resRef.current, {
+      key: q.key, mode: q.mode, right,
+      ms: Math.min(Date.now() - started.current, q.seconds * 1000),
+      text: q.text, answer: q.answer,
+    }];
+  }
+
+  function miss(v) {
+    if (dead.current) return;
+    record(false);
+    setTyped(v === null ? '' : String(v));
+    setState('wrong');
+    const rest = lives - 1;
+    setLives(rest);
+    if (rest <= 0) { dead.current = true; setTimeout(() => setState('over'), 1200); }
+  }
+
+  function hit() {
+    record(true);
+    setScore((x) => x + 1);
+    setState('right');
+    const n = idx + 1;
+    setTimeout(() => {
+      if (n >= ARCADE_PER_LEVEL) {
+        setState('levelup');
+        setTimeout(() => {
+          setLvl((l) => l + 1);
+          setIdx(0);
+          setQ(arcadeNext(prog, lvl + 1, 0));
+          setState('ask');
+        }, 1100);
+      } else {
+        setIdx(n);
+        setQ(arcadeNext(prog, lvl, n));
+        setState('ask');
+      }
+    }, 340);
+  }
+
+  const answer = (v) => {
+    if (state !== 'ask') return;
+    if (v === q.answer) hit(); else miss(v);
+  };
+
+  const press = (d) => {
+    if (state !== 'ask') return;
+    const t = (typed + d).slice(0, 3);
+    setTyped(t);
+    if (t.length >= String(q.answer).length) setTimeout(() => answer(Number(t)), 50);
+  };
+
+  const next = () => {
+    if (dead.current) return;
+    const n = idx + 1;
+    if (n >= ARCADE_PER_LEVEL) {
+      setLvl((l) => l + 1); setIdx(0); setQ(arcadeNext(prog, lvl + 1, 0));
+    } else {
+      setIdx(n); setQ(arcadeNext(prog, lvl, n));
+    }
+    setState('ask');
+  };
+
+  if (state === 'over') {
+    const better = lvl > best;
+    return (
+      <div className="h-mt-win">
+        <div className="h-mt-cup">{better ? '🏆' : '🎮'}</div>
+        <h2>Рівень {lvl}</h2>
+        <p>
+          {score} {plur(score, ['правильна', 'правильні', 'правильних'])} поспіль.{' '}
+          {better
+            ? `Новий рекорд — до цього був ${best || 0}.`
+            : `Рекорд ${best}. До нього ${best - lvl + 1} ${plur(best - lvl + 1, ['рівень', 'рівні', 'рівнів'])}.`}
+        </p>
+        <button className="h-add" onClick={() => onDone(resRef.current, lvl)}>Зберегти й вийти</button>
+      </div>
+    );
+  }
+
+  if (state === 'levelup') {
+    return (
+      <div className="h-mt-win">
+        <div className="h-mt-cup">⚡</div>
+        <h2>Рівень {lvl + 1}</h2>
+        <p>
+          {arcadeLevel(lvl + 1).seconds.toFixed(1)} с на відповідь
+          {arcadeLevel(lvl + 1).withDiv && !cfg.withDiv ? ' · додається ділення' : ''}
+          {arcadeLevel(lvl + 1).typed && !cfg.typed ? ' · тепер набираємо цифри' : ''}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-mt-drill">
+      <div className="h-mt-drill-h">
+        <button className="h-link" onClick={onBack}>← Вийти</button>
+        <span className="h-mt-arc-l">
+          {[...Array(ARCADE_LIVES)].map((_, k) => (
+            <i key={k} className={k < lives ? 'is-on' : ''}>♥</i>
+          ))}
+        </span>
+        <span className="h-mt-where">рівень {lvl} · {score}</span>
+      </div>
+
+      <div className="h-mt-bar">
+        <i className={left <= q.seconds * 0.3 ? 'is-hot' : ''}
+          style={{ width: Math.max(0, (left / q.seconds) * 100) + '%', transition: 'none' }} />
+      </div>
+      <div className="h-mt-arc-n">
+        {idx + (state === 'right' ? 1 : 0)} / {ARCADE_PER_LEVEL}
+        {q.fresh && <b> · новий</b>}
+      </div>
+
+      <div className={'h-mt-qbox' + (state === 'right' ? ' is-right' : state === 'wrong' ? ' is-wrong' : '')}>
+        <QLine q={q} shown={state === 'wrong' && !typed ? '—' : typed}
+          state={state === 'right' ? 'ok' : state === 'wrong' ? 'bad' : ''} />
+      </div>
+
+      {state === 'wrong' ? (
+        <div className="h-mt-fb">
+          <div className="h-mt-fb-t">
+            {typed ? 'Не так.' : 'Час вийшов.'} Правильно: <b>{q.answer}</b>
+          </div>
+          {hookFor(q.key) && <div className="h-mt-fb-h">💡 {hookFor(q.key)}</div>}
+          {lives > 0 && <button className="h-add" onClick={next}>Далі →</button>}
+        </div>
+      ) : q.typed ? (
+        <div className="h-mt-pad">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
+            <button key={d} onClick={() => press(String(d))} disabled={state !== 'ask'}>{d}</button>
+          ))}
+          <button className="is-soft" onClick={() => setTyped('')} disabled={state !== 'ask'}>С</button>
+          <button onClick={() => press('0')} disabled={state !== 'ask'}>0</button>
+          <button className="is-soft" onClick={() => setTyped((t) => t.slice(0, -1))} disabled={state !== 'ask'}>⌫</button>
+        </div>
+      ) : (
+        <div className="h-mt-opts">
+          {opts.map((o) => (
+            <button key={o}
+              className={'h-mt-opt' + (state === 'ask' ? '' : o === q.answer ? ' is-ok' : ' is-dim')}
+              onClick={() => answer(o)} disabled={state !== 'ask'}>{o}</button>
+          ))}
         </div>
       )}
     </div>
