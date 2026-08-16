@@ -5,7 +5,7 @@ import {
   enqueue, cacheGet, cachePut, startOffline, flushQueue, onOfflineChange, getState, takeDropped,
 } from '../lib/offline';
 // Розрахунки доставок — чисті функції без звернень до таблиць
-import { stuck, byDriver, byPoint, deliveredWithin } from '../lib/delivery';
+import { stuck, byDriver, byPoint, deliveredWithin, splitPoints, joinPoints } from '../lib/delivery';
 
 // Сесія добігає кінця сама, тож будь-який запит може повернути 401.
 // Тоді показуємо екран входу, а не незрозумілу помилку посеред роботи.
@@ -5768,9 +5768,10 @@ function DeliveryView({ setState }) {
 
 function DeliveryCard({ item, stages, onMove, onEdit, onDelete }) {
   const next = item.at + 1 < stages.length ? stages[item.at + 1] : null;
+  const pts = splitPoints(item.point);
   const rows = [
     ['Водій', item.driver],
-    ['Точка', item.point],
+    [pts.length > 1 ? 'Точки' : 'Точка', item.point],
     ['Здав', item.giver],
     ['Прийняв', item.taker],
     ['Примітка', item.note],
@@ -5895,6 +5896,7 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
   const [err, setErr] = useState('');
   const up = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const needs = stage.needs || [];
+  const picked = splitPoints(f.point);
 
   return (
     <Modal
@@ -5935,10 +5937,25 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
 
       {needs.includes('point') && (
         <div style={{ marginTop: 10 }}>
-          <label>Точка призначення</label>
-          <input type="text" list="dlvPoints" value={f.point}
-            onChange={(e) => up('point', e.target.value)} placeholder="Тигр, Рись, Білий…" />
-          <datalist id="dlvPoints">{points.map((v) => <option key={v} value={v} />)}</datalist>
+          {/* Точок буває дві: один виліт часто закриває і Тигр, і Рись.
+              Тому чипи з множинним вибором, а не одне поле — інакше
+              доводиться згадувати, через що їх перелічувати. */}
+          <label>Куди доставили{picked.length > 1 ? ` — ${picked.length} точки` : ''}</label>
+          <div className="chips">
+            {points.map((v) => (
+              <div key={v}
+                className={'chip' + (picked.includes(v) ? ' on' : '')}
+                onClick={() => up('point', joinPoints(
+                  picked.includes(v) ? picked.filter((x) => x !== v) : [...picked, v]
+                ))}
+              >
+                {v}
+              </div>
+            ))}
+          </div>
+          <input type="text" value={f.point} style={{ marginTop: 8 }}
+            onChange={(e) => up('point', e.target.value)}
+            placeholder="або впишіть свою: Тигр, Рись" />
         </div>
       )}
 
@@ -5946,7 +5963,7 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
         <div style={{ marginTop: 10 }}>
           <label>Хто прийняв</label>
           <input type="text" value={f.taker} onChange={(e) => up('taker', e.target.value)}
-            placeholder="позивний" />
+            placeholder={picked.length > 1 ? 'позивні через кому' : 'позивний'} />
         </div>
       )}
 
