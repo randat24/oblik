@@ -2812,6 +2812,12 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .dlv-mv p { color: var(--muted); font-size: .82rem; line-height: 1.5; margin: 8px 0 0; }
 .dlv-tip { color: var(--muted); font-size: .8rem; line-height: 1.5; margin-top: 12px; }
+/* позивний підставився сам — видно, що поле не порожнє випадково */
+.dlv-you {
+  margin-left: 8px; padding: 1px 6px; border-radius: 999px;
+  background: var(--panel-3); border: 1px solid var(--line);
+  color: var(--muted); font-size: .62rem; text-transform: none; letter-spacing: 0;
+}
 
 @media (max-width: 480px) {
   /* чотири підписи в ряд на вузькому екрані вже не читаються */
