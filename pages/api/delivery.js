@@ -8,14 +8,29 @@ import {
 
 const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
 
+/*
+ * Лист міг бути створений до появи колонки «Кому»: нові колонки дописані
+ * в кінець, тож дані не зсунулись, але заголовок лишився коротким. Правимо
+ * один раз на запуск і не падаючи — без шапки таблиця читається, а от без
+ * сторінки людина лишається геть.
+ */
+let headersFixed = false;
+
 async function state(extra = {}) {
   const values = await readSheet(DELIVERY_SHEET);
+  if ((values[0] || []).length < DELIVERY_HEADERS.length && !headersFixed) {
+    headersFixed = true;
+    try { await writeRow(DELIVERY_SHEET, 1, DELIVERY_HEADERS); } catch (e) {
+      console.error('не вдалося оновити заголовки доставок:', e.message);
+    }
+  }
   const list = parseDeliveries(values);
   return {
     list,
     stages: STAGES.map(({ key, label, action, hint, needs }) => ({ key, label, action, hint, needs: needs || [] })),
     drivers: suggestions(list, 'driver', DRIVERS),
     points: suggestions(list, 'point', POINTS),
+    tos: suggestions(list, 'to', []),
     ...extra,
   };
 }
@@ -34,15 +49,18 @@ export default withAuth(async (req, res) => {
     // Нова посилка одразу на першому етапі: складена — значить зібрана,
     // окремої кнопки «підтвердити збирання» тут не треба.
     if (action === 'add') {
-      const { what, weight, note } = req.body;
+      const { what, weight, note, to } = req.body;
       if (!str(what)) return res.status(400).json({ error: 'Не вказано вміст' });
       const now = stampKyiv();
       const row = deliveryRow({
-        created: now, what, weight, note,
+        created: now, what, weight, note, to,
         giver: who, dates: { packed: now },
       });
       await appendRow(DELIVERY_SHEET, row, { raw: true });
-      await logChange({ sheet: DELIVERY_SHEET, action: 'Зібрано', field: str(what), after: `${str(weight) || '?'} кг` });
+      await logChange({
+        sheet: DELIVERY_SHEET, action: 'Зібрано', field: str(what),
+        after: [`${str(weight) || '?'} кг`, str(to) && `для ${str(to)}`].filter(Boolean).join(' · '),
+      });
       return res.json(await state());
     }
 

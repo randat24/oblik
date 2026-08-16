@@ -2812,3 +2812,10 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   .dlv-step span { font-size: .55rem; }
   .dlv-grid { grid-template-columns: 1fr; }
 }
+/* Кому призначена посилка — над вмістом, це головне при пошуку */
+.dlv-to {
+  display: block; font-style: normal; font-family: var(--mono);
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--amber); margin-bottom: 3px;
+}
+.dlv-mv .dlv-to { margin-bottom: 4px; }
