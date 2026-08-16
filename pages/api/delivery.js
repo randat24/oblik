@@ -27,7 +27,7 @@ async function state(extra = {}) {
   const list = parseDeliveries(values);
   return {
     list,
-    stages: STAGES.map(({ key, label, action, hint, needs }) => ({ key, label, action, hint, needs: needs || [] })),
+    stages: STAGES.map(({ key, label, short, action, hint, needs }) => ({ key, label, short, action, hint, needs: needs || [] })),
     drivers: suggestions(list, 'driver', DRIVERS),
     points: suggestions(list, 'point', POINTS),
     tos: suggestions(list, 'to', []),

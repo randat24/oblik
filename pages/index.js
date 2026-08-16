@@ -5523,20 +5523,23 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
 /* ---------- Доставки ---------- */
 
 /**
- * Шлях посилки: зібрали → віддали водієві → водій довіз до точки вильоту →
+ * Шлях посилки: зібрали → передали водієві → водій довіз до точки вильоту →
  * доставили адресатові.
  *
- * Головне на картці — один наступний крок, а не перелік станів. Маршрут
- * лінійний, наступний етап завжди відомий, і вибирати з чотирьох варіантів
- * там, де правильний один, — це робота, яку не варто перекладати на того,
- * хто стоїть із коробкою в руках.
+ * Побудовано тим самим словником, що й решта розділів: сітка карток,
+ * бейдж-номер, пігулка стану, рядки даних, кнопки дій знизу. Свого тут
+ * лише смуга маршруту — чотирьох етапів у застосунку більше ніде немає.
+ *
+ * На картці одна головна кнопка, а не перелік станів: маршрут лінійний,
+ * наступний крок завжди відомий, і вибирати з чотирьох там, де правильний
+ * один, — робота, яку не варто перекладати на того, хто стоїть із коробкою.
  */
 function DeliveryView({ setState }) {
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
-  const [only, setOnly] = useState('');       // фільтр за етапом
+  const [only, setOnly] = useState('');
   const [add, setAdd] = useState(false);
-  const [move, setMove] = useState(null);     // { item, stage }
+  const [move, setMove] = useState(null);
   const [edit, setEdit] = useState(null);
 
   const load = useCallback(async () => {
@@ -5576,33 +5579,41 @@ function DeliveryView({ setState }) {
     list = list.filter((d) => [d.to, d.what, d.driver, d.point, d.giver, d.taker, d.note]
       .join(' ').toLowerCase().includes(t));
   }
-  // у дорозі — зверху, доставлене — донизу: діяти треба з першими
-  const rank = (d) => (d.done ? 1 : 0);
-  list = [...list].sort((a, b) => rank(a) - rank(b) || b.row - a.row);
 
-  const totalWeight = data.list.filter((d) => !d.done)
-    .reduce((n, d) => n + (d.weight || 0), 0);
+  const onWay = list.filter((d) => !d.done);
+  const done = list.filter((d) => d.done);
+  const weight = data.list.filter((d) => !d.done).reduce((n, d) => n + (d.weight || 0), 0);
+
+  const card = (d) => (
+    <DeliveryCard
+      key={d.row}
+      item={d}
+      stages={stages}
+      onMove={(stage) => setMove({ item: d, stage })}
+      onEdit={() => setEdit(d)}
+      onDelete={async () => {
+        if (!confirm(`Видалити посилку «${d.what}»?`)) return;
+        await send({ row: d.row }, 'DELETE');
+      }}
+    />
+  );
 
   return (
-    <div className="dlv">
-      <div className="dlv-sum">
+    <>
+      <div className="chips">
         {stages.map((s, i) => (
-          <button
+          <div
             key={s.key}
-            className={'dlv-chip' + (only === s.key ? ' on' : '') + (i === stages.length - 1 ? ' done' : '')}
+            className={'chip' + (only === s.key ? ' on' : '')}
             onClick={() => setOnly(only === s.key ? '' : s.key)}
           >
-            <b>{counts[i]}</b>
-            <span>{s.label}</span>
-          </button>
+            {s.label}<span className="count">{counts[i]}</span>
+          </div>
         ))}
-        {totalWeight > 0 && (
-          <span className="dlv-w">у дорозі {Math.round(totalWeight * 10) / 10} кг</span>
-        )}
       </div>
 
       <div className="toolbar">
-        <SearchBox value={q} onChange={setQ} placeholder="Пошук: кому, вміст, водій, точка…" />
+        <SearchBox value={q} onChange={setQ} placeholder="Знайти посилку: кому, вміст, водій, точка..." />
         <div className="spacer" />
         <button className="btn" onClick={() => setAdd(true)}>+ Нова посилка</button>
       </div>
@@ -5610,21 +5621,23 @@ function DeliveryView({ setState }) {
       {list.length === 0 ? (
         <div className="empty">{q.trim() || only ? 'Нічого не знайдено' : 'Посилок немає'}</div>
       ) : (
-        <div className="dlv-grid">
-          {list.map((d) => (
-            <DeliveryCard
-              key={d.row}
-              item={d}
-              stages={stages}
-              onMove={(stage) => setMove({ item: d, stage })}
-              onEdit={() => setEdit(d)}
-              onDelete={async () => {
-                if (!confirm(`Видалити посилку «${d.what}»?`)) return;
-                await send({ row: d.row }, 'DELETE');
-              }}
-            />
-          ))}
-        </div>
+        <>
+          {onWay.length > 0 && (
+            <div className="section">
+              <h3 className="primary">
+                У дорозі<span className="count">{onWay.length}</span>
+                {weight > 0 && <span className="count">{Math.round(weight * 10) / 10} кг</span>}
+              </h3>
+              <div className="grid">{onWay.map(card)}</div>
+            </div>
+          )}
+          {done.length > 0 && (
+            <div className="section">
+              <h3>Доставлено<span className="count">{done.length}</span></h3>
+              <div className="grid">{done.map(card)}</div>
+            </div>
+          )}
+        </>
       )}
 
       {add && (
@@ -5658,27 +5671,41 @@ function DeliveryView({ setState }) {
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 
 function DeliveryCard({ item, stages, onMove, onEdit, onDelete }) {
   const next = item.at + 1 < stages.length ? stages[item.at + 1] : null;
+  const rows = [
+    ['Водій', item.driver],
+    ['Точка', item.point],
+    ['Здав', item.giver],
+    ['Прийняв', item.taker],
+    ['Примітка', item.note],
+  ].filter(([, v]) => v);
+
   return (
-    <div className={'dlv-card' + (item.done ? ' is-done' : '')}>
-      <div className="dlv-head">
-        <span className="dlv-what">
-          {item.to && <i className="dlv-to">{item.to}</i>}
-          {item.what}
+    <div className="card">
+      <div className="card-head">
+        <div className="card-title">
+          <div className="title-line">
+            {item.to && <span className="id-badge" title="Кому призначена">{item.to}</span>}
+            <span className="dlv-name">{item.what}</span>
+          </div>
+          {item.weight !== null && (
+            <div className="card-sn" style={{ marginLeft: 0, width: 'auto' }}>{item.weight} кг</div>
+          )}
+        </div>
+        <span
+          className="pill dlv-pill"
+          style={{ color: item.done ? 'var(--green)' : 'var(--amber)' }}
+        >
+          {stages[item.at]?.short || stages[item.at]?.label || '—'}
         </span>
-        <span className={'dlv-st' + (item.done ? ' is-done' : '')}>{stages[item.at]?.label || '—'}</span>
       </div>
 
-      {item.weight !== null && (
-        <div className="dlv-weight">{item.weight}<i> кг</i></div>
-      )}
-
-      {/* Маршрут смугою: де була, де зараз, скільки лишилось */}
+      {/* Смуга маршруту: де була, де зараз, скільки лишилось */}
       <div className="dlv-track">
         {stages.map((s, i) => (
           <div key={s.key} className={'dlv-step' + (i <= item.at ? ' on' : '')} title={item.dates[s.key] || s.hint}>
@@ -5689,22 +5716,23 @@ function DeliveryCard({ item, stages, onMove, onEdit, onDelete }) {
         ))}
       </div>
 
-      <div className="dlv-fields">
-        {item.driver && <span>Водій <b>{item.driver}</b></span>}
-        {item.point && <span>Точка <b>{item.point}</b></span>}
-        {item.giver && <span>Здав <b>{item.giver}</b></span>}
-        {item.taker && <span>Прийняв <b>{item.taker}</b></span>}
-      </div>
+      {rows.length > 0 && (
+        <div className="card-body">
+          {rows.map(([k, v]) => (
+            <div className="drow" key={k}>
+              <div className="drow-k">{k}</div>
+              <div className="drow-v">{v}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {item.note && <div className="dlv-note">{item.note}</div>}
-
-      <div className="dlv-acts">
-        {next
-          ? <button className="btn btn-accept" onClick={() => onMove(next.key)}>{next.action}</button>
-          : <span className="dlv-fin">Шлях завершено</span>}
-        <div className="spacer" />
-        <button className="dlv-link" onClick={onEdit}>Правка</button>
-        <button className="dlv-link is-danger" onClick={onDelete}>Видалити</button>
+      <div className="actions">
+        {next && (
+          <button className="act-btn act-accept" onClick={() => onMove(next.key)}>{next.action}</button>
+        )}
+        <button className="act-btn" onClick={onEdit}>Правка</button>
+        <button className="act-btn act-del" onClick={onDelete}>Видалити</button>
       </div>
     </div>
   );
@@ -5797,13 +5825,15 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
       }}
     >
       <div className="dlv-mv">
-        {item.to && <span className="dlv-to">{item.to}</span>}
-        <b>{item.what}</b>
-        {item.weight !== null && <span> · {item.weight} кг</span>}
-        <div>{stage.hint}</div>
+        <div className="title-line">
+          {item.to && <span className="id-badge">{item.to}</span>}
+          <b>{item.what}</b>
+          {item.weight !== null && <span className="count">{item.weight} кг</span>}
+        </div>
+        <p>{stage.hint}</p>
       </div>
 
-      {(needs.includes('driver') || item.driver) && (
+      {needs.includes('driver') && (
         <div style={{ marginTop: 10 }}>
           <label>Водій</label>
           <input type="text" list="dlvDrivers" value={f.driver}
@@ -5812,7 +5842,7 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
         </div>
       )}
 
-      {(needs.includes('point') || item.point) && (
+      {needs.includes('point') && (
         <div style={{ marginTop: 10 }}>
           <label>Точка призначення</label>
           <input type="text" list="dlvPoints" value={f.point}
@@ -5830,7 +5860,9 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
       )}
 
       <div className="dlv-tip">
-        Дата й час проставляться самі.
+        {needs.length === 0
+          ? 'Нічого вписувати не треба — просто підтвердіть.'
+          : 'Дата й час проставляться самі.'}
       </div>
     </Modal>
   );
