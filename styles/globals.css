@@ -2736,3 +2736,79 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-mt-opt.is-eq { font-size: 1rem; font-weight: 600; color: var(--muted); }
 .h-mt-qbox.is-right { border-color: var(--green); }
 .h-mt-qbox.is-wrong { border-color: var(--red); }
+
+/* ---------- Доставки ---------- */
+
+.dlv-sum { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+.dlv-chip {
+  display: flex; align-items: baseline; gap: 7px; cursor: pointer; font: inherit;
+  padding: 9px 14px; border-radius: 999px; min-height: 40px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+}
+.dlv-chip b { font-family: var(--mono); font-size: .95rem; color: var(--text); }
+.dlv-chip span { font-size: .78rem; }
+.dlv-chip.on { border-color: var(--amber); color: var(--amber); }
+.dlv-chip.on b { color: var(--amber); }
+.dlv-chip.done.on { border-color: var(--green); color: var(--green); }
+.dlv-chip.done.on b { color: var(--green); }
+.dlv-w { font-family: var(--mono); font-size: .74rem; color: var(--muted); margin-left: auto; }
+
+.dlv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.dlv-card {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 16px 18px;
+}
+.dlv-card.is-done { opacity: .68; border-color: var(--green-dim); }
+.dlv-head { display: flex; align-items: flex-start; gap: 12px; }
+.dlv-what { font-size: 1rem; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.dlv-st {
+  margin-left: auto; flex: 0 0 auto; font-family: var(--mono);
+  font-size: .62rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--amber); background: var(--amber-dim);
+  border-radius: 999px; padding: 4px 10px; white-space: nowrap;
+}
+.dlv-st.is-done { color: var(--green); background: var(--green-dim); }
+.dlv-weight {
+  font-family: var(--mono); font-size: 1.7rem; font-weight: 700;
+  line-height: 1.1; margin-top: 8px;
+}
+.dlv-weight i { font-style: normal; font-size: .5em; font-weight: 400; color: var(--muted); margin-left: 4px; }
+
+/* Маршрут: чотири кроки смугою */
+.dlv-track { display: flex; gap: 4px; margin-top: 14px; }
+.dlv-step { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dlv-step i {
+  display: block; height: 4px; border-radius: 999px;
+  background: var(--panel-3); border: 1px solid var(--line);
+}
+.dlv-step.on i { background: var(--amber); border-color: var(--amber); }
+.dlv-step:last-child.on i { background: var(--green); border-color: var(--green); }
+.dlv-step span {
+  font-size: .6rem; line-height: 1.25; color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.dlv-step.on span { color: var(--text-dim); }
+.dlv-step em { font-style: normal; font-family: var(--mono); font-size: .56rem; color: var(--muted); }
+
+.dlv-fields {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 14px;
+  font-family: var(--mono); font-size: .72rem; color: var(--muted);
+}
+.dlv-fields b { color: var(--text); font-weight: 700; }
+.dlv-note { color: var(--muted); font-size: .82rem; line-height: 1.5; margin-top: 10px; }
+.dlv-acts {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--line-soft);
+}
+.dlv-fin { font-family: var(--mono); font-size: .72rem; color: var(--green); }
+.dlv-mv {
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 12px 14px; font-size: .9rem;
+}
+.dlv-mv div { color: var(--muted); font-size: .82rem; line-height: 1.5; margin-top: 6px; }
+
+@media (max-width: 560px) {
+  /* назви етапів у чотири колонки на вузькому екрані не читаються */
+  .dlv-step span { font-size: .55rem; }
+  .dlv-grid { grid-template-columns: 1fr; }
+}

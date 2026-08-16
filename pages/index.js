@@ -259,7 +259,7 @@ function BottomNav({ view, sheets, onOpen, onScan, extra = [] }) {
     { key: 'search', label: 'Пошук', icon: <IconSearch size={20} />, on: is('search'), run: () => onOpen({ kind: 'search', name: null }) },
     { key: 'scan', label: 'Скан', icon: <IconQr size={20} />, on: false, run: onScan, accent: true },
     { key: 'audit', label: 'Звірка', icon: <IconCheck />, on: is('audit'), run: () => onOpen({ kind: 'audit', name: null }) },
-    { key: 'more', label: 'Ще', icon: <IconList />, on: ['items', 'ledger', 'stock', 'warehouse', 'log', 'people'].includes(view.kind), run: () => setMore(true) },
+    { key: 'more', label: 'Ще', icon: <IconList />, on: ['items', 'ledger', 'stock', 'warehouse', 'log', 'people', 'delivery'].includes(view.kind), run: () => setMore(true) },
   ];
 
   return (
@@ -2279,6 +2279,7 @@ export default function Home({ startView }) {
       run: () => setView({ kind: s.kind, name: s.name }),
     })),
     { label: 'Звірка', hint: 'екран', run: () => setView({ kind: 'audit', name: null }) },
+    { label: 'Доставки', hint: 'екран', run: () => setView({ kind: 'delivery', name: null }) },
     { label: 'Журнал змін', hint: 'екран', run: () => setView({ kind: 'log', name: null }) },
     // цей рядок не показується сам по собі — він стає «Шукати: …», коли є текст
     { query: true, label: 'Шукати', hint: 'пошук', run: (q) => setView({ kind: 'search', name: null, q }) },
@@ -2358,6 +2359,12 @@ export default function Home({ startView }) {
             </div>
           ))}
           <div
+            className={'tab' + (view.kind === 'delivery' ? ' active' : '')}
+            onClick={() => setView({ kind: 'delivery', name: null })}
+          >
+            Доставки
+          </div>
+          <div
             className={'tab' + (view.kind === 'log' ? ' active' : '')}
             onClick={() => setView({ kind: 'log', name: null })}
           >
@@ -2395,6 +2402,7 @@ export default function Home({ startView }) {
         {view.kind === 'items' && (
           <ItemsView key={view.name + ':' + (view.row || '')} name={view.name} setState={setState} focusRow={view.row} onOpen={setView} />
         )}
+        {view.kind === 'delivery' && <DeliveryView setState={setState} />}
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
         {view.kind === 'stock' && (
           <StockView
@@ -2418,6 +2426,7 @@ export default function Home({ startView }) {
         onOpen={setView}
         onScan={() => setScan(true)}
         extra={[
+          { label: 'Доставки', kind: 'delivery', run: () => setView({ kind: 'delivery', name: null }) },
           { label: 'Журнал змін', kind: 'log', run: () => setView({ kind: 'log', name: null }) },
           ...(me.role === 'admin'
             ? [{ label: 'Люди', kind: 'people', run: () => setView({ kind: 'people', name: null }) }]
@@ -5506,6 +5515,314 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
         {fields.length > 0 && ` · поля листа: ${fields.map((f) => f.label).join(', ')}`}
         {catalog.length > 0 && ` · у листі «${sheet}»: ${catalog.length} поз.`}
         {bindings > 0 && ` · оновимо наявних: ${bindings}`}
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------- Доставки ---------- */
+
+/**
+ * Шлях посилки: зібрали → віддали водієві → водій довіз до точки вильоту →
+ * доставили адресатові.
+ *
+ * Головне на картці — один наступний крок, а не перелік станів. Маршрут
+ * лінійний, наступний етап завжди відомий, і вибирати з чотирьох варіантів
+ * там, де правильний один, — це робота, яку не варто перекладати на того,
+ * хто стоїть із коробкою в руках.
+ */
+function DeliveryView({ setState }) {
+  const [data, setData] = useState(null);
+  const [q, setQ] = useState('');
+  const [only, setOnly] = useState('');       // фільтр за етапом
+  const [add, setAdd] = useState(false);
+  const [move, setMove] = useState(null);     // { item, stage }
+  const [edit, setEdit] = useState(null);
+
+  const load = useCallback(async () => {
+    setState('завантаження…');
+    try {
+      setData(await api('/api/delivery'));
+      setState('синхронізовано');
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  }, [setState]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const send = async (body, method = 'POST') => {
+    setState('збереження…');
+    try {
+      setData(await api('/api/delivery', { method, body }));
+      setState('синхронізовано');
+      return true;
+    } catch (e) {
+      setState('помилка: ' + e.message);
+      alert(e.message);
+      return false;
+    }
+  };
+
+  if (!data) return <div className="loading">Завантаження…</div>;
+
+  const stages = data.stages;
+  const counts = stages.map((s) => data.list.filter((d) => d.stage === s.key).length);
+
+  let list = data.list;
+  if (only) list = list.filter((d) => d.stage === only);
+  if (q.trim()) {
+    const t = q.trim().toLowerCase();
+    list = list.filter((d) => [d.what, d.driver, d.point, d.giver, d.taker, d.note]
+      .join(' ').toLowerCase().includes(t));
+  }
+  // у дорозі — зверху, доставлене — донизу: діяти треба з першими
+  const rank = (d) => (d.done ? 1 : 0);
+  list = [...list].sort((a, b) => rank(a) - rank(b) || b.row - a.row);
+
+  const totalWeight = data.list.filter((d) => !d.done)
+    .reduce((n, d) => n + (d.weight || 0), 0);
+
+  return (
+    <div className="dlv">
+      <div className="dlv-sum">
+        {stages.map((s, i) => (
+          <button
+            key={s.key}
+            className={'dlv-chip' + (only === s.key ? ' on' : '') + (i === stages.length - 1 ? ' done' : '')}
+            onClick={() => setOnly(only === s.key ? '' : s.key)}
+          >
+            <b>{counts[i]}</b>
+            <span>{s.label}</span>
+          </button>
+        ))}
+        {totalWeight > 0 && (
+          <span className="dlv-w">у дорозі {Math.round(totalWeight * 10) / 10} кг</span>
+        )}
+      </div>
+
+      <div className="toolbar">
+        <input
+          className="search-input"
+          placeholder="Пошук: вміст, водій, точка…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <div className="spacer" />
+        <button className="btn" onClick={() => setAdd(true)}>+ Нова посилка</button>
+      </div>
+
+      {list.length === 0 ? (
+        <div className="empty">{q.trim() || only ? 'Нічого не знайдено' : 'Посилок немає'}</div>
+      ) : (
+        <div className="dlv-grid">
+          {list.map((d) => (
+            <DeliveryCard
+              key={d.row}
+              item={d}
+              stages={stages}
+              onMove={(stage) => setMove({ item: d, stage })}
+              onEdit={() => setEdit(d)}
+              onDelete={async () => {
+                if (!confirm(`Видалити посилку «${d.what}»?`)) return;
+                await send({ row: d.row }, 'DELETE');
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {add && (
+        <DeliveryAdd
+          onCancel={() => setAdd(false)}
+          onSave={async (body) => { if (await send({ ...body, action: 'add' })) setAdd(false); }}
+        />
+      )}
+
+      {move && (
+        <DeliveryMove
+          item={move.item}
+          stage={stages.find((s) => s.key === move.stage)}
+          drivers={data.drivers}
+          points={data.points}
+          onCancel={() => setMove(null)}
+          onSave={async (body) => {
+            if (await send({ ...body, action: 'stage', row: move.item.row, stage: move.stage })) setMove(null);
+          }}
+        />
+      )}
+
+      {edit && (
+        <DeliveryAdd
+          item={edit}
+          onCancel={() => setEdit(null)}
+          onSave={async (body) => {
+            if (await send({ ...body, action: 'update', row: edit.row })) setEdit(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeliveryCard({ item, stages, onMove, onEdit, onDelete }) {
+  const next = item.at + 1 < stages.length ? stages[item.at + 1] : null;
+  return (
+    <div className={'dlv-card' + (item.done ? ' is-done' : '')}>
+      <div className="dlv-head">
+        <span className="dlv-what">{item.what}</span>
+        <span className={'dlv-st' + (item.done ? ' is-done' : '')}>{stages[item.at]?.label || '—'}</span>
+      </div>
+
+      {item.weight !== null && (
+        <div className="dlv-weight">{item.weight}<i> кг</i></div>
+      )}
+
+      {/* Маршрут смугою: де була, де зараз, скільки лишилось */}
+      <div className="dlv-track">
+        {stages.map((s, i) => (
+          <div key={s.key} className={'dlv-step' + (i <= item.at ? ' on' : '')} title={item.dates[s.key] || s.hint}>
+            <i />
+            <span>{s.label}</span>
+            <em>{(item.dates[s.key] || '').split(' ')[0] || ''}</em>
+          </div>
+        ))}
+      </div>
+
+      <div className="dlv-fields">
+        {item.driver && <span>Водій <b>{item.driver}</b></span>}
+        {item.point && <span>Точка <b>{item.point}</b></span>}
+        {item.giver && <span>Здав <b>{item.giver}</b></span>}
+        {item.taker && <span>Прийняв <b>{item.taker}</b></span>}
+      </div>
+
+      {item.note && <div className="dlv-note">{item.note}</div>}
+
+      <div className="dlv-acts">
+        {next
+          ? <button className="btn primary" onClick={() => onMove(next.key)}>{next.action}</button>
+          : <span className="dlv-fin">Шлях завершено</span>}
+        <div className="spacer" />
+        <button className="link" onClick={onEdit}>Правка</button>
+        <button className="link danger" onClick={onDelete}>Видалити</button>
+      </div>
+    </div>
+  );
+}
+
+function DeliveryAdd({ item, onCancel, onSave }) {
+  const [f, setF] = useState(() => ({
+    what: item?.what || '',
+    weight: item?.weight ?? '',
+    note: item?.note || '',
+  }));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const up = (k, v) => setF((p) => ({ ...p, [k]: v }));
+
+  return (
+    <Modal
+      title={item ? 'Правка посилки' : 'Нова посилка'}
+      onCancel={onCancel}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        if (!f.what.trim()) return setErr('Вкажіть, що всередині');
+        setBusy(true); setErr('');
+        try { await onSave({ ...f, what: f.what.trim() }); }
+        catch (e) { setErr(e.message); }
+        finally { setBusy(false); }
+      }}
+    >
+      <div style={{ marginTop: 10 }}>
+        <label>Що всередині</label>
+        <input type="text" value={f.what} onChange={(e) => up('what', e.target.value)}
+          placeholder="Напр. акумулятори 6S, 4 шт." />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Вага, кг</label>
+        <input type="number" min="0" step="0.1" inputMode="decimal"
+          value={f.weight} onChange={(e) => up('weight', e.target.value)} placeholder="—" />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>Примітка</label>
+        <input type="text" value={f.note} onChange={(e) => up('note', e.target.value)}
+          placeholder="крихке, тримати сухим…" />
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Перехід на наступний етап. Питаємо рівно те, чого етап вимагає: водія
+ * при передачі, точку й того, хто прийняв, — при доставці. Дата й час
+ * ставляться самі: людина, яка щойно віддала коробку, не має ще й згадувати,
+ * котра година.
+ */
+function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
+  const [f, setF] = useState(() => ({
+    driver: item.driver || '',
+    point: item.point || '',
+    taker: item.taker || '',
+  }));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const up = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const needs = stage.needs || [];
+
+  return (
+    <Modal
+      title={stage.action}
+      saveLabel="Підтвердити"
+      onCancel={onCancel}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        for (const n of needs) {
+          if (!String(f[n] || '').trim()) {
+            return setErr(n === 'driver' ? 'Вкажіть водія' : n === 'point' ? 'Вкажіть точку' : 'Вкажіть, хто прийняв');
+          }
+        }
+        setBusy(true); setErr('');
+        try { await onSave(f); }
+        catch (e) { setErr(e.message); }
+        finally { setBusy(false); }
+      }}
+    >
+      <div className="dlv-mv">
+        <b>{item.what}</b>
+        {item.weight !== null && <span> · {item.weight} кг</span>}
+        <div>{stage.hint}</div>
+      </div>
+
+      {(needs.includes('driver') || item.driver) && (
+        <div style={{ marginTop: 10 }}>
+          <label>Водій</label>
+          <input type="text" list="dlvDrivers" value={f.driver}
+            onChange={(e) => up('driver', e.target.value)} placeholder="Лотар, Джин, БПС…" />
+          <datalist id="dlvDrivers">{drivers.map((v) => <option key={v} value={v} />)}</datalist>
+        </div>
+      )}
+
+      {(needs.includes('point') || item.point) && (
+        <div style={{ marginTop: 10 }}>
+          <label>Точка призначення</label>
+          <input type="text" list="dlvPoints" value={f.point}
+            onChange={(e) => up('point', e.target.value)} placeholder="Тигр, Рись, Білий…" />
+          <datalist id="dlvPoints">{points.map((v) => <option key={v} value={v} />)}</datalist>
+        </div>
+      )}
+
+      {needs.includes('taker') && (
+        <div style={{ marginTop: 10 }}>
+          <label>Хто прийняв</label>
+          <input type="text" value={f.taker} onChange={(e) => up('taker', e.target.value)}
+            placeholder="позивний" />
+        </div>
+      )}
+
+      <div className="hc-notes" style={{ marginTop: 12 }}>
+        Дата й час проставляться самі.
       </div>
     </Modal>
   );
