@@ -5,7 +5,10 @@ import {
   enqueue, cacheGet, cachePut, startOffline, flushQueue, onOfflineChange, getState, takeDropped,
 } from '../lib/offline';
 // Розрахунки доставок — чисті функції без звернень до таблиць
-import { stuck, byDriver, byPoint, deliveredWithin, splitPoints, joinPoints } from '../lib/delivery';
+import {
+  stuck, byDriver, byPoint, deliveredWithin, splitPoints, joinPoints,
+  splitParts, joinParts, partsOf, partsLeft,
+} from '../lib/delivery';
 
 // Сесія добігає кінця сама, тож будь-який запит може повернути 401.
 // Тоді показуємо екран входу, а не незрозумілу помилку посеред роботи.
@@ -5603,7 +5606,7 @@ function DeliveryView({ setState }) {
   if (only) list = list.filter((d) => d.stage === only);
   if (q.trim()) {
     const t = q.trim().toLowerCase();
-    list = list.filter((d) => [d.to, d.what, d.driver, d.point, d.giver, d.taker, d.note]
+    list = list.filter((d) => [d.to, d.what, d.driver, d.point, d.giver, d.taker, d.note, d.parts]
       .join(' ').toLowerCase().includes(t));
   }
 
@@ -5623,6 +5626,7 @@ function DeliveryView({ setState }) {
   const week = deliveredWithin(all, 7);
   const drivers = byDriver(all);
   const points = byPoint(all);
+  const left = partsLeft(all);
   const kg = (n) => Math.round(n * 10) / 10;
 
   const card = (d) => (
@@ -5631,6 +5635,7 @@ function DeliveryView({ setState }) {
       item={d}
       stages={stages}
       onMove={(stage) => setMove({ item: d, stage })}
+      onPart={(n) => send({ action: 'part', row: d.row, n })}
       onEdit={() => setEdit(d)}
       onDelete={async () => {
         if (!confirm(`Видалити посилку «${d.what}»?`)) return;
@@ -5658,6 +5663,15 @@ function DeliveryView({ setState }) {
 
       <div className="totals">
         <span>У дорозі <b>{inTransit.length}</b>{weight > 0 ? ` · ${kg(weight)} кг` : ''}</span>
+        {/* Посилок може бути п'ять, а місць у них — двадцять: коли відправку
+            везуть частинами, «скільки коробок» і «скільки ще везти» — різні
+            числа, і друге в логістиці головніше. */}
+        {left.total > 0 && (
+          <>
+            <span className="totals-sep">·</span>
+            <span>Місць лишилось <b>{left.left}</b> <span className="totals-of">з {left.total}</span></span>
+          </>
+        )}
       </div>
 
       {late.length > 0 && (
@@ -5778,9 +5792,10 @@ function DeliveryView({ setState }) {
   );
 }
 
-function DeliveryCard({ item, stages, onMove, onEdit, onDelete }) {
+function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
   const next = item.at + 1 < stages.length ? stages[item.at + 1] : null;
   const pts = splitPoints(item.point);
+  const parts = partsOf(item);
   const rows = [
     ['Водій', item.driver],
     [pts.length > 1 ? 'Точки' : 'Точка', item.point],
@@ -5820,6 +5835,32 @@ function DeliveryCard({ item, stages, onMove, onEdit, onDelete }) {
         ))}
       </div>
 
+      {/* Місця. Відправку часто везуть частинами: три каністри води йдуть
+          різними бортами, і питання «що вже поставили» має відповідь на
+          рівні каністри, а не посилки. Дотик по місцю ставить і знімає
+          позначку — окремої кнопки «скасувати» тут не треба. */}
+      {parts && (
+        <div className="dlv-parts">
+          <div className="dlv-parts-head">
+            <span>Місця</span>
+            <b className={parts.done === parts.total ? 'all' : ''}>{parts.done} з {parts.total}</b>
+            {parts.left.length > 0 && <em>лишилось: {parts.left.join(', ')}</em>}
+          </div>
+          <div className="dlv-chips">
+            {parts.items.map((p) => (
+              <button
+                key={p.n}
+                className={'dlv-part' + (p.done ? ' on' : '')}
+                onClick={() => onPart(p.n)}
+                title={p.done ? 'Поставлено — зняти позначку' : 'Позначити як поставлене'}
+              >
+                <i>{p.done ? '✓' : ''}</i>{p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {rows.length > 0 && (
         <div className="card-body">
           {rows.map(([k, v]) => (
@@ -5849,6 +5890,11 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
     weight: item?.weight ?? '',
     note: item?.note || '',
   }));
+  // Місця вводяться рядками, а зберігаються через «;»: набирати список
+  // з Enter простіше, ніж пам'ятати розділювач, а в самих назвах повно ком
+  // («7,7 л»), тож кома розділювачем бути не може.
+  const [parts, setParts] = useState(() => splitParts(item?.parts).join('\n'));
+  const partList = parts.split(/[\n;]/).map((x) => x.trim()).filter(Boolean);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const up = (k, v) => setF((p) => ({ ...p, [k]: v }));
@@ -5862,7 +5908,7 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
       onSave={async () => {
         if (!f.what.trim()) return setErr('Вкажіть, що всередині');
         setBusy(true); setErr('');
-        try { await onSave({ ...f, what: f.what.trim() }); }
+        try { await onSave({ ...f, what: f.what.trim(), parts: joinParts(partList) }); }
         catch (e) { setErr(e.message); }
         finally { setBusy(false); }
       }}
@@ -5882,6 +5928,18 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
         <label>Вага, кг</label>
         <input type="number" min="0" step="0.1" inputMode="decimal"
           value={f.weight} onChange={(e) => up('weight', e.target.value)} placeholder="—" />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <label>
+          Місця — кожне з нового рядка
+          {partList.length > 0 && <span className="count" style={{ marginLeft: 6 }}>{partList.length}</span>}
+        </label>
+        <textarea rows={3} value={parts} onChange={(e) => setParts(e.target.value)}
+          placeholder={'7,7 л\n7,8 л\n8,5 л'} />
+        <div className="dlv-tip" style={{ marginTop: 6 }}>
+          Заповнюйте, коли відправку везуть частинами: кожне місце
+          відмічається окремо, і видно, що вже поставили, а що ні.
+        </div>
       </div>
       <div style={{ marginTop: 10 }}>
         <label>Примітка</label>
@@ -5909,6 +5967,11 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
   const up = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const needs = stage.needs || [];
   const picked = splitPoints(f.point);
+  const parts = partsOf(item);
+  // Закрити відправку, коли половина місць ще не поставлена, — саме та
+  // помилка, через яку потім шукають «а де ще одна каністра». Не забороняємо
+  // (буває, що решту списали), але й мовчки не пропускаємо.
+  const restLeft = stage.key === 'delivered' && parts && parts.left.length ? parts.left : null;
 
   return (
     <Modal
@@ -5936,6 +5999,12 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
           {item.weight !== null && <span className="count">{item.weight} кг</span>}
         </div>
         <p>{stage.hint}</p>
+        {restLeft && (
+          <p style={{ color: 'var(--amber)' }}>
+            Не поставлено {restLeft.length} з {parts.total} місць: {restLeft.join(', ')}.
+            Позначте їх на картці або підтвердіть — посилка закриється як є.
+          </p>
+        )}
       </div>
 
       {needs.includes('driver') && (
