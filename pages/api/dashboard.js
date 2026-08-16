@@ -4,6 +4,10 @@ import { readStock } from '../../lib/stock';
 import { readLog } from '../../lib/log';
 import { readActs } from '../../lib/acts';
 import { readAudits, STATUS } from '../../lib/audit';
+import {
+  DELIVERY_SHEET, STAGES, parseDeliveries, partsLeft, partsOf,
+  stuck, byPoint, deliveredWithin,
+} from '../../lib/delivery';
 
 const WAREHOUSE = 'Склад';
 
@@ -115,14 +119,66 @@ async function warehouseSummary() {
   return { total: rows.length, stale: stale.slice(0, 12) };
 }
 
+/**
+ * Доставки на головній.
+ *
+ * Логістику видно не за кількістю посилок, а за тим, скільки ще везти:
+ * одна посилка може бути трьома каністрами, з яких дві ще на точці вильоту.
+ * Тому поруч із коробками рахуємо й місця.
+ */
+async function deliverySummary() {
+  let values;
+  try {
+    values = await readSheet(DELIVERY_SHEET);
+  } catch {
+    // листа ще немає — розділом просто не користувались
+    return null;
+  }
+  const list = parseDeliveries(values);
+  if (!list.length) return null;
+
+  const onWay = list.filter((d) => !d.done);
+  const byStage = STAGES.map((s) => ({
+    key: s.key, label: s.label,
+    n: list.filter((d) => d.stage === s.key && !d.done).length,
+  }));
+  const late = stuck(list);
+
+  return {
+    onWay: onWay.length,
+    kg: Math.round(onWay.reduce((a, d) => a + (d.weight || 0), 0) * 10) / 10,
+    delivered: list.filter((d) => d.done).length,
+    week: deliveredWithin(list, 7).length,
+    byStage,
+    points: byPoint(list).filter((x) => x.name !== '—').slice(0, 6),
+    parts: partsLeft(list),
+    late: late.slice(0, 4).map((d) => ({
+      what: d.what, to: d.to, days: d.days,
+      stage: STAGES[d.at]?.label || '', driver: d.driver,
+    })),
+    lateTotal: late.length,
+    // посилки, від яких лишились окремі місця, — головне питання дня:
+    // «що ще везти» стоїть саме тут
+    open: onWay
+      .map((d) => ({ d, p: partsOf(d) }))
+      .filter((x) => x.p && x.p.left.length)
+      .slice(0, 6)
+      .map(({ d, p }) => ({
+        what: d.what, to: d.to,
+        done: p.done, total: p.total, left: p.left,
+      })),
+  };
+}
+
 export default withAuth(async (req, res) => {
-  const [items, warehouse, stock, log, acts, audits] = await Promise.all([
+  const [items, warehouse, stock, log, acts, audits, delivery] = await Promise.all([
     itemsSummary(),
     warehouseSummary(),
     readStock().catch(() => ({ items: [] })),
     readLog(12).catch(() => []),
     readActs(6).catch(() => []),
     readAudits().catch(() => []),
+    deliverySummary().catch(() => null),
   ]);
 
   const st = stock.items || [];
@@ -144,6 +200,7 @@ export default withAuth(async (req, res) => {
     stock: stockSummary,
     log,
     acts,
+    delivery,
     audit: { open: openAudit, last: lastAudit, total: audits.length },
   });
 });
