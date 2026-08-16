@@ -4,7 +4,7 @@ import { logChange } from '../../lib/log';
 import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS,
   parseDeliveries, deliveryRow, stampKyiv, suggestions, stageOf,
-  splitParts, parseDone, joinDone,
+  splitParts, parseDone, joinDone, partsOf,
 } from '../../lib/delivery';
 
 const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
@@ -129,11 +129,20 @@ export default withAuth(async (req, res) => {
       const upd = { ...cur, partsDone: joinDone(done) };
       const next = deliveryRow({ ...upd, dates: syncDelivered(upd, now) }, prev);
       await writeRow(DELIVERY_SHEET, row, next);
+      // у журналі має бути видно саме місце, а не «щось із трьох»:
+      // назва, вага й скільки лишилось після цього руху
+      const p = partsOf({ ...cur, partsDone: upd.partsDone });
+      const it = p.items[i - 1];
       await logChange({
         sheet: DELIVERY_SHEET, row,
         action: was ? 'Місце знято' : 'Місце доставлено',
         field: cur.what,
-        after: [labels[i - 1], `${done.size} з ${labels.length}`].join(' · '),
+        after: [
+          it.name,
+          it.kg !== null && `${it.kg} кг`,
+          `${done.size} з ${labels.length}`,
+          p.left.length ? `лишилось: ${p.left.join(', ')}` : 'посилка закрита',
+        ].filter(Boolean).join(' · '),
       });
       return res.json(await state());
     }
