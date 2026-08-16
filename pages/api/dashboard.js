@@ -6,7 +6,7 @@ import { readActs } from '../../lib/acts';
 import { readAudits, STATUS } from '../../lib/audit';
 import {
   DELIVERY_SHEET, STAGES, parseDeliveries, partsLeft, partsOf,
-  stuck, byPoint, deliveredWithin,
+  stuck, byPoint, deliveredWithin, weightLeft,
 } from '../../lib/delivery';
 
 const WAREHOUSE = 'Склад';
@@ -146,7 +146,8 @@ async function deliverySummary() {
 
   return {
     onWay: onWay.length,
-    kg: Math.round(onWay.reduce((a, d) => a + (d.weight || 0), 0) * 10) / 10,
+    // вага того, що ще везти, а не всіх посилок цілком
+    kg: Math.round(weightLeft(onWay) * 10) / 10,
     delivered: list.filter((d) => d.done).length,
     week: deliveredWithin(list, 7).length,
     byStage,
@@ -166,6 +167,7 @@ async function deliverySummary() {
       .map(({ d, p }) => ({
         what: d.what, to: d.to,
         done: p.done, total: p.total, left: p.left,
+        kgLeft: p.weighed ? Math.round(p.kgLeft * 10) / 10 : null,
       })),
   };
 }

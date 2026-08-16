@@ -2,6 +2,62 @@ import { withAuth } from '../../lib/auth';
 import { SHEET_CONFIGS, readSheet, findColumns } from '../../lib/sheets';
 import { STOCK_SHEET, parseStockItems } from '../../lib/stock';
 import { LINES_SHEET, parseLines } from '../../lib/boxes';
+import {
+  DELIVERY_SHEET, STAGES, parseDeliveries, partsOf, weightOf,
+} from '../../lib/delivery';
+
+/**
+ * Доставки. Шукаємо і за посилкою, і за окремим місцем: «Вода 7,7» —
+ * це саме місце, а не назва посилки, і людина, яка його шукає, тримає в
+ * голові саме цю каністру.
+ */
+async function searchDeliveries(qText) {
+  let values;
+  try {
+    values = await readSheet(DELIVERY_SHEET);
+  } catch {
+    // розділом ще не користувались
+    return [];
+  }
+  const out = [];
+  parseDeliveries(values).forEach((d) => {
+    const parts = partsOf(d);
+    const hitPart = parts?.items.find((p) => p.name.toLowerCase().includes(qText));
+    const fields = [
+      ['кому', d.to], ['вміст', d.what], ['водій', d.driver],
+      ['точка', d.point], ['здав', d.giver], ['прийняв', d.taker],
+      ['примітка', d.note],
+    ];
+    const hit = fields.find(([, v]) => (v || '').toString().toLowerCase().includes(qText));
+    if (!hit && !hitPart) return;
+
+    out.push({
+      kind: 'delivery',
+      sheet: DELIVERY_SHEET,
+      row: d.row,
+      what: d.what,
+      to: d.to,
+      driver: d.driver,
+      point: d.point,
+      weight: weightOf(d),
+      stage: STAGES[d.at]?.label || 'Нова',
+      done: d.done,
+      date: d.dates[STAGES[d.at]?.key] || d.created,
+      parts: parts && {
+        done: parts.done, total: parts.total, left: parts.left,
+        kgLeft: parts.weighed ? Math.round(parts.kgLeft * 10) / 10 : null,
+      },
+      // знайшли конкретне місце — саме його й показуємо першим рядком
+      matchedField: hitPart ? 'місце' : hit[0],
+      matchedValue: hitPart
+        ? hitPart.name + (hitPart.done ? ` — доставлено ${hitPart.at}` : ' — ще не поставлено')
+        : hit[1],
+    });
+  });
+  // те, що ще їде, потрібніше за вже закрите
+  out.sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
+  return out;
+}
 
 /** Склад Рибаківки має власну структуру, тож шукаємо в ньому окремо */
 async function searchStock(qText) {
@@ -105,7 +161,9 @@ async function searchBoxes(qText) {
 
 export default withAuth(async (req, res) => {
   const q = (req.query.q || '').toString().trim();
-  if (q.length < 2) return res.json({ serial: [], assigned: [], other: [], stock: [], boxes: [] });
+  if (q.length < 2) {
+    return res.json({ serial: [], assigned: [], other: [], stock: [], boxes: [], deliveries: [] });
+  }
 
   const qText = q.toLowerCase();
   const qNorm = q.replace(/[\s\-/\\:]/g, '').toLowerCase();
@@ -118,6 +176,7 @@ export default withAuth(async (req, res) => {
 
   const stockHits = searchStock(qText);
   const boxHits = searchBoxes(qText);
+  const deliveryHits = searchDeliveries(qText).catch(() => []);
 
   await Promise.all(
     targets.map(async (cfg) => {
@@ -191,5 +250,10 @@ export default withAuth(async (req, res) => {
     })
   );
 
-  res.json({ serial, assigned, other, stock: await stockHits, boxes: await boxHits });
+  res.json({
+    serial, assigned, other,
+    stock: await stockHits,
+    boxes: await boxHits,
+    deliveries: await deliveryHits,
+  });
 });

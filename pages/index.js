@@ -7,7 +7,7 @@ import {
 // Розрахунки доставок — чисті функції без звернень до таблиць
 import {
   stuck, byDriver, byPoint, deliveredWithin, splitPoints, joinPoints,
-  splitParts, joinParts, partsOf, partsLeft,
+  splitParts, joinParts, partsOf, partsLeft, weightOf, weightLeft, parsePart,
 } from '../lib/delivery';
 
 // Сесія добігає кінця сама, тож будь-який запит може повернути 401.
@@ -695,6 +695,7 @@ function HomeView({ setState, onOpen, me }) {
                     <th>Посилка</th>
                     <th>Кому</th>
                     <th className="col-num">Місць</th>
+                    <th className="col-num">Везти, кг</th>
                     <th>Ще не поставлено</th>
                     <th />
                   </tr>
@@ -707,6 +708,7 @@ function HomeView({ setState, onOpen, me }) {
                       <td className="col-num col-strong" style={{ color: 'var(--amber)' }}>
                         {x.done} з {x.total}
                       </td>
+                      <td className="col-num">{x.kgLeft ?? '—'}</td>
                       <td>{x.left.join(', ')}</td>
                       <td className="col-act">
                         <button className="act-btn" onClick={(e) => {
@@ -2668,7 +2670,8 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
   const hits = groups.flatMap((g) => g.data);
   const stockHits = res?.stock?.length || 0;
   const boxHits = res?.boxes?.length || 0;
-  const found = hits.length + stockHits + boxHits + acts.length;
+  const dlvHits = res?.deliveries?.length || 0;
+  const found = hits.length + stockHits + boxHits + dlvHits + acts.length;
   let totalsParts = [];
   if (res) {
     // «нічого не знайдено» вже написано нижче — дублювати нулем не треба
@@ -2678,6 +2681,7 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
         ...countBy(hits, (r) => r.sheet),
         ...(stockHits ? [['Склад Рибаківки', stockHits]] : []),
         ...(boxHits ? [['У ящиках', boxHits]] : []),
+        ...(dlvHits ? [['Доставки', dlvHits]] : []),
         ...(acts.length ? [['Акти', acts.length]] : []),
       ];
     }
@@ -2700,7 +2704,8 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
       {q.trim().length > 0 && q.trim().length < 2 && (
         <div className="empty">Введіть щонайменше 2 символи</div>
       )}
-      {!busy && res && groups.length === 0 && acts.length === 0 && !res.stock?.length && !res.boxes?.length && (
+      {!busy && res && groups.length === 0 && acts.length === 0
+        && !res.stock?.length && !res.boxes?.length && !res.deliveries?.length && (
         <div className="empty">Нічого не знайдено</div>
       )}
 
@@ -2749,6 +2754,53 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
           ))}
         </div>
       ))}
+
+      {/* Доставки в загальному пошуку. Шукають не лише посилку, а й окреме
+          місце: «Вода 7,7» — це каністра, і людина тримає в голові саме її. */}
+      {res?.deliveries?.length > 0 && (
+        <div className="section">
+          <h3 className="primary">Доставки<span className="count">{res.deliveries.length}</span></h3>
+          {res.deliveries.map((r) => (
+            <div className="result" key={'dl' + r.row}>
+              <div className="result-head">
+                {r.to && <span className="badge">{r.to}</span>}
+                <span style={{ fontWeight: 600 }}>{r.what}</span>
+                <span style={{
+                  fontFamily: 'var(--mono)', fontSize: '.8rem', fontWeight: 700,
+                  color: r.done ? 'var(--green)' : 'var(--amber)',
+                }}>
+                  {r.stage}
+                </span>
+                {r.date && (
+                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: '.7rem', color: 'var(--muted)' }}>
+                    {r.date.split(' ')[0]}
+                  </span>
+                )}
+              </div>
+              <div className="fields">
+                {[
+                  r.matchedField === 'місце' && ['Місце', r.matchedValue],
+                  r.parts && ['Місць', `${r.parts.done} з ${r.parts.total}`
+                    + (r.parts.left.length ? `, лишилось: ${r.parts.left.join(', ')}` : '')
+                    + (r.parts.kgLeft > 0 ? ` (${r.parts.kgLeft} кг)` : '')],
+                  r.weight !== null && ['Вага', `${r.weight} кг`],
+                  r.driver && ['Водій', r.driver],
+                  r.point && ['Точка', r.point],
+                ].filter(Boolean).map(([k, v], i, a) => (
+                  <span key={k}>
+                    <span className="k">{k}:</span> {v}{i < a.length - 1 ? '  ·  ' : ''}
+                  </span>
+                ))}
+              </div>
+              <div className="actions">
+                <button className="act-btn act-qr" onClick={() => onOpen(DELIVERY_VIEW)}>
+                  Відкрити доставки
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {res?.boxes?.length > 0 && (
         <div className="section">
@@ -5734,11 +5786,13 @@ function DeliveryView({ setState, me = '' }) {
   // список, але не змінює того, скільки коробок насправді в дорозі.
   const all = data.list;
   const inTransit = all.filter((d) => !d.done);
-  const weight = inTransit.reduce((n, d) => n + (d.weight || 0), 0);
+  // кілограми рахуємо по тому, що ще везти: половину посилки вже поставили,
+  // і її вага в «у дорозі» більше не стоїть
+  const weight = weightLeft(inTransit);
   const waiting = all.filter((d) => d.stage === 'packed');
   const handed = all.filter((d) => d.stage === 'handed');
   const atbase = all.filter((d) => d.stage === 'atbase');
-  const waitKg = waiting.reduce((n, d) => n + (d.weight || 0), 0);
+  const waitKg = weightLeft(waiting);
   const late = stuck(all);
   const week = deliveredWithin(all, 7);
   const drivers = byDriver(all);
@@ -5776,7 +5830,10 @@ function DeliveryView({ setState, me = '' }) {
         <Stat label="Передано водіям" value={handed.length}
           sub={byDriver(handed).map((x) => `${x.name} ${x.n}`).join(' · ') || 'нікому не передавали'} />
         <Stat label="На точці вильоту" value={atbase.length}
-          sub={atbaseLeft.left > 0 ? `місць до розвезення: ${atbaseLeft.left}` : 'чекає на виліт'} />
+          sub={atbaseLeft.left > 0
+            ? `місць до розвезення: ${atbaseLeft.left}`
+              + (weightLeft(atbase) > 0 ? ` · ${kg(weightLeft(atbase))} кг` : '')
+            : 'чекає на виліт'} />
         <Stat label="Доставлено" value={all.filter((d) => d.done).length} tone="ok"
           sub={`за тиждень ${week.length}`} />
       </div>
@@ -5917,6 +5974,9 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
   const next = item.at + 1 < stages.length ? stages[item.at + 1] : null;
   const pts = splitPoints(item.point);
   const parts = partsOf(item);
+  // коли місця зважені, вага посилки — їх сума: два числа, вписані окремо,
+  // рано чи пізно розійшлись би
+  const kg = weightOf(item);
   const rows = [
     ['Водій', item.driver],
     [pts.length > 1 ? 'Точки' : 'Точка', item.point],
@@ -5933,8 +5993,13 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
             {item.to && <span className="id-badge" title="Кому призначена">{item.to}</span>}
             <span className="dlv-name">{item.what}</span>
           </div>
-          {item.weight !== null && (
-            <div className="card-sn" style={{ marginLeft: 0, width: 'auto' }}>{item.weight} кг</div>
+          {kg !== null && (
+            <div className="card-sn" style={{ marginLeft: 0, width: 'auto' }}>
+              {Math.round(kg * 10) / 10} кг
+              {parts?.weighed && parts.kgLeft > 0 && parts.kgLeft !== kg && (
+                <span className="dlv-kg-left"> · везти ще {Math.round(parts.kgLeft * 10) / 10}</span>
+              )}
+            </div>
           )}
         </div>
         <span
@@ -5965,6 +6030,9 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
           <div className="dlv-parts-head">
             <span>Місця</span>
             <b className={parts.done === parts.total ? 'all' : ''}>{parts.done} з {parts.total}</b>
+            {parts.weighed && parts.kgLeft > 0 && (
+              <b className="dlv-kg">{Math.round(parts.kgLeft * 10) / 10} кг везти</b>
+            )}
             {parts.left.length > 0 && <em>лишилось: {parts.left.join(', ')}</em>}
           </div>
           <div className="dlv-chips">
@@ -5978,7 +6046,8 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
                   : 'Позначити як доставлене'}
               >
                 <i>{p.done ? '✓' : ''}</i>
-                <span>{p.label}</span>
+                <span>{p.name}</span>
+                {p.kg !== null && <em className="dlv-part-kg">{p.kg} кг</em>}
                 {/* на чипі досить дня й місяця — рік і час є в підказці */}
                 {p.at && <em>{p.at.split(' ')[0].split('.').slice(0, 2).join('.')}</em>}
               </button>
@@ -6027,6 +6096,12 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
   // («7,7 л»), тож кома розділювачем бути не може.
   const [parts, setParts] = useState(() => splitParts(item?.parts).join('\n'));
   const partList = parts.split(/[\n;]/).map((x) => x.trim()).filter(Boolean);
+  // вага, порахована з місць: коли вона є, окреме поле ваги зайве —
+  // два числа про одне й те саме завжди рано чи пізно розходяться
+  const weighed = partList.map(parsePart);
+  const partsKg = weighed.some((x) => x.kg !== null)
+    ? Math.round(weighed.reduce((a, x) => a + (x.kg || 0), 0) * 10) / 10
+    : null;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const up = (k, v) => setF((p) => ({ ...p, [k]: v }));
@@ -6040,7 +6115,14 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
       onSave={async () => {
         if (!f.what.trim()) return setErr('Вкажіть, що всередині');
         setBusy(true); setErr('');
-        try { await onSave({ ...f, what: f.what.trim(), parts: joinParts(partList) }); }
+        try {
+          await onSave({
+            ...f,
+            what: f.what.trim(),
+            weight: partsKg !== null ? partsKg : f.weight,
+            parts: joinParts(partList),
+          });
+        }
         catch (e) { setErr(e.message); }
         finally { setBusy(false); }
       }}
@@ -6057,9 +6139,15 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
           placeholder="Напр. акумулятори 6S, 4 шт." />
       </div>
       <div style={{ marginTop: 10 }}>
-        <label>Вага, кг</label>
+        <label>
+          Вага, кг
+          {partsKg !== null && <span className="dlv-you">з місць: {partsKg}</span>}
+        </label>
         <input type="number" min="0" step="0.1" inputMode="decimal"
-          value={f.weight} onChange={(e) => up('weight', e.target.value)} placeholder="—" />
+          value={partsKg !== null ? partsKg : f.weight}
+          disabled={partsKg !== null}
+          onChange={(e) => up('weight', e.target.value)}
+          placeholder="—" />
       </div>
       <div style={{ marginTop: 10 }}>
         <label>
@@ -6067,10 +6155,12 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
           {partList.length > 0 && <span className="count" style={{ marginLeft: 6 }}>{partList.length}</span>}
         </label>
         <textarea rows={3} value={parts} onChange={(e) => setParts(e.target.value)}
-          placeholder={'7,7 л\n7,8 л\n8,5 л'} />
+          placeholder={'Вода 7,7 л = 7.7\nВода 7,8 л = 7.8\nЇжа'} />
         <div className="dlv-tip" style={{ marginTop: 6 }}>
           Заповнюйте, коли відправку везуть частинами: кожне місце
           відмічається окремо, і видно, що вже поставили, а що ні.
+          Після «=» можна вписати вагу місця — тоді вага посилки складеться
+          сама, а на картці буде видно, скільки кілограмів ще везти.
         </div>
       </div>
       <div style={{ marginTop: 10 }}>

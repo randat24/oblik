@@ -2805,6 +2805,12 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .dlv-part.on em { color: var(--green); opacity: .8; }
 .dlv-parts-foot { color: var(--muted); font-size: .74rem; line-height: 1.45; margin-top: 8px; }
+/* вага місця на чипі й скільки лишилось везти — борт має межу підйому,
+   і рахувати її треба по тому, що справді полетить */
+.dlv-part-kg { color: var(--muted); }
+.dlv-part.on .dlv-part-kg { color: var(--green); opacity: .7; }
+.dlv-parts-head b.dlv-kg { color: var(--blue); }
+.dlv-kg-left { color: var(--amber); }
 
 .dlv-mv {
   background: var(--panel-2); border: 1px solid var(--line-soft);
