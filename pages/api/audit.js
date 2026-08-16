@@ -41,15 +41,15 @@ async function expectedFor(scope) {
   const values = await readSheet(scope);
   const headers = values[0] || [];
   const cols = findColumns(headers);
-  const idIdx = cols.id >= 0 && cols.id !== 0 ? cols.id : -1;
-  const snIdx = cols.snCols?.find((i) => i !== 0 && i !== idIdx) ?? -1;
+  const idIdx = cols.id >= 0 && cols.id !== cols.name ? cols.id : -1;
+  const snIdx = cols.snCols?.find((i) => i !== cols.name && i !== idIdx) ?? -1;
   const cell = (r, i) => (i >= 0 ? (r[i] || '').toString().trim() : '');
 
   return values.slice(1).map((raw, i) => {
     const r = [...(raw || [])];
     return {
       sheet: scope, row: i + 2,
-      name: cell(r, 0),
+      name: cell(r, cols.name),
       ident: [cell(r, idIdx), cell(r, snIdx)].filter(Boolean).join(' · '),
       expected: '', kind: 'yesno',
       hint: [cell(r, cols.status), cell(r, cols.who)].filter(Boolean).join(' → '),

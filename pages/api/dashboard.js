@@ -55,7 +55,7 @@ async function itemsSummary() {
     }
     const headers = values[0] || [];
     const cols = findColumns(headers);
-    const idIdx = cols.id >= 0 && cols.id !== 0 ? cols.id : -1;
+    const idIdx = cols.id >= 0 && cols.id !== cols.name ? cols.id : -1;
     const accIdx = accountingCol(headers);
     const rows = values.slice(1).filter((r) => (r || []).join('').trim());
 
@@ -72,7 +72,7 @@ async function itemsSummary() {
       if (isLost(status)) {
         lost.push({
           sheet: cfg.name, row: i + 2,
-          name: (r[0] || '').toString(),
+          name: (r[cols.name] || '').toString(),
           ident: idIdx >= 0 ? (r[idIdx] || '').toString() : '',
           who: cols.who >= 0 ? (r[cols.who] || '').toString() : '',
         });
