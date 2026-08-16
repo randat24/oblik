@@ -2774,3 +2774,11 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
    («Зібрано», «На точці», «Прибула»), і обрізати їх нема потреби —
    а обрізане «ЗІБРА…» не каже нічого. */
 .card .pill.dlv-pill { max-width: none; flex-shrink: 0; }
+/* Доставки — розділ із дією, а не з довідкою: до посилки в дорозі треба
+   повертатись кілька разів на день. Тому вкладка не губиться серед листів
+   майна, але й не кричить: колір і рамка замість заливки. */
+.tab-dlv { color: var(--blue); border-color: var(--blue-dim); }
+.tab-dlv:hover { background: var(--blue-dim); color: var(--blue); }
+.tab-dlv.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+.sheet-i.sheet-dlv { color: var(--blue); border-color: var(--blue-dim); }
+.sheet-i.sheet-dlv.on { border-color: var(--blue); color: var(--blue); }
