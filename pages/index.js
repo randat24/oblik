@@ -2852,9 +2852,15 @@ function PhotoLightbox({ act, onClose }) {
 /* ---------- Звичайні листи ---------- */
 /** Колонки, що йдуть у тіло картки: без назви, номера, серійника й статусу — вони вже в шапці */
 function bodyCols(headers, cols, snIdx, idIdx, tagCols = []) {
-  const skip = new Set([0, snIdx, idIdx, cols.status, ...tagCols].filter((i) => i >= 0));
+  const skip = new Set([nameOf(cols), snIdx, idIdx, cols.status, ...tagCols].filter((i) => i >= 0));
   return headers.map((_, i) => i).filter((i) => !skip.has(i));
 }
+
+/**
+ * Колонка з назвою речі. Стара версія листа могла прийти без цього поля —
+ * тоді, як і раніше, назвою вважається перша колонка.
+ */
+const nameOf = (cols) => (cols?.name >= 0 ? cols.name : 0);
 
 /** Колонка «Оф облік»: числиться річ за документами чи ні */
 function accountingCol(headers) {
@@ -2933,8 +2939,9 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
 
   const { headers, items, cols, statusOptions, typeOptions, maskCols, noIssue, hideStatus } = data;
   // у шапці картки: власний номер речі бейджем, назва, серійник виробника під нею
-  const idIdx = cols.id >= 0 && cols.id !== 0 ? cols.id : -1;
-  const snIdx = cols.snCols?.find((i) => i !== 0 && i !== idIdx) ?? -1;
+  const nameIdx = nameOf(cols);
+  const idIdx = cols.id >= 0 && cols.id !== nameIdx ? cols.id : -1;
+  const snIdx = cols.snCols?.find((i) => i !== nameIdx && i !== idIdx) ?? -1;
   // облік, тип і місце йдуть тегами під назвою, а не окремими рядками
   const accIdx = accountingCol(headers);
   const tagCols = [accIdx, cols.type, cols.where > 0 ? cols.where : -1];
@@ -2972,9 +2979,9 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
             <input
               className="ghost big"
               type="text"
-              defaultValue={it.values[0]}
-              placeholder={headers[0] || 'Назва'}
-              onBlur={(e) => e.target.value !== it.values[0] && save(it.row, 0, e.target.value, it.values[0])}
+              defaultValue={it.values[nameIdx]}
+              placeholder={headers[nameIdx] || 'Назва'}
+              onBlur={(e) => e.target.value !== it.values[nameIdx] && save(it.row, nameIdx, e.target.value, it.values[nameIdx])}
             />
           </div>
           {snIdx >= 0 && (
@@ -3161,7 +3168,9 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
     <>
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Пошук..." />
-        {!hideStatus && statusOptions.map((s) => (
+        {/* фільтри за статусом — лише там, де статус узагалі є: у листі без
+            такої колонки шість чипів нічого не фільтрують, а місце займають */}
+        {!hideStatus && cols.status >= 0 && statusOptions.map((s) => (
           <div key={s} className={'chip' + (chip === s ? ' on' : '')} onClick={() => setChip(chip === s ? null : s)}>
             {s}
           </div>
@@ -3201,7 +3210,7 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
           attn={lost.length ? [{
             bad: true,
             text: <>Втрачено або списано: <b>{lost.length}</b>{' '}
-              <span className="sd-empty">{lost.slice(0, 4).map((it) => cell(it, idIdx >= 0 ? idIdx : 0) || it.values[0]).join(', ')}{lost.length > 4 ? '…' : ''}</span></>,
+              <span className="sd-empty">{lost.slice(0, 4).map((it) => cell(it, nameIdx) || cell(it, idIdx)).join(', ')}{lost.length > 4 ? '…' : ''}</span></>,
             action: { label: 'Показати', run: () => setChip(cell(lost[0], cols.status)) },
           }] : []}
           onOpen={onOpen}
@@ -3310,7 +3319,7 @@ function formGroups({ headers, cols, idIdx, snIdx, hideStatus }) {
     return i;
   };
 
-  const thing = [take(0), take(idIdx), take(snIdx)].filter((i) => i !== null);
+  const thing = [take(nameOf(cols)), take(idIdx), take(snIdx)].filter((i) => i !== null);
   const state = [hideStatus ? null : take(cols.status), take(cols.type)].filter((i) => i !== null);
   const whom = [take(cols.who), take(cols.date), take(cols.where > 0 ? cols.where : -1)]
     .filter((i) => i !== null);
@@ -3336,6 +3345,22 @@ function AddItemModal({
 
   const set = (i, v) => setVals((p) => p.map((x, j) => (j === i ? v : x)));
   const groups = formGroups({ headers, cols, idIdx, snIdx, hideStatus });
+  // обов'язкова — назва речі, а не перша колонка: у «майно не облік»
+  // першою стоїть «№ з/п», і вимагати його першим питанням безглуздо
+  const nameIdx = nameOf(cols);
+
+  /*
+   * Підказка в порожньому полі. «№ з/п» і «Номер» стоять поруч і на вигляд
+   * однакові — з самого заголовка не видно, що перше це порядковий номер
+   * рядка, а друге серійник виробника. Пишемо це просто в полі.
+   */
+  const hintFor = (i) => {
+    if (i === idIdx) return 'порядковий номер у таблиці';
+    if (i === snIdx) return 'серійний номер або код виробника';
+    if (i === cols.date) return 'дд.мм.рррр';
+    if (i === cols.who) return 'позивний';
+    return '';
+  };
 
   return (
     <Modal
@@ -3344,7 +3369,9 @@ function AddItemModal({
       busy={busy}
       error={err}
       onSave={async () => {
-        if (!vals[0]?.trim()) return setErr(`Вкажіть «${headers[0] || 'назву'}» — без цього запис не знайти`);
+        if (!vals[nameIdx]?.trim()) {
+          return setErr(`Вкажіть «${headers[nameIdx] || 'назву'}» — без цього запис не знайти`);
+        }
         setBusy(true);
         setErr('');
         try {
@@ -3363,7 +3390,7 @@ function AddItemModal({
             <div key={i} style={{ marginTop: 10 }}>
               <label>
                 {headers[i] || 'Поле ' + (i + 1)}
-                {i === 0 && <span className="req"> *</span>}
+                {i === nameIdx && <span className="req"> *</span>}
               </label>
               {i === cols.status || i === cols.type ? (
                 <select value={vals[i]} onChange={(e) => set(i, e.target.value)}>
@@ -3373,13 +3400,14 @@ function AddItemModal({
                   ))}
                 </select>
               ) : suggestions[i]?.length ? (
-                <Combo value={vals[i]} options={suggestions[i]} onChange={(v) => set(i, v)} />
+                <Combo value={vals[i]} options={suggestions[i]} placeholder={hintFor(i)}
+                  onChange={(v) => set(i, v)} />
               ) : (
                 <input
                   type="text"
                   value={vals[i]}
-                  autoFocus={i === 0}
-                  placeholder={i === cols.date ? 'дд.мм.рррр' : ''}
+                  autoFocus={i === nameIdx}
+                  placeholder={hintFor(i)}
                   onChange={(e) => set(i, e.target.value)}
                 />
               )}
@@ -5371,6 +5399,9 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
   const [catalog, setCatalog] = useState([]);
   // набір полів у кожного листа свій — беремо його з сервера разом із підказками
   const [fields, setFields] = useState([]);
+  // і яке з них головне: у більшості листів це перша колонка, але не в усіх —
+  // сервер знає, де назва речі, і форма має питати саме її
+  const [titleCol, setTitleCol] = useState(0);
   // приймає або віддає той, хто зараз у системі — підставляємо, але лишаємо змінним
   const [from, setFrom] = useState(accept ? '' : me);
   const [to, setTo] = useState(accept ? me : '');
@@ -5394,6 +5425,7 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
         if (!alive) return;
         setCatalog(d.catalog || []);
         setFields(d.fields || []);
+        setTitleCol(d.titleCol ?? 0);
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -5416,8 +5448,8 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
     setItems([{ cells: { ...hit.cells }, row: hit.row }]);
   }, [catalog, bindRow]);
 
-  const titleCol = fields[0]?.col ?? 0;
-  const subFields = fields.slice(1);
+  const titleField = fields.find((f) => f.col === titleCol);
+  const subFields = fields.filter((f) => f.col !== titleCol);
   const cellOf = (it, col) => it.cells?.[col] || '';
 
   const upCell = (i, col, v) =>
@@ -5470,7 +5502,7 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
             <ItemPicker
               value={cellOf(it, titleCol)}
               catalog={catalog}
-              placeholder={fields[0]?.label || 'Назва'}
+              placeholder={titleField?.label || 'Назва'}
               onText={(v) => upCell(i, titleCol, v)}
               onPick={(h) => pickItem(i, h)}
             />

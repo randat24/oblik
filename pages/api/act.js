@@ -5,8 +5,8 @@ import { logChange } from '../../lib/log';
 
 /** Індекси колонок, що описують саму річ, — однакові для читання й для запису */
 function itemCols(headers, cols) {
-  const id = cols.id >= 0 && cols.id !== 0 ? cols.id : -1;
-  const sn = cols.snCols?.find((i) => i !== 0 && i !== id) ?? -1;
+  const id = cols.id >= 0 && cols.id !== cols.name ? cols.id : -1;
+  const sn = cols.snCols?.find((i) => i !== cols.name && i !== id) ?? -1;
   // «Назва» теж підпадає під пошук колонки «де», а туди писати місце не можна
   const where = cols.where > 0 ? cols.where : -1;
   const note = headers.findIndex((h) => (h || '').toString().toLowerCase().includes('примітк'));
@@ -32,13 +32,23 @@ function fieldsOf(headers, cols, masked = new Set()) {
     .filter((f) => !skip.has(f.col));
 }
 
+/**
+ * Чим річ підписана в акті. Це назва — не порядковий номер, який у деяких
+ * листах займає першу колонку: «13» в акті нічого не каже про те, що саме
+ * передали.
+ */
+function titleColOf(fields, cols) {
+  if (fields.some((f) => f.col === cols.name)) return cols.name;
+  return fields[0]?.col ?? 0;
+}
+
 /** Список речей листа — для підказок у формі акта */
 function catalogOf(values, cfg) {
   const headers = values[0] || [];
   const cols = findColumns(headers);
   const masked = new Set(cfg?.maskPasswords ? cols.maskCols : []);
   const fields = fieldsOf(headers, cols, masked);
-  const titleCol = fields[0]?.col ?? 0;
+  const titleCol = titleColOf(fields, cols);
   const cell = (row, i) => (i >= 0 ? (row[i] || '').toString().trim() : '');
 
   const catalog = values
@@ -169,7 +179,7 @@ export default withAuth(async (req, res) => {
   const values = await readSheet(sheet);
   const headers = values[0] || [];
   const cols = findColumns(headers);
-  const titleCol = fieldsOf(headers, cols)[0]?.col ?? 0;
+  const titleCol = titleColOf(fieldsOf(headers, cols), cols);
   const ctx = { kind, to, from, date, condition };
 
   // назва — єдине обов'язкове поле; решта залежить від того, які колонки має лист
