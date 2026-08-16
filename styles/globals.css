@@ -2797,6 +2797,14 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   background: var(--green-dim); border-color: var(--green); color: var(--green);
 }
 .dlv-part.on i { background: var(--green); border-color: var(--green); color: var(--bg); }
+/* дата поруч із назвою місця: воду відвезли 16-го, решту 17-го — саме це
+   й треба бачити, не розгортаючи журнал */
+.dlv-part em {
+  font-style: normal; font-family: var(--mono); font-size: .66rem;
+  color: var(--muted); margin-left: 1px;
+}
+.dlv-part.on em { color: var(--green); opacity: .8; }
+.dlv-parts-foot { color: var(--muted); font-size: .74rem; line-height: 1.45; margin-top: 8px; }
 
 .dlv-mv {
   background: var(--panel-2); border: 1px solid var(--line-soft);

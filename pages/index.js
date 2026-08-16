@@ -5659,6 +5659,7 @@ function DeliveryView({ setState }) {
   const drivers = byDriver(all);
   const points = byPoint(all);
   const left = partsLeft(all);
+  const atbaseLeft = partsLeft(atbase);
   const kg = (n) => Math.round(n * 10) / 10;
 
   const card = (d) => (
@@ -5685,10 +5686,12 @@ function DeliveryView({ setState }) {
         <Stat label="Готово до відправки" value={waiting.length}
           tone={waiting.length ? 'warn' : undefined}
           sub={waitKg > 0 ? `${kg(waitKg)} кг чекає водія` : 'зібрано, ще не передано'} />
+        {/* під плиткою — ті самі посилки в розрізі водіїв, а не всі, що в
+            когось на руках: «0» і «БПС 1» поруч читаються як помилка */}
         <Stat label="Передано водіям" value={handed.length}
-          sub={drivers.length ? drivers.map((x) => `${x.name} ${x.n}`).join(' · ') : 'нікому не передавали'} />
+          sub={byDriver(handed).map((x) => `${x.name} ${x.n}`).join(' · ') || 'нікому не передавали'} />
         <Stat label="На точці вильоту" value={atbase.length}
-          sub="чекає на виліт" />
+          sub={atbaseLeft.left > 0 ? `місць до розвезення: ${atbaseLeft.left}` : 'чекає на виліт'} />
         <Stat label="Доставлено" value={all.filter((d) => d.done).length} tone="ok"
           sub={`за тиждень ${week.length}`} />
       </div>
@@ -5867,10 +5870,10 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
         ))}
       </div>
 
-      {/* Місця. Відправку часто везуть частинами: три каністри води йдуть
-          різними бортами, і питання «що вже поставили» має відповідь на
-          рівні каністри, а не посилки. Дотик по місцю ставить і знімає
-          позначку — окремої кнопки «скасувати» тут не треба. */}
+      {/* Місця. Відправку часто везуть частинами: вода полетіла сьогодні,
+          їжа й обладнання — через день. Тому дата стоїть у кожного місця
+          окремо, а не одна на всю посилку. Дотик ставить і знімає позначку —
+          окремої кнопки «скасувати» тут не треба. */}
       {parts && (
         <div className="dlv-parts">
           <div className="dlv-parts-head">
@@ -5884,12 +5887,23 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
                 key={p.n}
                 className={'dlv-part' + (p.done ? ' on' : '')}
                 onClick={() => onPart(p.n)}
-                title={p.done ? 'Поставлено — зняти позначку' : 'Позначити як поставлене'}
+                title={p.done
+                  ? `Доставлено${p.at ? ' ' + p.at : ''} — натисніть, щоб зняти`
+                  : 'Позначити як доставлене'}
               >
-                <i>{p.done ? '✓' : ''}</i>{p.label}
+                <i>{p.done ? '✓' : ''}</i>
+                <span>{p.label}</span>
+                {/* на чипі досить дня й місяця — рік і час є в підказці */}
+                {p.at && <em>{p.at.split(' ')[0].split('.').slice(0, 2).join('.')}</em>}
               </button>
             ))}
           </div>
+          {parts.left.length > 0 && (
+            <div className="dlv-parts-foot">
+              Решта поїде пізніше — відмітьте її тоді. Посилка закриється,
+              коли прибуде останнє місце.
+            </div>
+          )}
         </div>
       )}
 
@@ -6000,9 +6014,8 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
   const needs = stage.needs || [];
   const picked = splitPoints(f.point);
   const parts = partsOf(item);
-  // Закрити відправку, коли половина місць ще не поставлена, — саме та
-  // помилка, через яку потім шукають «а де ще одна каністра». Не забороняємо
-  // (буває, що решту списали), але й мовчки не пропускаємо.
+  // «Доставлено» закриє й невідмічені місця — про це треба сказати до, а не
+  // після: якщо решта їде завтра, кнопку тиснути ще рано.
   const restLeft = stage.key === 'delivered' && parts && parts.left.length ? parts.left : null;
 
   return (
@@ -6033,8 +6046,9 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
         <p>{stage.hint}</p>
         {restLeft && (
           <p style={{ color: 'var(--amber)' }}>
-            Не поставлено {restLeft.length} з {parts.total} місць: {restLeft.join(', ')}.
-            Позначте їх на картці або підтвердіть — посилка закриється як є.
+            Ще не відмічено {restLeft.length} з {parts.total} місць: {restLeft.join(', ')}.
+            Підтвердження закриє їх усі сьогоднішньою датою. Якщо вони поїдуть
+            пізніше — закрийте вікно й відмітьте на картці лише те, що вже прибуло.
           </p>
         )}
       </div>

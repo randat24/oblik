@@ -4,7 +4,7 @@ import { logChange } from '../../lib/log';
 import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS,
   parseDeliveries, deliveryRow, stampKyiv, suggestions, stageOf,
-  splitParts, splitDone, joinDone,
+  splitParts, parseDone, joinDone,
 } from '../../lib/delivery';
 
 const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
@@ -20,11 +20,30 @@ let headersFixed = false;
 /** Позначки доставлених місць після правки переліку — за назвами, не за номерами */
 function remapDone(cur, parts) {
   const was = splitParts(cur.parts);
-  const done = splitDone(cur.partsDone);
-  const kept = new Set(was.filter((_, i) => done.has(i + 1)));
-  const next = new Set();
-  splitParts(parts).forEach((label, i) => { if (kept.has(label)) next.add(i + 1); });
+  const done = parseDone(cur.partsDone);
+  const kept = new Map();
+  was.forEach((label, i) => { if (done.has(i + 1)) kept.set(label, done.get(i + 1)); });
+  const next = new Map();
+  splitParts(parts).forEach((label, i) => { if (kept.has(label)) next.set(i + 1, kept.get(label)); });
   return joinDone(next);
+}
+
+/**
+ * Останній етап іде слідом за місцями.
+ *
+ * Посилка «прибула» тоді, коли прибуло все, що в ній їхало, — тож коли
+ * відмічено останнє місце, дата доставки ставиться сама, а коли позначку
+ * знімають, вона так само сама зникає. Інакше на картці стоїть «Прибула»,
+ * а дві каністри з трьох ще на точці вильоту.
+ */
+function syncDelivered(d, stamp) {
+  const labels = splitParts(d.parts);
+  if (!labels.length) return d.dates;
+  const done = parseDone(d.partsDone);
+  const all = labels.every((_, i) => done.has(i + 1));
+  if (all && !d.dates.delivered) return { ...d.dates, delivered: stamp };
+  if (!all && d.dates.delivered) return { ...d.dates, delivered: '' };
+  return d.dates;
 }
 
 async function state(extra = {}) {
@@ -100,11 +119,15 @@ export default withAuth(async (req, res) => {
         return res.status(400).json({ error: 'Немає такого місця' });
       }
 
-      const done = splitDone(cur.partsDone);
+      const now = stampKyiv();
+      const done = parseDone(cur.partsDone);
       const was = done.has(i);
-      if (was) done.delete(i); else done.add(i);
+      if (was) done.delete(i); else done.set(i, now);
 
-      const next = deliveryRow({ ...cur, partsDone: joinDone(done) }, prev);
+      // у кожного місця своя дата: решту відвезли через день — це має бути
+      // видно, а не сховатись за спільною датою всієї посилки
+      const upd = { ...cur, partsDone: joinDone(done) };
+      const next = deliveryRow({ ...upd, dates: syncDelivered(upd, now) }, prev);
       await writeRow(DELIVERY_SHEET, row, next);
       await logChange({
         sheet: DELIVERY_SHEET, row,
@@ -140,6 +163,21 @@ export default withAuth(async (req, res) => {
 
       const now = stampKyiv();
       const dates = { ...cur.dates, [stage]: now };
+
+      /*
+       * «Доставлено» означає, що доставлено все. Якщо в посилки є перелік
+       * місць, кнопка закриває їх усі — на картці не може стояти «прибула»
+       * поруч із двома невідміченими каністрами. Ті, що вже мають свою
+       * дату, її й зберігають: воду відвезли вчора, і це не сьогоднішня
+       * подія.
+       */
+      const labels = splitParts(cur.parts);
+      const done = parseDone(cur.partsDone);
+      let closed = 0;
+      if (stage === 'delivered') {
+        labels.forEach((_, i) => { if (!done.has(i + 1)) { done.set(i + 1, now); closed++; } });
+      }
+
       // Проміжні етапи, які пропустили, лишаються порожніми навмисно:
       // домалювати їх заднім числом означало б написати в журнал те,
       // чого не було.
@@ -149,6 +187,7 @@ export default withAuth(async (req, res) => {
         point: str(req.body.point) || cur.point,
         taker: str(req.body.taker) || cur.taker,
         giver: cur.giver || who,
+        partsDone: joinDone(done),
         dates,
       }, prev);
 
@@ -157,8 +196,12 @@ export default withAuth(async (req, res) => {
         sheet: DELIVERY_SHEET, row, action: st.action,
         field: cur.what,
         before: STAGES[cur.at]?.label || '',
-        after: [st.label, str(req.body.driver) || cur.driver, str(req.body.point) || cur.point]
-          .filter(Boolean).join(' · '),
+        after: [
+          st.label,
+          str(req.body.driver) || cur.driver,
+          str(req.body.point) || cur.point,
+          closed > 0 && `закрито місць: ${closed}`,
+        ].filter(Boolean).join(' · '),
       });
       return res.json(await state());
     }
