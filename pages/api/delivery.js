@@ -4,6 +4,7 @@ import { logChange } from '../../lib/log';
 import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS,
   parseDeliveries, deliveryRow, stampKyiv, suggestions, stageOf,
+  splitParts, splitDone, joinDone,
 } from '../../lib/delivery';
 
 const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
@@ -15,6 +16,16 @@ const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
  * сторінки людина лишається геть.
  */
 let headersFixed = false;
+
+/** Позначки доставлених місць після правки переліку — за назвами, не за номерами */
+function remapDone(cur, parts) {
+  const was = splitParts(cur.parts);
+  const done = splitDone(cur.partsDone);
+  const kept = new Set(was.filter((_, i) => done.has(i + 1)));
+  const next = new Set();
+  splitParts(parts).forEach((label, i) => { if (kept.has(label)) next.add(i + 1); });
+  return joinDone(next);
+}
 
 async function state(extra = {}) {
   const values = await readSheet(DELIVERY_SHEET);
@@ -49,17 +60,57 @@ export default withAuth(async (req, res) => {
     // Нова посилка одразу на першому етапі: складена — значить зібрана,
     // окремої кнопки «підтвердити збирання» тут не треба.
     if (action === 'add') {
-      const { what, weight, note, to } = req.body;
+      const { what, weight, note, to, parts } = req.body;
       if (!str(what)) return res.status(400).json({ error: 'Не вказано вміст' });
       const now = stampKyiv();
       const row = deliveryRow({
-        created: now, what, weight, note, to,
+        created: now, what, weight, note, to, parts,
         giver: who, dates: { packed: now },
       });
       await appendRow(DELIVERY_SHEET, row, { raw: true });
+      const n = splitParts(parts).length;
       await logChange({
         sheet: DELIVERY_SHEET, action: 'Зібрано', field: str(what),
-        after: [`${str(weight) || '?'} кг`, str(to) && `для ${str(to)}`].filter(Boolean).join(' · '),
+        after: [
+          `${str(weight) || '?'} кг`,
+          n > 1 && `${n} місць`,
+          str(to) && `для ${str(to)}`,
+        ].filter(Boolean).join(' · '),
+      });
+      return res.json(await state());
+    }
+
+    /*
+     * Одне місце з відправки. «Вода, 3 шт» їде трьома каністрами, і на
+     * точку вони потрапляють нарізно, тож позначка стоїть не на посилці,
+     * а на конкретному місці. Дія перемикає: помилково натиснуте
+     * знімається тим самим дотиком.
+     */
+    if (action === 'part') {
+      const { row, n } = req.body;
+      if (!row) return res.status(400).json({ error: 'Не вказано рядок' });
+      const values = await readSheet(DELIVERY_SHEET);
+      const prev = values[row - 1];
+      if (!prev) return res.status(404).json({ error: 'Рядок не знайдено' });
+
+      const cur = parseDeliveries([DELIVERY_HEADERS, prev])[0];
+      const labels = splitParts(cur.parts);
+      const i = Number(n);
+      if (!(i >= 1 && i <= labels.length)) {
+        return res.status(400).json({ error: 'Немає такого місця' });
+      }
+
+      const done = splitDone(cur.partsDone);
+      const was = done.has(i);
+      if (was) done.delete(i); else done.add(i);
+
+      const next = deliveryRow({ ...cur, partsDone: joinDone(done) }, prev);
+      await writeRow(DELIVERY_SHEET, row, next);
+      await logChange({
+        sheet: DELIVERY_SHEET, row,
+        action: was ? 'Місце знято' : 'Місце доставлено',
+        field: cur.what,
+        after: [labels[i - 1], `${done.size} з ${labels.length}`].join(' · '),
       });
       return res.json(await state());
     }
@@ -121,7 +172,13 @@ export default withAuth(async (req, res) => {
       if (!str(req.body.what)) return res.status(400).json({ error: 'Не вказано вміст' });
 
       const cur = parseDeliveries([DELIVERY_HEADERS, prev])[0];
-      const next = deliveryRow({ ...cur, ...req.body, dates: cur.dates }, prev);
+      // Перелік місць правлять і після відправки — дописують забуту
+      // каністру. Позначки прив'язані до номерів, тож переносимо їх за
+      // назвами: інакше дописане на початку зсуває всі галочки.
+      const partsDone = 'parts' in req.body
+        ? remapDone(cur, str(req.body.parts))
+        : cur.partsDone;
+      const next = deliveryRow({ ...cur, ...req.body, partsDone, dates: cur.dates }, prev);
       await writeRow(DELIVERY_SHEET, row, next);
       await logChange({
         sheet: DELIVERY_SHEET, row, action: 'Правка',

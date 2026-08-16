@@ -997,7 +997,9 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   font-size: 0.92rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--amber); margin: 0 0 16px;
 }
-.modal input, .modal select { width: 100%; }
+.modal input, .modal select, .modal textarea { width: 100%; }
+/* textarea тягнуть за куток лише вниз: бокове розтягування ламає модалку */
+.modal textarea { resize: vertical; line-height: 1.5; }
 .modal-actions {
   display: flex; gap: 8px; margin-top: 20px; padding-top: 14px;
   border-top: 1px solid var(--line-soft);
@@ -2758,6 +2760,43 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .dlv-step.on span { color: var(--text-dim); }
 .dlv-step em { font-style: normal; font-family: var(--mono); font-size: .56rem; color: var(--muted); }
+
+/* Місця однієї відправки. Кожне — кнопка, бо це саме дія: поставили —
+   торкнулися. Розмір узятий не з тексту, а з пальця: 30px заввишки й
+   майже сантиметр завширшки натискаються з коробкою в другій руці. */
+.dlv-parts { margin: 12px 0 0; }
+.dlv-parts-head {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font-size: .72rem; color: var(--muted); margin-bottom: 6px;
+}
+.dlv-parts-head span { text-transform: uppercase; letter-spacing: .06em; }
+.dlv-parts-head b { color: var(--amber); font-family: var(--mono); font-size: .76rem; }
+.dlv-parts-head b.all { color: var(--green); }
+.dlv-parts-head em {
+  font-style: normal; color: var(--text-dim); min-width: 0; overflow-wrap: anywhere;
+}
+.dlv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dlv-part {
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: 30px; padding: 0 10px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 999px; color: var(--text-dim);
+  font: inherit; font-size: .78rem; cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.dlv-part:hover { border-color: var(--line-soft); background: var(--panel-3); }
+.dlv-part i {
+  font-style: normal; width: 14px; height: 14px; flex: 0 0 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line-soft); border-radius: 4px;
+  font-size: .62rem; line-height: 1;
+}
+/* Поставлене видно з відстані витягнутої руки — інакше рахувати
+   доводиться очима по одному чипу. */
+.dlv-part.on {
+  background: var(--green-dim); border-color: var(--green); color: var(--green);
+}
+.dlv-part.on i { background: var(--green); border-color: var(--green); color: var(--bg); }
 
 .dlv-mv {
   background: var(--panel-2); border: 1px solid var(--line-soft);
