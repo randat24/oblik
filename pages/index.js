@@ -5573,7 +5573,7 @@ function DeliveryView({ setState }) {
   if (only) list = list.filter((d) => d.stage === only);
   if (q.trim()) {
     const t = q.trim().toLowerCase();
-    list = list.filter((d) => [d.what, d.driver, d.point, d.giver, d.taker, d.note]
+    list = list.filter((d) => [d.to, d.what, d.driver, d.point, d.giver, d.taker, d.note]
       .join(' ').toLowerCase().includes(t));
   }
   // у дорозі — зверху, доставлене — донизу: діяти треба з першими
@@ -5602,12 +5602,7 @@ function DeliveryView({ setState }) {
       </div>
 
       <div className="toolbar">
-        <input
-          className="search-input"
-          placeholder="Пошук: вміст, водій, точка…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+        <SearchBox value={q} onChange={setQ} placeholder="Пошук: кому, вміст, водій, точка…" />
         <div className="spacer" />
         <button className="btn" onClick={() => setAdd(true)}>+ Нова посилка</button>
       </div>
@@ -5634,6 +5629,7 @@ function DeliveryView({ setState }) {
 
       {add && (
         <DeliveryAdd
+          tos={data.tos}
           onCancel={() => setAdd(false)}
           onSave={async (body) => { if (await send({ ...body, action: 'add' })) setAdd(false); }}
         />
@@ -5655,6 +5651,7 @@ function DeliveryView({ setState }) {
       {edit && (
         <DeliveryAdd
           item={edit}
+          tos={data.tos}
           onCancel={() => setEdit(null)}
           onSave={async (body) => {
             if (await send({ ...body, action: 'update', row: edit.row })) setEdit(null);
@@ -5670,7 +5667,10 @@ function DeliveryCard({ item, stages, onMove, onEdit, onDelete }) {
   return (
     <div className={'dlv-card' + (item.done ? ' is-done' : '')}>
       <div className="dlv-head">
-        <span className="dlv-what">{item.what}</span>
+        <span className="dlv-what">
+          {item.to && <i className="dlv-to">{item.to}</i>}
+          {item.what}
+        </span>
         <span className={'dlv-st' + (item.done ? ' is-done' : '')}>{stages[item.at]?.label || '—'}</span>
       </div>
 
@@ -5710,8 +5710,9 @@ function DeliveryCard({ item, stages, onMove, onEdit, onDelete }) {
   );
 }
 
-function DeliveryAdd({ item, onCancel, onSave }) {
+function DeliveryAdd({ item, tos, onCancel, onSave }) {
   const [f, setF] = useState(() => ({
+    to: item?.to || '',
     what: item?.what || '',
     weight: item?.weight ?? '',
     note: item?.note || '',
@@ -5734,6 +5735,12 @@ function DeliveryAdd({ item, onCancel, onSave }) {
         finally { setBusy(false); }
       }}
     >
+      <div style={{ marginTop: 10 }}>
+        <label>Кому призначена</label>
+        <input type="text" list="dlvTo" value={f.to} onChange={(e) => up('to', e.target.value)}
+          placeholder="позивний або підрозділ" />
+        <datalist id="dlvTo">{(tos || []).map((v) => <option key={v} value={v} />)}</datalist>
+      </div>
       <div style={{ marginTop: 10 }}>
         <label>Що всередині</label>
         <input type="text" value={f.what} onChange={(e) => up('what', e.target.value)}
@@ -5790,6 +5797,7 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
       }}
     >
       <div className="dlv-mv">
+        {item.to && <span className="dlv-to">{item.to}</span>}
         <b>{item.what}</b>
         {item.weight !== null && <span> · {item.weight} кг</span>}
         <div>{stage.hint}</div>
