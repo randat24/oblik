@@ -289,7 +289,8 @@ function BottomNav({ view, sheets, onOpen, onScan, extra = [] }) {
               ))}
               {extra.map((e) => (
                 <button key={e.label}
-                  className={'sheet-i' + (view.kind === e.kind ? ' on' : '')}
+                  className={'sheet-i' + (e.kind === 'delivery' ? ' sheet-dlv' : '')
+                    + (view.kind === e.kind ? ' on' : '')}
                   onClick={() => { setMore(false); e.run(); }}>
                   {e.label}
                 </button>
@@ -2359,7 +2360,7 @@ export default function Home({ startView }) {
             </div>
           ))}
           <div
-            className={'tab' + (view.kind === 'delivery' ? ' active' : '')}
+            className={'tab tab-dlv' + (view.kind === 'delivery' ? ' active' : '')}
             onClick={() => setView({ kind: 'delivery', name: null })}
           >
             Доставки
