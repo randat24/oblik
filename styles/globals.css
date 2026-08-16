@@ -2782,3 +2782,5 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .tab-dlv.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
 .sheet-i.sheet-dlv { color: var(--blue); border-color: var(--blue-dim); }
 .sheet-i.sheet-dlv.on { border-color: var(--blue); color: var(--blue); }
+/* Плитка, яка вимагає дії: зібране без водія — це не статистика, а черга */
+.stat-warn .stat-v { color: var(--amber); }

@@ -4,6 +4,8 @@ import {
 import {
   enqueue, cacheGet, cachePut, startOffline, flushQueue, onOfflineChange, getState, takeDropped,
 } from '../lib/offline';
+// Розрахунки доставок — чисті функції без звернень до таблиць
+import { stuck, byDriver, byPoint, deliveredWithin } from '../lib/delivery';
 
 // Сесія добігає кінця сама, тож будь-який запит може повернути 401.
 // Тоді показуємо екран входу, а не незрозумілу помилку посеред роботи.
@@ -2171,6 +2173,8 @@ function useNewRecordHotkey(open) {
 /* ---------- Головна ---------- */
 export const STOCK_SHEET_NAME = 'Майно Рибаківки';
 // стабільне посилання — інакше useEffect із цим значенням крутився б без кінця
+export const DELIVERY_VIEW = { kind: 'delivery', name: null };
+
 export const STOCK_VIEW = { kind: 'stock', name: STOCK_SHEET_NAME };
 
 /** Адреса, яку показуємо в рядку браузера для поточної вкладки */
@@ -5523,6 +5527,16 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
 
 /* ---------- Доставки ---------- */
 
+/** «1 добу / 2 доби / 5 діб» — за останньою цифрою, крім підлітків */
+function dayWord(n) {
+  const t = n % 100;
+  const o = n % 10;
+  if (t >= 11 && t <= 14) return 'діб';
+  if (o === 1) return 'добу';
+  if (o >= 2 && o <= 4) return 'доби';
+  return 'діб';
+}
+
 /**
  * Шлях посилки: зібрали → передали водієві → водій довіз до точки вильоту →
  * доставили адресатові.
@@ -5583,7 +5597,21 @@ function DeliveryView({ setState }) {
 
   const onWay = list.filter((d) => !d.done);
   const done = list.filter((d) => d.done);
-  const weight = data.list.filter((d) => !d.done).reduce((n, d) => n + (d.weight || 0), 0);
+
+  // Зведення рахуємо по всьому, а не по відфільтрованому: пошук звужує
+  // список, але не змінює того, скільки коробок насправді в дорозі.
+  const all = data.list;
+  const inTransit = all.filter((d) => !d.done);
+  const weight = inTransit.reduce((n, d) => n + (d.weight || 0), 0);
+  const waiting = all.filter((d) => d.stage === 'packed');
+  const handed = all.filter((d) => d.stage === 'handed');
+  const atbase = all.filter((d) => d.stage === 'atbase');
+  const waitKg = waiting.reduce((n, d) => n + (d.weight || 0), 0);
+  const late = stuck(all);
+  const week = deliveredWithin(all, 7);
+  const drivers = byDriver(all);
+  const points = byPoint(all);
+  const kg = (n) => Math.round(n * 10) / 10;
 
   const card = (d) => (
     <DeliveryCard
@@ -5601,6 +5629,71 @@ function DeliveryView({ setState }) {
 
   return (
     <>
+      {/* Плитки повторюють етапи один в один: питання логістики — «скільки
+          готово, скільки передано, скільки доставлено», і відповідь має
+          читатися без перекладу зі слів застосунку на слова людини. */}
+      <div className="stats">
+        <Stat label="Готово до відправки" value={waiting.length}
+          tone={waiting.length ? 'warn' : undefined}
+          sub={waitKg > 0 ? `${kg(waitKg)} кг чекає водія` : 'зібрано, ще не передано'} />
+        <Stat label="Передано водіям" value={handed.length}
+          sub={drivers.length ? drivers.map((x) => `${x.name} ${x.n}`).join(' · ') : 'нікому не передавали'} />
+        <Stat label="На точці вильоту" value={atbase.length}
+          sub="чекає на виліт" />
+        <Stat label="Доставлено" value={all.filter((d) => d.done).length} tone="ok"
+          sub={`за тиждень ${week.length}`} />
+      </div>
+
+      <div className="totals">
+        <span>У дорозі <b>{inTransit.length}</b>{weight > 0 ? ` · ${kg(weight)} кг` : ''}</span>
+      </div>
+
+      {late.length > 0 && (
+        <div className="section">
+          <h3 className="primary">Потребує уваги<span className="count">{late.length}</span></h3>
+          <div className="attn-list">
+            {late.map((d) => {
+              const st = stages[d.at];
+              const nxt = stages[d.at + 1];
+              return (
+                <div className={'attn' + (d.days > d.sla * 2 ? ' attn-bad' : '')} key={d.row}>
+                  <span className="attn-text">
+                    <b>{d.what}</b>{d.to ? ` для ${d.to}` : ''} — {st.label.toLowerCase()}{' '}
+                    {d.days} {dayWord(d.days)}
+                    {d.driver ? `, у ${d.driver}` : ''}
+                  </span>
+                  {nxt && (
+                    <button className="act-btn act-accept" onClick={() => setMove({ item: d, stage: nxt.key })}>
+                      {nxt.action}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {(drivers.length > 0 || points.length > 1) && (
+        <div className="section">
+          <h3 className="sec">Хто везе й куди</h3>
+          <div className="chips">
+            {drivers.map((x) => (
+              <div className="chip" key={'d' + x.name} onClick={() => setQ(x.name)}>
+                {x.name} <b style={{ marginLeft: 4 }}>{x.n}</b>
+                {x.kg > 0 && <span className="count" style={{ marginLeft: 6 }}>{kg(x.kg)} кг</span>}
+              </div>
+            ))}
+            {points.filter((x) => x.name !== '—').map((x) => (
+              <div className="chip" key={'p' + x.name} style={{ color: 'var(--blue)' }}
+                onClick={() => setQ(x.name)}>
+                → {x.name} <b style={{ marginLeft: 4 }}>{x.n}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="chips">
         {stages.map((s, i) => (
           <div
@@ -5625,10 +5718,7 @@ function DeliveryView({ setState }) {
         <>
           {onWay.length > 0 && (
             <div className="section">
-              <h3 className="primary">
-                У дорозі<span className="count">{onWay.length}</span>
-                {weight > 0 && <span className="count">{Math.round(weight * 10) / 10} кг</span>}
-              </h3>
+              <h3 className="primary">У дорозі<span className="count">{onWay.length}</span></h3>
               <div className="grid">{onWay.map(card)}</div>
             </div>
           )}
