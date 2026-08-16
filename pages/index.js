@@ -5700,11 +5700,11 @@ function DeliveryCard({ item, stages, onMove, onEdit, onDelete }) {
 
       <div className="dlv-acts">
         {next
-          ? <button className="btn primary" onClick={() => onMove(next.key)}>{next.action}</button>
+          ? <button className="btn btn-accept" onClick={() => onMove(next.key)}>{next.action}</button>
           : <span className="dlv-fin">Шлях завершено</span>}
         <div className="spacer" />
-        <button className="link" onClick={onEdit}>Правка</button>
-        <button className="link danger" onClick={onDelete}>Видалити</button>
+        <button className="dlv-link" onClick={onEdit}>Правка</button>
+        <button className="dlv-link is-danger" onClick={onDelete}>Видалити</button>
       </div>
     </div>
   );
@@ -5829,7 +5829,7 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
         </div>
       )}
 
-      <div className="hc-notes" style={{ marginTop: 12 }}>
+      <div className="dlv-tip">
         Дата й час проставляться самі.
       </div>
     </Modal>
