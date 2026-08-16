@@ -2819,3 +2819,14 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   color: var(--amber); margin-bottom: 3px;
 }
 .dlv-mv .dlv-to { margin-bottom: 4px; }
+.dlv { display: block; }
+.dlv-link {
+  background: none; border: 0; padding: 0; cursor: pointer; font: inherit;
+  font-family: var(--mono); font-size: .74rem; color: var(--amber);
+  letter-spacing: .3px; white-space: nowrap;
+  display: inline-flex; align-items: center; min-height: 40px;
+}
+.dlv-link:hover { filter: brightness(1.25); text-decoration: underline; }
+.dlv-link.is-danger { color: var(--muted); }
+.dlv-link.is-danger:hover { color: var(--red); }
+.dlv-tip { color: var(--muted); font-size: .82rem; line-height: 1.5; margin-top: 12px; }
