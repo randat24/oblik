@@ -185,7 +185,9 @@ export default withAuth(async (req, res) => {
         ...cur,
         driver: str(req.body.driver) || cur.driver,
         point: str(req.body.point) || cur.point,
-        taker: str(req.body.taker) || cur.taker,
+        // хто прийняв: вписане в формі, вже записане раніше, а як нема
+        // ні того, ні того — той, хто зараз закриває етап
+        taker: str(req.body.taker) || cur.taker || (stage === 'delivered' ? who : ''),
         giver: cur.giver || who,
         partsDone: joinDone(done),
         dates,

@@ -2422,7 +2422,7 @@ export default function Home({ startView }) {
         {view.kind === 'items' && (
           <ItemsView key={view.name + ':' + (view.row || '')} name={view.name} setState={setState} focusRow={view.row} onOpen={setView} />
         )}
-        {view.kind === 'delivery' && <DeliveryView setState={setState} />}
+        {view.kind === 'delivery' && <DeliveryView setState={setState} me={me.callsign} />}
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
         {view.kind === 'stock' && (
           <StockView
@@ -5596,7 +5596,7 @@ function dayWord(n) {
  * наступний крок завжди відомий, і вибирати з чотирьох там, де правильний
  * один, — робота, яку не варто перекладати на того, хто стоїть із коробкою.
  */
-function DeliveryView({ setState }) {
+function DeliveryView({ setState, me = '' }) {
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
   const [only, setOnly] = useState('');
@@ -5806,6 +5806,7 @@ function DeliveryView({ setState }) {
           stage={stages.find((s) => s.key === move.stage)}
           drivers={data.drivers}
           points={data.points}
+          me={me}
           onCancel={() => setMove(null)}
           onSave={async (body) => {
             if (await send({ ...body, action: 'stage', row: move.item.row, stage: move.stage })) setMove(null);
@@ -6002,11 +6003,14 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
  * ставляться самі: людина, яка щойно віддала коробку, не має ще й згадувати,
  * котра година.
  */
-function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
+function DeliveryMove({ item, stage, drivers, points, me = '', onCancel, onSave }) {
   const [f, setF] = useState(() => ({
     driver: item.driver || '',
     point: item.point || '',
-    taker: item.taker || '',
+    // «Хто прийняв» — це майже завжди той, хто зараз і закриває доставку в
+    // застосунку. Підставляємо його позивний, але лишаємо поле відкритим:
+    // буває, що приймав інший, а вносить запис черговий.
+    taker: item.taker || me || '',
   }));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -6086,9 +6090,16 @@ function DeliveryMove({ item, stage, drivers, points, onCancel, onSave }) {
         </div>
       )}
 
-      {needs.includes('taker') && (
+      {/* Хто прийняв — уже підставлений і нічого не блокує: у дев'яти
+          випадках із десяти доставку закриває той, хто її й прийняв. Поле
+          лишається на місці для десятого — коли приймав інший, а вносить
+          запис черговий. */}
+      {stage.key === 'delivered' && (
         <div style={{ marginTop: 10 }}>
-          <label>Хто прийняв</label>
+          <label>
+            Хто прийняв
+            {f.taker && f.taker === me && <span className="dlv-you">це ви</span>}
+          </label>
           <input type="text" value={f.taker} onChange={(e) => up('taker', e.target.value)}
             placeholder={picked.length > 1 ? 'позивні через кому' : 'позивний'} />
         </div>
