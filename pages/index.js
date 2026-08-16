@@ -549,6 +549,18 @@ function HomeView({ setState, onOpen, me }) {
       run: () => onOpen({ kind: 'warehouse', name: 'Склад' }),
     });
   }
+  // застрягла посилка — це не статистика, а те, з чим треба щось робити
+  if (d.delivery?.lateTotal) {
+    const l = d.delivery.late[0];
+    attention.push({
+      key: 'dlvlate',
+      tone: 'bad',
+      text: `Стоїть без руху: ${d.delivery.lateTotal} — ${l.what}${l.to ? ` для ${l.to}` : ''},`
+        + ` ${l.stage.toLowerCase()} ${l.days} ${dayWord(l.days)}`,
+      action: 'Доставки',
+      run: () => onOpen(DELIVERY_VIEW),
+    });
+  }
   if (!d.audit.open) {
     attention.push({
       key: 'newaudit',
@@ -640,6 +652,79 @@ function HomeView({ setState, onOpen, me }) {
           <span>У «В наявності» для Рибаківки — залишок у штуках, а не кількість позицій</span>
         </div>
       </div>
+
+      {/* Доставки. На головній важливо не скільки коробок узагалі, а що
+          зараз у дорозі й скільки місць ще везти: одна посилка може бути
+          трьома каністрами, з яких дві ще на точці вильоту. */}
+      {d.delivery && (
+        <div className="section">
+          <h3 className="sec">Доставки<span className="count">{d.delivery.onWay}</span></h3>
+
+          <div className="totals">
+            <span>У дорозі <b>{d.delivery.onWay}</b>{d.delivery.kg > 0 ? ` · ${d.delivery.kg} кг` : ''}</span>
+            {d.delivery.parts.total > 0 && (
+              <>
+                <span className="totals-sep">·</span>
+                <span>Місць лишилось <b>{d.delivery.parts.left}</b>{' '}
+                  <span className="totals-of">з {d.delivery.parts.total}</span></span>
+              </>
+            )}
+            <span className="totals-sep">·</span>
+            <span>Доставлено за тиждень <b>{d.delivery.week}</b></span>
+          </div>
+
+          <div className="chips">
+            {d.delivery.byStage.filter((s) => s.n > 0).map((s) => (
+              <div className="chip" key={s.key} onClick={() => onOpen(DELIVERY_VIEW)}>
+                {s.label}<span className="count">{s.n}</span>
+              </div>
+            ))}
+            {d.delivery.points.map((x) => (
+              <div className="chip" key={'p' + x.name} style={{ color: 'var(--blue)' }}
+                onClick={() => onOpen(DELIVERY_VIEW)}>
+                → {x.name} <b style={{ marginLeft: 4 }}>{x.n}</b>
+              </div>
+            ))}
+          </div>
+
+          {d.delivery.open.length > 0 && (
+            <TableWrap>
+              <table className="data-table" style={{ marginTop: 10 }}>
+                <thead>
+                  <tr>
+                    <th>Посилка</th>
+                    <th>Кому</th>
+                    <th className="col-num">Місць</th>
+                    <th>Ще не поставлено</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.delivery.open.map((x, i) => (
+                    <tr key={i} onClick={() => onOpen(DELIVERY_VIEW)}>
+                      <td className="col-name">{x.what}</td>
+                      <td>{x.to || '—'}</td>
+                      <td className="col-num col-strong" style={{ color: 'var(--amber)' }}>
+                        {x.done} з {x.total}
+                      </td>
+                      <td>{x.left.join(', ')}</td>
+                      <td className="col-act">
+                        <button className="act-btn" onClick={(e) => {
+                          e.stopPropagation();
+                          onOpen(DELIVERY_VIEW);
+                        }}>Відкрити</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableWrap>
+          )}
+
+          <button className="act-btn" style={{ marginTop: 8 }}
+            onClick={() => onOpen(DELIVERY_VIEW)}>Усі доставки</button>
+        </div>
+      )}
 
       {d.items.byStatus.length > 0 && (
         <div className="section">
