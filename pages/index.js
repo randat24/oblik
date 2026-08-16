@@ -2178,9 +2178,21 @@ export const DELIVERY_VIEW = { kind: 'delivery', name: null };
 export const STOCK_VIEW = { kind: 'stock', name: STOCK_SHEET_NAME };
 
 /** Адреса, яку показуємо в рядку браузера для поточної вкладки */
+/**
+ * Адреса, що відповідає вкладці.
+ *
+ * Не косметика: саме через неї сторінка лишається собою після входу.
+ * Екран пароля показується поверх застосунку, адреса тим часом уже
+ * підмінена — і той, хто відкрив /delivery і ввів пароль, опинявся на
+ * головній. Кожна вкладка з власною адресою має бути тут; решта чесно
+ * зводиться до кореня.
+ */
 function urlFor(view) {
-  if (view.kind !== 'stock') return '/';
-  return '/rybakivka' + (view.id ? '?id=' + encodeURIComponent(view.id) : '');
+  if (view.kind === 'stock') {
+    return '/rybakivka' + (view.id ? '?id=' + encodeURIComponent(view.id) : '');
+  }
+  if (view.kind === 'delivery') return '/delivery';
+  return '/';
 }
 
 export default function Home({ startView }) {
