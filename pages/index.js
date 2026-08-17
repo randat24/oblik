@@ -2784,7 +2784,7 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
                     + (r.parts.left.length ? `, лишилось: ${r.parts.left.join(', ')}` : '')
                     + (r.parts.kgLeft > 0 ? ` (${r.parts.kgLeft} кг)` : '')],
                   r.weight !== null && ['Вага', `${r.weight} кг`],
-                  r.driver && ['Водій', r.driver],
+                  r.driver && ['Хто відправляє', r.driver],
                   r.point && ['Точка', r.point],
                 ].filter(Boolean).map(([k, v], i, a) => (
                   <span key={k}>
@@ -5722,7 +5722,7 @@ function dayWord(n) {
 }
 
 /**
- * Шлях посилки: зібрали → передали водієві → водій довіз до точки вильоту →
+ * Шлях посилки: зібрали → передали на відправку → відправник довіз до точки вильоту →
  * доставили адресатові.
  *
  * Побудовано тим самим словником, що й решта розділів: сітка карток,
@@ -5824,10 +5824,10 @@ function DeliveryView({ setState, me = '' }) {
       <div className="stats">
         <Stat label="Готово до відправки" value={waiting.length}
           tone={waiting.length ? 'warn' : undefined}
-          sub={waitKg > 0 ? `${kg(waitKg)} кг чекає водія` : 'зібрано, ще не передано'} />
+          sub={waitKg > 0 ? `${kg(waitKg)} кг чекає відправки` : 'зібрано, ще не передано'} />
         {/* під плиткою — ті самі посилки в розрізі водіїв, а не всі, що в
             когось на руках: «0» і «БПС 1» поруч читаються як помилка */}
-        <Stat label="Передано водіям" value={handed.length}
+        <Stat label="Передано на відправку" value={handed.length}
           sub={byDriver(handed).map((x) => `${x.name} ${x.n}`).join(' · ') || 'нікому не передавали'} />
         <Stat label="На точці вильоту" value={atbase.length}
           sub={atbaseLeft.left > 0
@@ -5879,7 +5879,7 @@ function DeliveryView({ setState, me = '' }) {
 
       {(drivers.length > 0 || points.length > 1) && (
         <div className="section">
-          <h3 className="sec">Хто везе й куди</h3>
+          <h3 className="sec">Хто відправляє й куди</h3>
           <div className="chips">
             {drivers.map((x) => (
               <div className="chip" key={'d' + x.name} onClick={() => setQ(x.name)}>
@@ -5910,7 +5910,7 @@ function DeliveryView({ setState, me = '' }) {
       </div>
 
       <div className="toolbar">
-        <SearchBox value={q} onChange={setQ} placeholder="Знайти посилку: кому, вміст, водій, точка..." />
+        <SearchBox value={q} onChange={setQ} placeholder="Знайти посилку: кому, вміст, хто відправляє, точка..." />
         <div className="spacer" />
         <button className="btn" onClick={() => setAdd(true)}>+ Нова посилка</button>
       </div>
@@ -5978,7 +5978,7 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
   // рано чи пізно розійшлись би
   const kg = weightOf(item);
   const rows = [
-    ['Водій', item.driver],
+    ['Хто відправляє', item.driver],
     [pts.length > 1 ? 'Точки' : 'Точка', item.point],
     ['Здав', item.giver],
     ['Прийняв', item.taker],
@@ -6207,7 +6207,8 @@ function DeliveryMove({ item, stage, drivers, points, me = '', onCancel, onSave 
       onSave={async () => {
         for (const n of needs) {
           if (!String(f[n] || '').trim()) {
-            return setErr(n === 'driver' ? 'Вкажіть водія' : n === 'point' ? 'Вкажіть точку' : 'Вкажіть, хто прийняв');
+            return setErr(n === 'driver' ? 'Вкажіть, хто відправляє'
+              : n === 'point' ? 'Вкажіть точку' : 'Вкажіть, хто прийняв');
           }
         }
         setBusy(true); setErr('');
@@ -6234,7 +6235,7 @@ function DeliveryMove({ item, stage, drivers, points, me = '', onCancel, onSave 
 
       {needs.includes('driver') && (
         <div style={{ marginTop: 10 }}>
-          <label>Водій</label>
+          <label>Хто відправляє</label>
           <input type="text" list="dlvDrivers" value={f.driver}
             onChange={(e) => up('driver', e.target.value)} placeholder="Лотар, Джин, БПС…" />
           <datalist id="dlvDrivers">{drivers.map((v) => <option key={v} value={v} />)}</datalist>

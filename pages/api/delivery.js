@@ -163,7 +163,7 @@ export default withAuth(async (req, res) => {
         const v = str(req.body[need]) || cur[need];
         if (!v) {
           return res.status(400).json({
-            error: need === 'driver' ? 'Вкажіть водія'
+            error: need === 'driver' ? 'Вкажіть, хто відправляє'
               : need === 'point' ? 'Вкажіть точку'
               : 'Вкажіть, хто прийняв',
           });
