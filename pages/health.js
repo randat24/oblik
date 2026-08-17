@@ -4,6 +4,7 @@ import Head from 'next/head';
 import {
   LESSONS, FACTS, RUN, FAST_SEC, keyOf, known, auto, runOf, tipFor, options, question,
   problems, slows, dayQueue, daily, dayStreak, hardest, hookFor, practiceDays, DAY_SIZE,
+  QUICK_TILES, QUICK_SIZE, quickQueue,
   arcadeLevel, arcadeNext, ARCADE_LIVES, ARCADE_PER_LEVEL, ask, formFor,
   lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
   lessonProgress, partProgress, unlockedLessons,
@@ -3950,6 +3951,15 @@ function MultTab({ data, reload, toast }) {
   if (view.s === 'win') {
     return <MultWin lesson={view.lesson} onBack={() => setView({ s: 'lessons' })} />;
   }
+  if (view.s === 'quick') {
+    return (
+      <MultQuick
+        tile={view.tile}
+        onBack={() => setView({ s: 'lessons' })}
+        onDone={async (results) => { await save(results); setView({ s: 'lessons' }); }}
+      />
+    );
+  }
   if (view.s === 'day') {
     return (
       <MultSpeed
@@ -4045,6 +4055,24 @@ function MultTab({ data, reload, toast }) {
           </div>
         )
       )}
+
+      {/*
+        Повторити те, що сам вибрав.
+        Уроки йдуть по черзі й відкриваються один за одним — це щоб вивчити
+        з нуля. Але коли таблиця вже загалом відома, потрібне інше: ткнути
+        «×7» і десять разів його проговорити, не питаючи дозволу. Тому
+        плитки нічого не вимагають і ніколи не замкнені.
+      */}
+      <div className="h-sec"><h3>Повторити таблицю</h3></div>
+      <div className="h-mt-tiles">
+        {QUICK_TILES.map((t) => (
+          <button key={t.key} className={'h-mt-tile' + (t.table ? '' : ' is-wide')}
+            onClick={() => setView({ s: 'quick', tile: t })}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="h-mt-tiles-n">{QUICK_SIZE} прикладів · без таймера</div>
 
       {done > 0 && (
         <button className="h-mt-arcade" onClick={() => setView({ s: 'arcade' })}>
@@ -4446,7 +4474,7 @@ function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
  * одне місце: і в тренуванні дня, і в аркаді питання виглядають однаково,
  * бо це буквально той самий код.
  */
-function AskBox({ q, state, typed, opts, onAnswer, disabled }) {
+function AskBox({ q, state, typed, opts, onAnswer, disabled, quad }) {
   if (q.kind === 'tf') {
     return (
       <>
@@ -4483,7 +4511,9 @@ function AskBox({ q, state, typed, opts, onAnswer, disabled }) {
         <QLine q={q} shown={typed} state={state === 'right' ? 'ok' : state === 'wrong' ? 'bad' : ''} />
       </div>
       {opts && (
-        <div className="h-mt-opts">
+        // чотири варіанти йдуть сіткою 2×2: так кнопки вдвічі більші й обидві
+        // колонки дістаються великим пальцем, не переставляючи телефон
+        <div className={'h-mt-opts' + (quad ? ' is-quad' : '')}>
           {opts.map((o) => (
             <button key={o}
               className={'h-mt-opt' + (state ? (o === q.answer ? ' is-ok' : String(o) === String(typed) ? ' is-bad' : ' is-dim') : '')}
@@ -4647,6 +4677,93 @@ function MultSpeed({ prog, items, onBack, onDone }) {
           <button className="is-soft" onClick={() => setTyped((t) => t.slice(0, -1))} disabled={state !== 'ask'}>⌫</button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Швидкий повтор обраної таблиці.
+ *
+ * Найпростіший екран у тренажері, і це навмисно: питання, чотири великі
+ * кнопки, лічильники правильних і промахів. Ні таймера, ні життів, ні
+ * кнопки «далі» — відповів і поїхали. Саме така вправа виходить, коли є
+ * вільна хвилина й немає бажання розбиратися, чого від тебе хочуть.
+ *
+ * Помилка не зупиняє: правильна відповідь підсвічується, під нею зачіпка,
+ * і за півтори секунди йде наступне питання. Тиснути нічого не треба —
+ * інакше половина повтору перетворюється на натискання «далі».
+ */
+function MultQuick({ tile, onBack, onDone }) {
+  const [queue] = useState(() => quickQueue(tile, QUICK_SIZE));
+  const [i, setI] = useState(0);
+  const [opts, setOpts] = useState([]);
+  const [picked, setPicked] = useState(null);
+  const [state, setState] = useState('ask');
+  const started = useRef(Date.now());
+  const resRef = useRef([]);
+  const cur = queue[i];
+
+  useEffect(() => {
+    if (!cur) return;
+    setOpts(options(cur, tile.table, 4));
+    setPicked(null);
+    setState('ask');
+    started.current = Date.now();
+  }, [i]);
+
+  if (!queue.length) {
+    return <div className="h-empty">Нема чого повторювати. <button className="h-link" onClick={onBack}>Назад</button></div>;
+  }
+
+  const ok = resRef.current.filter((r) => r.right).length;
+  const bad = resRef.current.length - ok;
+
+  if (i >= queue.length) {
+    return (
+      <div className="h-mt-win">
+        <div className="h-mt-cup">{bad === 0 ? '🏆' : ok >= queue.length - 2 ? '👍' : '🔁'}</div>
+        <h2>{ok} з {queue.length}</h2>
+        <p>
+          {bad === 0
+            ? 'Без жодного промаху. Саме так це й має відповідатись.'
+            : `Промахів ${bad} — вони самі повернуться в тренування дня.`}
+        </p>
+        <button className="h-add" onClick={() => onDone(resRef.current)}>Зберегти й вийти</button>
+      </div>
+    );
+  }
+
+  const answer = (v) => {
+    if (state !== 'ask') return;
+    const right = v === cur.answer;
+    resRef.current = [...resRef.current, {
+      key: cur.key, mode: cur.mode, right,
+      ms: Date.now() - started.current, text: cur.text, answer: cur.answer,
+    }];
+    setPicked(v);
+    setState(right ? 'right' : 'wrong');
+    setTimeout(() => setI((x) => x + 1), right ? 520 : 1700);
+  };
+
+  return (
+    <div className="h-mt-drill">
+      <div className="h-mt-drill-h">
+        <button className="h-link" onClick={onBack}>← Вийти</button>
+        <span className="h-mt-where">{i + 1} з {queue.length}</span>
+        <span className="h-mt-tally">
+          <b className="is-ok">{ok}</b>
+          <b className="is-bad">{bad}</b>
+        </span>
+      </div>
+      <div className="h-mt-bar"><i style={{ width: (i / queue.length) * 100 + '%' }} /></div>
+
+      <AskBox q={cur} state={state === 'ask' ? '' : state}
+        typed={picked === null ? '' : String(picked)}
+        opts={opts} quad onAnswer={answer} disabled={state !== 'ask'} />
+
+      {state === 'wrong' && hookFor(cur.key) && (
+        <div className="h-mt-fb-h">💡 {hookFor(cur.key)}</div>
+      )}
     </div>
   );
 }
