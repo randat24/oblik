@@ -2535,6 +2535,24 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-mt-drill { display: flex; flex-direction: column; gap: 12px; }
 .h-mt-drill-h { display: flex; align-items: center; gap: 14px; }
 .h-mt-where { margin-left: auto; font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+/* правильні й промахи поруч із лічильником: видно, як іде підхід, і не
+   треба чекати підсумкового екрана, щоб зрозуміти, чи все гаразд */
+.h-mt-tally { display: flex; gap: 10px; margin-left: 12px; font-family: var(--mono); font-size: .9rem; }
+.h-mt-tally b.is-ok { color: var(--green); }
+.h-mt-tally b.is-bad { color: var(--red); }
+
+/* Плитки таблиць: вибрати «×7» і повторити його — одна дія, без уроків,
+   замків і попередніх умов */
+.h-mt-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.h-mt-tile {
+  min-height: 62px; font: inherit; font-family: var(--mono);
+  font-size: 1.25rem; font-weight: 700; cursor: pointer;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r);
+}
+.h-mt-tile:active { background: var(--panel-3); border-color: var(--amber); }
+.h-mt-tile.is-wide { color: var(--amber); }
+.h-mt-tiles-n { color: var(--muted); font-size: .74rem; margin-top: 8px; }
 .h-mt-clock { font-family: var(--mono); font-size: .72rem; color: var(--muted); text-align: right; margin-top: -6px; }
 .h-mt-stars { display: flex; gap: 6px; justify-content: center; }
 .h-mt-stars i { font-style: normal; font-size: 1.15rem; color: var(--panel-3); line-height: 1; }
@@ -2561,6 +2579,10 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-mt-nums { font-size: 2.1rem; font-weight: 300; letter-spacing: .03em; }
 
 .h-mt-opts { display: grid; gap: 9px; }
+/* чотири варіанти сіткою: кнопка вдвічі ширша за стовпчик із трьох, і
+   обидві колонки дістаються великим пальцем однієї руки */
+.h-mt-opts.is-quad { grid-template-columns: 1fr 1fr; gap: 10px; }
+.h-mt-opts.is-quad .h-mt-opt { min-height: 76px; font-size: 1.6rem; }
 .h-mt-opt {
   min-height: 62px; font: inherit; font-family: var(--mono);
   font-size: 1.45rem; font-weight: 700; cursor: pointer;
@@ -2581,6 +2603,8 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-mt-fb-t { font-size: .92rem; }
 .h-mt-fb-t b { font-family: var(--mono); font-size: 1.15rem; color: var(--text); }
 .h-mt-fb-h { font-family: var(--mono); font-size: .8rem; color: var(--text-dim); }
+/* та сама зачіпка, коли вона стоїть сама по собі, без блоку розбору */
+.h-mt-drill > .h-mt-fb-h { margin-top: 14px; text-align: center; line-height: 1.5; }
 
 /* Кубок */
 .h-mt-win { text-align: center; padding: 40px 16px 20px; }
