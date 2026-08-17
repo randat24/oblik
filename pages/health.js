@@ -4330,7 +4330,11 @@ function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
 
   useEffect(() => {
     if (!cur) return;
-    setOpts(options(cur, lesson.kind === 'table' ? lesson.table : 0));
+    // «правда-неправда» й «що більше» малюють свої кнопки самі — числових
+    // варіантів у них немає, і рахувати їх нема з чого
+    setOpts(cur.kind === 'tf' || cur.kind === 'cmp'
+      ? null
+      : options(cur, lesson.kind === 'table' ? lesson.table : 0));
     setPicked(null);
     started.current = Date.now();
   }, [cur]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -4426,28 +4430,20 @@ function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
         </div>
       )}
 
-      <div className="h-mt-qbox">
-        <QLine q={cur} shown={picked === null ? '' : picked}
-          state={picked === null ? '' : picked === cur.answer ? 'ok' : 'bad'} />
-      </div>
-
-      <div className="h-mt-opts">
-        {opts.map((o) => (
-          <button
-            key={o}
-            className={'h-mt-opt'
-              + (picked === null ? '' : o === cur.answer ? ' is-ok' : o === picked ? ' is-bad' : ' is-dim')}
-            onClick={() => answer(o)}
-            disabled={picked !== null}
-          >
-            {o}
-          </button>
-        ))}
-      </div>
+      {/*
+        Питання показує AskBox — той самий, що в тренуванні дня й аркаді.
+        Раніше урок малював рядок і варіанти сам, і це працювало доти, доки
+        траплялись самі лише звичайні приклади. «Правда-неправда» й «що
+        більше» приходили сюди з відповіддю true чи «eq» замість числа:
+        рядок виходив порожній, а серед кнопок стояла порожня.
+      */}
+      <AskBox q={cur} state={picked === null ? '' : picked === cur.answer ? 'right' : 'wrong'}
+        typed={picked === null ? '' : String(picked)}
+        opts={opts} onAnswer={answer} disabled={picked !== null} />
 
       {picked !== null && picked !== cur.answer && (
         <div className="h-mt-fb">
-          <div className="h-mt-fb-t">Не так. Правильно: <b>{cur.answer}</b></div>
+          <div className="h-mt-fb-t">Не так. Правильно: <b>{answerLabel(cur)}</b></div>
           {(() => {
             // Зачіпка краща за обчислення: поки приклад рахують, його не
             // памʼятають. Якщо зачіпки немає — показуємо, як порахувати.
@@ -4474,6 +4470,17 @@ function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
  * одне місце: і в тренуванні дня, і в аркаді питання виглядають однаково,
  * бо це буквально той самий код.
  */
+/**
+ * Правильна відповідь словами. У звичайного прикладу це число, у
+ * «правда-неправда» — так чи ні, у порівняння — сам вираз: показати там
+ * `true` означає не показати нічого.
+ */
+function answerLabel(q) {
+  if (q.kind === 'tf') return q.answer ? 'правда' : 'неправда';
+  if (q.kind === 'cmp') return q.answer === 'eq' ? 'порівну' : q.answer === 'left' ? q.left : q.right;
+  return q.answer;
+}
+
 function AskBox({ q, state, typed, opts, onAnswer, disabled, quad }) {
   if (q.kind === 'tf') {
     return (
@@ -4639,13 +4646,6 @@ function MultSpeed({ prog, items, onBack, onDone }) {
     // відповіді: окреме «готово» на кожен приклад — це зайвий дотик,
     // помножений на дванадцять.
     if (t.length >= String(cur.answer).length) setTimeout(() => commit(t), 50);
-  };
-
-  /** Що показати як правильну відповідь — залежить від виду питання */
-  const answerLabel = (q) => {
-    if (q.kind === 'tf') return q.answer ? 'правда' : 'неправда';
-    if (q.kind === 'cmp') return q.answer === 'eq' ? 'порівну' : q.answer === 'left' ? q.left : q.right;
-    return q.answer;
   };
 
   return (
@@ -4892,12 +4892,6 @@ function MultArcade({ prog, best, onBack, onDone }) {
     if (v === q.answer) hit(); else miss(v);
   };
 
-  const arcAnswer = (x) => {
-    if (x.kind === 'tf') return x.answer ? 'правда' : 'неправда';
-    if (x.kind === 'cmp') return x.answer === 'eq' ? 'порівну' : x.answer === 'left' ? x.left : x.right;
-    return x.answer;
-  };
-
   const press = (d) => {
     if (state !== 'ask') return;
     const t = (typed + d).slice(0, 3);
@@ -4986,7 +4980,7 @@ function MultArcade({ prog, best, onBack, onDone }) {
       {state === 'wrong' ? (
         <div className="h-mt-fb">
           <div className="h-mt-fb-t">
-            {typed ? 'Не так.' : 'Час вийшов.'} Правильно: <b>{arcAnswer(q)}</b>
+            {typed ? 'Не так.' : 'Час вийшов.'} Правильно: <b>{answerLabel(q)}</b>
           </div>
           {hookFor(q.key) && <div className="h-mt-fb-h">💡 {hookFor(q.key)}</div>}
           {lives > 0 && <button className="h-add" onClick={next}>Далі →</button>}
