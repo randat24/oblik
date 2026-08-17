@@ -3,7 +3,7 @@ import Head from 'next/head';
 // Чиста логіка тренажера — без звернень до таблиць, тому їде і в браузер
 import {
   LESSONS, FACTS, RUN, FAST_SEC, keyOf, known, auto, runOf, tipFor, options, question,
-  problems, slows, listQueue, daily, dayStreak, hardest, hookFor, practiceDays, DAY_SIZE,
+  problems, slows, dayQueue, daily, dayStreak, hardest, hookFor, practiceDays, DAY_SIZE,
   arcadeLevel, arcadeNext, ARCADE_LIVES, ARCADE_PER_LEVEL, ask, formFor,
   lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
   lessonProgress, partProgress, unlockedLessons,
@@ -4027,6 +4027,9 @@ function MultTab({ data, reload, toast }) {
           <button className={'h-mt-card' + (day.bad.length ? ' is-bad' : '')} onClick={() => setView({ s: 'day' })}>
             <span>Тренування дня</span>
             <span className="h-mt-card-b">
+              {DAY_SIZE} питань · блоками по 5, кожен двічі
+            </span>
+            <span className="h-mt-card-b">
               {[
                 day.bad.length ? `${day.bad.length} з помилками` : '',
                 day.rep.length ? `${day.rep.length} повторити` : '',
@@ -4048,8 +4051,8 @@ function MultTab({ data, reload, toast }) {
           <span>🎮 Рівні</span>
           <span className="h-mt-quiz-b">
             {num(data.goals?.arcadeBest)
-              ? `дійшли до ${num(data.goals.arcadeBest)}-го · три життя, далі — швидше`
-              : 'три життя, з кожним рівнем швидше'}
+              ? `дійшли до ${num(data.goals.arcadeBest)}-го · лише вивчене, чистий рівень відкриває складніше`
+              : 'лише вивчене · чистий рівень відкриває складніше'}
           </span>
         </button>
       )}
@@ -4550,7 +4553,7 @@ function MultWin({ lesson, onBack }) {
  * автоматизму, коли відповідь приходить швидше ніж за три секунди.
  */
 function MultSpeed({ prog, items, onBack, onDone }) {
-  const [queue] = useState(() => listQueue(items, DAY_SIZE));
+  const [queue] = useState(() => dayQueue(items, DAY_SIZE));
   const [i, setI] = useState(0);
   const [typed, setTyped] = useState('');
   const [state, setState] = useState('ask');
@@ -4657,15 +4660,17 @@ function MultSpeed({ prog, items, onBack, onDone }) {
  * зупиняє гра — і тому повторів виходить утричі більше, ніж збирався
  * зробити той, хто заходив «просто повторити».
  *
- * Матеріал — вивчене, кожне п'яте питання нове, але лише з відкритих
- * уроків: кидати 8×8 тому, хто дійшов до п'ятірки, нечесно.
+ * Матеріал — саме вивчене: гра тут для того, щоб довести до блиску те, що
+ * вже знаєш. Невивчене підмішується лише після рівня, закритого без жодного
+ * промаху, — і теж лише з відкритих уроків: кидати 8×8 тому, хто дійшов до
+ * п'ятірки, нечесно.
  */
 function MultArcade({ prog, best, onBack, onDone }) {
   const [lvl, setLvl] = useState(1);
   const [idx, setIdx] = useState(0);          // питань на цьому рівні
   const [lives, setLives] = useState(ARCADE_LIVES);
   const [score, setScore] = useState(0);
-  const [q, setQ] = useState(() => arcadeNext(prog, 1, 0));
+  const [q, setQ] = useState(() => arcadeNext(prog, 1, 0, false));
   const [opts, setOpts] = useState([]);
   const [typed, setTyped] = useState('');
   const [state, setState] = useState('ask');  // ask | right | wrong | levelup | over
@@ -4673,6 +4678,14 @@ function MultArcade({ prog, best, onBack, onDone }) {
   const started = useRef(Date.now());
   const resRef = useRef([]);
   const dead = useRef(false);
+  /*
+   * Чи був попередній рівень чистим. Поки ні — трапляється лише вивчене:
+   * аркада тут для того, щоб довести до блиску знайоме. Пройшов рівень
+   * без жодного промаху — заслужив складніше, і тоді підмішується те, що
+   * знаєш гірше.
+   */
+  const clean = useRef(true);      // поточний рівень ще без промахів
+  const [earned, setEarned] = useState(false);   // попередній закрито ідеально
 
   const cfg = arcadeLevel(lvl);
 
@@ -4724,6 +4737,7 @@ function MultArcade({ prog, best, onBack, onDone }) {
   function miss(v) {
     if (dead.current) return;
     record(false);
+    clean.current = false;
     setTyped(v === null ? '' : String(v));
     setState('wrong');
     const rest = lives - 1;
@@ -4738,16 +4752,19 @@ function MultArcade({ prog, best, onBack, onDone }) {
     const n = idx + 1;
     setTimeout(() => {
       if (n >= ARCADE_PER_LEVEL) {
+        const won = clean.current;
+        setEarned(won);
         setState('levelup');
         setTimeout(() => {
+          clean.current = true;
           setLvl((l) => l + 1);
           setIdx(0);
-          setQ(arcadeNext(prog, lvl + 1, 0));
+          setQ(arcadeNext(prog, lvl + 1, 0, won));
           setState('ask');
         }, 1100);
       } else {
         setIdx(n);
-        setQ(arcadeNext(prog, lvl, n));
+        setQ(arcadeNext(prog, lvl, n, earned));
         setState('ask');
       }
     }, 340);
@@ -4775,9 +4792,12 @@ function MultArcade({ prog, best, onBack, onDone }) {
     if (dead.current) return;
     const n = idx + 1;
     if (n >= ARCADE_PER_LEVEL) {
-      setLvl((l) => l + 1); setIdx(0); setQ(arcadeNext(prog, lvl + 1, 0));
+      // після промаху рівень уже не чистий — наступний знову зі знайомого
+      setEarned(false);
+      clean.current = true;
+      setLvl((l) => l + 1); setIdx(0); setQ(arcadeNext(prog, lvl + 1, 0, false));
     } else {
-      setIdx(n); setQ(arcadeNext(prog, lvl, n));
+      setIdx(n); setQ(arcadeNext(prog, lvl, n, earned));
     }
     setState('ask');
   };
@@ -4802,12 +4822,19 @@ function MultArcade({ prog, best, onBack, onDone }) {
   if (state === 'levelup') {
     return (
       <div className="h-mt-win">
-        <div className="h-mt-cup">⚡</div>
+        <div className="h-mt-cup">{earned ? '🏅' : '⚡'}</div>
         <h2>Рівень {lvl + 1}</h2>
         <p>
           {arcadeLevel(lvl + 1).seconds.toFixed(1)} с на відповідь
           {arcadeLevel(lvl + 1).withDiv && !cfg.withDiv ? ' · додається ділення' : ''}
           {arcadeLevel(lvl + 1).typed && !cfg.typed ? ' · тепер набираємо цифри' : ''}
+        </p>
+        {/* чистий рівень — єдиний спосіб дістати складніше: доки є промахи,
+            аркада лишається повторенням знайомого */}
+        <p className="h-mt-earned">
+          {earned
+            ? 'Рівень без жодного промаху — далі підмішаємо те, що знаєте гірше.'
+            : 'Був промах — далі знову лише знайоме. Пройдіть рівень чисто, щоб додалося складніше.'}
         </p>
       </div>
     );

@@ -2587,6 +2587,9 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-mt-cup { font-size: 3.4rem; line-height: 1; }
 .h-mt-win h2 { margin: 18px 0 8px; font-size: 1.2rem; }
 .h-mt-win p { color: var(--muted); font-size: .88rem; line-height: 1.55; margin: 0 0 24px; }
+/* умова, за якої аркада додає складніше: сказана до наступного рівня,
+   а не після — інакше правило доводиться вгадувати з поведінки */
+.h-mt-earned { font-size: .8rem; max-width: 30ch; margin: -14px auto 0; }
 
 /* Карта таблиці */
 .h-mt-grid-w { overflow-x: auto; -webkit-overflow-scrolling: touch; }
