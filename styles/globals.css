@@ -2518,6 +2518,33 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   background: var(--amber-dim); border: 1px solid var(--amber);
 }
 .h-mt-groups i { width: 9px; height: 9px; border-radius: 50%; background: var(--amber); display: block; }
+
+/* Приклад прямокутником, розрізаним по п'ятірці. Два кольори — це не
+   прикраса: саме по межі кольорів приклад і розкладається на два доданки,
+   які легше згадати, ніж результат. */
+.h-fa { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.h-fa-pair { display: flex; align-items: center; gap: 10px; }
+.h-fa-b { display: grid; gap: 5px; }
+.h-fa-b i { width: 13px; height: 13px; border-radius: 50%; display: block; }
+.h-fa-b.is-one i { background: var(--amber); }
+.h-fa-b.is-two i { background: var(--blue); }
+.h-fa-plus { font-family: var(--mono); font-size: 1.1rem; color: var(--muted); }
+.h-fa-sum {
+  display: flex; align-items: baseline; gap: 7px;
+  font-family: var(--mono); font-size: 1.15rem; color: var(--muted);
+}
+.h-fa-sum b { font-size: 1.3rem; color: var(--text); }
+.h-fa-sum b.is-one { color: var(--amber); }
+.h-fa-sum b.is-two { color: var(--blue); }
+.h-fa-n { font-family: var(--mono); font-size: .72rem; color: var(--muted); }
+
+/* У розборі помилки місця менше — крапки дрібніші, дрібниці зайві */
+.h-fa.is-small { gap: 7px; margin-top: 12px; }
+.h-fa.is-small .h-fa-b { gap: 4px; }
+.h-fa.is-small .h-fa-b i { width: 9px; height: 9px; }
+.h-fa.is-small .h-fa-sum { font-size: .95rem; }
+.h-fa.is-small .h-fa-sum b { font-size: 1.05rem; }
+.h-fa.is-small .h-fa-n { display: none; }
 .h-mt-line { margin-top: 22px; }
 .h-mt-line .h-cap { text-align: left; }
 .h-mt-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -2553,6 +2580,35 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-mt-tile:active { background: var(--panel-3); border-color: var(--amber); }
 .h-mt-tile.is-wide { color: var(--amber); }
 .h-mt-tiles-n { color: var(--muted); font-size: .74rem; margin-top: 8px; }
+
+/* Важка дюжина — дванадцять фактів, які доводиться саме памʼятати */
+.h-mt-doz {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 14px; font: inherit; color: var(--text);
+}
+.h-mt-doz:active { background: var(--panel-3); }
+.h-mt-doz-n { display: block; font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+.h-mt-doz-n b { font-size: 1.5rem; color: var(--amber); margin-right: 4px; }
+.h-mt-doz-g { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 0; }
+.h-mt-doz-g i {
+  font-style: normal; font-family: var(--mono); font-size: .74rem;
+  padding: 3px 7px; border-radius: 999px;
+  background: var(--panel-3); border: 1px solid var(--line); color: var(--muted);
+}
+.h-mt-doz-g i.is-on { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+.h-mt-doz-c { display: block; color: var(--muted); font-size: .74rem; line-height: 1.45; margin-top: 10px; }
+
+/* Вмикач голосу — поруч із тренуваннями, бо вмикають його не «взагалі»,
+   а залежно від того, чи можна зараз шуміти */
+.h-mt-voice {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  margin-top: 14px; padding: 11px 13px; font: inherit; font-size: .84rem;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r-sm); color: var(--muted);
+}
+.h-mt-voice.is-on { border-color: var(--green); color: var(--green); }
+.h-mt-voice span { display: block; color: var(--muted); font-size: .72rem; margin-top: 3px; }
 .h-mt-clock { font-family: var(--mono); font-size: .72rem; color: var(--muted); text-align: right; margin-top: -6px; }
 .h-mt-stars { display: flex; gap: 6px; justify-content: center; }
 .h-mt-stars i { font-style: normal; font-size: 1.15rem; color: var(--panel-3); line-height: 1; }
