@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 // Чиста логіка тренажера — без звернень до таблиць, тому їде і в браузер
 import {
-  LESSONS, FACTS, RUN, FAST_SEC, keyOf, known, auto, runOf, tipFor, options, question,
+  LESSONS, FACTS, RUN, FAST_SEC, keyOf, known, auto, runOf, tipFor, options, question, factOf,
   problems, slows, dayQueue, daily, dayStreak, hardest, hookFor, practiceDays, DAY_SIZE,
-  QUICK_TILES, QUICK_SIZE, quickQueue,
+  QUICK_TILES, QUICK_SIZE, quickQueue, HARD, hardDone,
   arcadeLevel, arcadeNext, ARCADE_LIVES, ARCADE_PER_LEVEL, ask, formFor,
   lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
   lessonProgress, partProgress, unlockedLessons,
@@ -4063,6 +4063,27 @@ function MultTab({ data, reload, toast }) {
         «×7» і десять разів його проговорити, не питаючи дозволу. Тому
         плитки нічого не вимагають і ніколи не замкнені.
       */}
+      {/*
+        Важка дюжина. «Вивчено 12 із 72» — число чесне, але від нього руки
+        опускаються; насправді більшість фактів закривається правилами, а
+        пам'ятати доводиться дванадцять. До дванадцяти видимо близько.
+      */}
+      <div className="h-sec"><h3>Важка дюжина</h3></div>
+      <button className="h-mt-doz" onClick={() => setView({ s: 'quick', tile: QUICK_TILES.find((t) => t.key === 'hard') })}>
+        <span className="h-mt-doz-n">
+          <b>{hardDone(prog)}</b> з {HARD.length}
+        </span>
+        <span className="h-mt-doz-g">
+          {HARD.map((k) => (
+            <i key={k} className={known(prog, k, 'mul') ? 'is-on' : ''}>{k}</i>
+          ))}
+        </span>
+        <span className="h-mt-doz-c">
+          Решта таблиці закривається правилами. Ці дванадцять доводиться
+          саме памʼятати — вони й вирішують.
+        </span>
+      </button>
+
       <div className="h-sec"><h3>Повторити таблицю</h3></div>
       <div className="h-mt-tiles">
         {QUICK_TILES.map((t) => (
@@ -4073,6 +4094,8 @@ function MultTab({ data, reload, toast }) {
         ))}
       </div>
       <div className="h-mt-tiles-n">{QUICK_SIZE} прикладів · без таймера</div>
+
+      <VoiceToggle />
 
       {done > 0 && (
         <button className="h-mt-arcade" onClick={() => setView({ s: 'arcade' })}>
@@ -4255,11 +4278,10 @@ function MultLook({ lesson, part, n, onStart, onBack }) {
       <div className="h-mt-shot">
         <div className="h-mt-eqbig">{t} × {b} = <b>{t * b}</b></div>
 
-        <div className="h-mt-groups">
-          {[...Array(b)].map((_, g) => (
-            <span key={g}>{[...Array(t)].map((__, d) => <i key={d} />)}</span>
-          ))}
-        </div>
+        {/* Прямокутник замість купок по t. Купки показують, що множення —
+            це додавання; прямокутник показує ще й як дійти до відповіді,
+            не перелічуючи все з початку: п'ять стовпчиків і решта. */}
+        <FactArray a={t} b={b} />
 
         <div className="h-mt-line">
           <div className="h-cap">Додавай по {t}</div>
@@ -4363,6 +4385,7 @@ function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
       text: cur.text, answer: cur.answer,
     }];
     if (part || fix) runRef.current = { ...runRef.current, [k]: right ? (runRef.current[k] || 0) + 1 : 0 };
+    sayFact(cur);
     setPicked(v);
     setResults(resRef.current);
     setRuns(runRef.current);
@@ -4455,6 +4478,8 @@ function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
             }
             return null;
           })()}
+          {/* і сам приклад прямокутником: слова пояснюють, картинка показує */}
+          <FactArray {...factOf(cur.key)} small />
           <button className="h-add" onClick={() => step()}>Далі →</button>
         </div>
       )}
@@ -4470,6 +4495,158 @@ function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
  * одне місце: і в тренуванні дня, і в аркаді питання виглядають однаково,
  * бо це буквально той самий код.
  */
+/* ---------- Голос ---------- */
+
+/**
+ * Приклад, сказаний уголос.
+ *
+ * Прочитане очима й почуте вухами лягають у різну памʼять, і та, що чує,
+ * у таблиці працює краще: «сім на вісім — пʼятдесят шість» згадується
+ * ритмом, як рядок вірша, а не як картинка. Саме тому таблицю споконвіку
+ * промовляли вголос, а не переписували.
+ *
+ * Синтез мовлення вбудований у браузер — ні ключів, ні мережі, ні
+ * бібліотек. Українського голосу може не бути; тоді просто мовчимо, бо
+ * читати українські слова англійським голосом гірше, ніж не читати.
+ */
+const SAY_KEY = 'oblik_mult_voice';
+
+function voiceOk() {
+  return typeof window !== 'undefined' && 'speechSynthesis' in window;
+}
+
+/** Український голос, якщо система його має */
+function ukVoice() {
+  const all = window.speechSynthesis.getVoices() || [];
+  return all.find((v) => /^uk/i.test(v.lang)) || null;
+}
+
+function say(text) {
+  if (!voiceOk()) return;
+  const v = ukVoice();
+  if (!v) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.voice = v;
+  u.lang = v.lang;
+  u.rate = 0.95;
+  // нове питання перебиває попереднє: черга з десяти прикладів, які
+  // дочитуються вже після того, як ви відповіли, — це не допомога
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(u);
+}
+
+/*
+ * Прапорець читаємо просто зі сховища, а не тягнемо пропсом крізь п'ять
+ * компонентів: це налаштування, яке нікого, крім самого голосу, не
+ * стосується.
+ */
+const voiceOn = () => typeof window !== 'undefined' && localStorage.getItem(SAY_KEY) === '1';
+
+/** «7×8» уголос: саме як приклад, а не як два числа поспіль */
+function sayFact(q) {
+  if (!q || !voiceOn()) return;
+  if (q.kind && q.kind !== 'pick') return;
+  const [x, y] = String(q.key).split('×').map(Number);
+  if (!x || !y) return;
+  if (q.mode === 'div') say(`${x * y} поділити на ${x} — ${y}`);
+  else say(`${x} на ${y} — ${x * y}`);
+}
+
+/**
+ * Вмикач голосу. Стоїть поруч із тренуваннями, а не в налаштуваннях: його
+ * вмикають і вимикають залежно від того, де ви зараз — самі вдома чи в
+ * кімнаті, де сплять.
+ */
+function VoiceToggle() {
+  const [on, setOn] = useState(false);
+  const [has, setHas] = useState(true);
+
+  useEffect(() => {
+    if (!voiceOk()) { setHas(false); return; }
+    setOn(voiceOn());
+    // у частині браузерів список голосів приходить не одразу
+    const check = () => setHas(!!ukVoice());
+    check();
+    window.speechSynthesis.addEventListener?.('voiceschanged', check);
+    return () => window.speechSynthesis.removeEventListener?.('voiceschanged', check);
+  }, []);
+
+  if (!has) return null;
+
+  return (
+    <button
+      className={'h-mt-voice' + (on ? ' is-on' : '')}
+      onClick={() => {
+        const next = !on;
+        localStorage.setItem(SAY_KEY, next ? '1' : '0');
+        setOn(next);
+        if (next) say('сім на вісім — пʼятдесят шість');
+      }}
+    >
+      {on ? '🔊 Голос увімкнено' : '🔇 Голос вимкнено'}
+      <span>приклад звучить уголос — вухами таблиця вчиться краще</span>
+    </button>
+  );
+}
+
+/**
+ * Приклад як прямокутник, розрізаний по п'ятірці.
+ *
+ * Уся решта тренажера символьна: 7 × 8 — це два знаки й відповідь, яку
+ * або згадав, або ні. Прямокутник із 56 крапок, розрізаний на 7×5 і 7×3,
+ * показує, чому саме 56, і — головне — дає спосіб дійти до відповіді,
+ * коли вона не спливла: 35 і ще 21.
+ *
+ * Ріжемо завжди по п'ятірці, хоч для дев'ятки й зручніше «десять мінус
+ * одне». Один інструмент, застосовний до всього, кращий за вісім різних:
+ * його встигаєш дістати, поки згадуєш, який із восьми тут потрібен.
+ */
+function FactArray({ a, b, small }) {
+  // рядків беремо менший множник: прямокутник виходить широким, а не
+  // високим, і на телефоні його видно цілком
+  const rows = Math.min(a, b);
+  const cols = Math.max(a, b);
+  const cut = cols > 5 ? 5 : 0;
+  const rest = cols - cut;
+
+  const block = (n, cls) => (
+    <div className={'h-fa-b ' + cls} style={{ gridTemplateColumns: `repeat(${n}, 1fr)` }}>
+      {[...Array(rows * n)].map((_, k) => <i key={k} />)}
+    </div>
+  );
+
+  return (
+    <div className={'h-fa' + (small ? ' is-small' : '')}>
+      <div className="h-fa-pair">
+        {cut ? (
+          <>
+            {block(cut, 'is-one')}
+            <span className="h-fa-plus">+</span>
+            {block(rest, 'is-two')}
+          </>
+        ) : block(cols, 'is-one')}
+      </div>
+      {/* Рядок суми потрібен рівно там, де є що розкладати. Коли множник
+          не більший за п'ять, прямокутник видно цілком — і «2 × 2 = 4» під
+          таким самим написом угорі лише займає місце. */}
+      {cut > 0 && (
+        <>
+          <div className="h-fa-sum">
+            <b className="is-one">{rows * cut}</b>
+            <span>+</span>
+            <b className="is-two">{rows * rest}</b>
+            <span>=</span>
+            <b>{a * b}</b>
+          </div>
+          <div className="h-fa-n">
+            {rows} × {cut} = {rows * cut} · {rows} × {rest} = {rows * rest}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /**
  * Правильна відповідь словами. У звичайного прикладу це число, у
  * «правда-неправда» — так чи ні, у порівняння — сам вираз: показати там
@@ -4742,6 +4919,9 @@ function MultQuick({ tile, onBack, onDone }) {
     }];
     setPicked(v);
     setState(right ? 'right' : 'wrong');
+    // промах озвучуємо теж — саме тоді почути правильну відповідь
+    // найкорисніше
+    sayFact(cur);
     setTimeout(() => setI((x) => x + 1), right ? 520 : 1700);
   };
 
@@ -4761,8 +4941,11 @@ function MultQuick({ tile, onBack, onDone }) {
         typed={picked === null ? '' : String(picked)}
         opts={opts} quad onAnswer={answer} disabled={state !== 'ask'} />
 
-      {state === 'wrong' && hookFor(cur.key) && (
-        <div className="h-mt-fb-h">💡 {hookFor(cur.key)}</div>
+      {state === 'wrong' && (
+        <div className="h-mt-fb">
+          {hookFor(cur.key) && <div className="h-mt-fb-h">💡 {hookFor(cur.key)}</div>}
+          <FactArray {...factOf(cur.key)} small />
+        </div>
       )}
     </div>
   );
