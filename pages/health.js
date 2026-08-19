@@ -4,7 +4,7 @@ import Head from 'next/head';
 import {
   LESSONS, FACTS, RUN, FAST_SEC, keyOf, known, auto, runOf, tipFor, options, question, factOf,
   problems, slows, dayQueue, daily, dayStreak, hardest, hookFor, practiceDays, DAY_SIZE,
-  QUICK_TILES, QUICK_SIZE, quickQueue, HARD, hardDone,
+  QUICK_TILES, QUICK_SIZE, quickQueue, HARD, hardDone, stats, nextNew, NEW_PER_DAY,
   arcadeLevel, arcadeNext, ARCADE_LIVES, ARCADE_PER_LEVEL, ask, formFor,
   lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
   lessonProgress, partProgress, unlockedLessons,
@@ -4041,6 +4041,7 @@ function MultTab({ data, reload, toast }) {
             </span>
             <span className="h-mt-card-b">
               {[
+                day.fresh.length ? `${day.fresh.length} нових` : '',
                 day.bad.length ? `${day.bad.length} з помилками` : '',
                 day.rep.length ? `${day.rep.length} повторити` : '',
                 day.slow.length ? `${day.slow.length} розігнати` : '',
@@ -4063,6 +4064,54 @@ function MultTab({ data, reload, toast }) {
         «×7» і десять разів його проговорити, не питаючи дозволу. Тому
         плитки нічого не вимагають і ніколи не замкнені.
       */}
+      {/*
+        Аналітика. Не «скільки відсотків пройдено», а що саме зараз із
+        таблицею: чого ще не бачив, що вчиться, що знаєш і що вже
+        відповідається не думаючи. Чотири щаблі — і видно, куди рухається
+        робота, а не лише те, скільки її лишилось.
+      */}
+      {(() => {
+        const st = stats(prog);
+        const next = nextNew(prog, NEW_PER_DAY);
+        const parts = [
+          ['auto', 'автомат', st.auto],
+          ['known', 'знаю', st.known],
+          ['learning', 'вчу', st.learning],
+          ['new', 'не бачив', st.new],
+        ];
+        return (
+          <>
+            <div className="h-sec"><h3>Як справи</h3></div>
+            <div className="h-mt-an">
+              <div className="h-mt-an-bar">
+                {parts.map(([k, , n]) => n > 0 && (
+                  <i key={k} className={'is-' + k} style={{ flexGrow: n }} />
+                ))}
+              </div>
+              <div className="h-mt-an-l">
+                {parts.map(([k, label, n]) => (
+                  <span key={k} className={'is-' + k}><b>{n}</b> {label}</span>
+                ))}
+              </div>
+              <div className="h-mt-an-r">
+                <span>Точність <b>{Math.round(st.accuracy * 100)}%</b>
+                  {st.answers > 0 && <i> з {st.answers} відповідей</i>}</span>
+                {st.timed > 0 && (
+                  <span>Середній час <b>{st.avgTime.toFixed(1)} с</b>
+                    <i> · до {FAST_SEC} с — {st.fast}</i></span>
+                )}
+              </div>
+              {next.length > 0 && (
+                <div className="h-mt-an-next">
+                  Далі вчимо: <b>{next.map((x) => x.fact.key).join(', ')}</b>
+                  {' — вони самі зʼявляться в тренуванні дня'}
+                </div>
+              )}
+            </div>
+          </>
+        );
+      })()}
+
       {/*
         Важка дюжина. «Вивчено 12 із 72» — число чесне, але від нього руки
         опускаються; насправді більшість фактів закривається правилами, а
@@ -4515,19 +4564,25 @@ function voiceOk() {
   return typeof window !== 'undefined' && 'speechSynthesis' in window;
 }
 
-/** Український голос, якщо система його має */
+/**
+ * Чим говорити. Українського голосу в системі може не бути — на iOS його
+ * треба окремо завантажити. Тоді беремо будь-який слов'янський: числа
+ * ним читаються зрозуміло, а мовчати гірше, ніж мати легкий акцент.
+ */
 function ukVoice() {
   const all = window.speechSynthesis.getVoices() || [];
-  return all.find((v) => /^uk/i.test(v.lang)) || null;
+  return all.find((v) => /^uk/i.test(v.lang))
+    || all.find((v) => /^(ru|be|pl)/i.test(v.lang))
+    || all.find((v) => v.default)
+    || all[0]
+    || null;
 }
 
 function say(text) {
   if (!voiceOk()) return;
   const v = ukVoice();
-  if (!v) return;
   const u = new SpeechSynthesisUtterance(text);
-  u.voice = v;
-  u.lang = v.lang;
+  if (v) { u.voice = v; u.lang = v.lang; }
   u.rate = 0.95;
   // нове питання перебиває попереднє: черга з десяти прикладів, які
   // дочитуються вже після того, як ви відповіли, — це не допомога
@@ -4560,12 +4615,17 @@ function sayFact(q) {
 function VoiceToggle() {
   const [on, setOn] = useState(false);
   const [has, setHas] = useState(true);
+  const [uk, setUk] = useState(true);
 
   useEffect(() => {
     if (!voiceOk()) { setHas(false); return; }
     setOn(voiceOn());
     // у частині браузерів список голосів приходить не одразу
-    const check = () => setHas(!!ukVoice());
+    const check = () => {
+      const all = window.speechSynthesis.getVoices() || [];
+      setHas(all.length > 0);
+      setUk(all.some((v) => /^uk/i.test(v.lang)));
+    };
     check();
     window.speechSynthesis.addEventListener?.('voiceschanged', check);
     return () => window.speechSynthesis.removeEventListener?.('voiceschanged', check);
@@ -4584,7 +4644,12 @@ function VoiceToggle() {
       }}
     >
       {on ? '🔊 Голос увімкнено' : '🔇 Голос вимкнено'}
-      <span>приклад звучить уголос — вухами таблиця вчиться краще</span>
+      <span>
+        {uk
+          ? 'приклад звучить уголос — вухами таблиця вчиться краще'
+          : 'українського голосу в системі немає, читає той, що є. '
+            + 'iPhone: Налаштування → Універсальний доступ → Вимовляння → Голоси'}
+      </span>
     </button>
   );
 }
@@ -4922,7 +4987,10 @@ function MultQuick({ tile, onBack, onDone }) {
     // промах озвучуємо теж — саме тоді почути правильну відповідь
     // найкорисніше
     sayFact(cur);
-    setTimeout(() => setI((x) => x + 1), right ? 520 : 1700);
+    // Правильну гортаємо самі — пауза рівно щоб побачити зелене. Промах
+    // не гортаємо: під ним стоїть розбір із прямокутником, і поки його
+    // читають, екран не має тікати. Далі — коли людина сама скаже.
+    if (right) setTimeout(() => setI((x) => x + 1), 520);
   };
 
   return (
@@ -4943,8 +5011,10 @@ function MultQuick({ tile, onBack, onDone }) {
 
       {state === 'wrong' && (
         <div className="h-mt-fb">
+          <div className="h-mt-fb-t">Не так. Правильно: <b>{cur.answer}</b></div>
           {hookFor(cur.key) && <div className="h-mt-fb-h">💡 {hookFor(cur.key)}</div>}
           <FactArray {...factOf(cur.key)} small />
+          <button className="h-add" onClick={() => setI(i + 1)}>Далі →</button>
         </div>
       )}
     </div>

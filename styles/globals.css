@@ -2581,6 +2581,40 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-mt-tile.is-wide { color: var(--amber); }
 .h-mt-tiles-n { color: var(--muted); font-size: .74rem; margin-top: 8px; }
 
+/* Аналітика: чотири щаблі одним рядком. Смуга показує не «скільки
+   пройдено», а куди рухається робота — від «не бачив» до автоматизму. */
+.h-mt-an {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 14px;
+}
+.h-mt-an-bar { display: flex; gap: 2px; height: 10px; border-radius: 999px; overflow: hidden; }
+.h-mt-an-bar i { display: block; }
+.h-mt-an-bar i.is-auto { background: var(--green); }
+.h-mt-an-bar i.is-known { background: var(--green-dim); }
+.h-mt-an-bar i.is-learning { background: var(--amber); }
+.h-mt-an-bar i.is-new { background: var(--panel-3); }
+.h-mt-an-l {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px;
+  font-family: var(--mono); font-size: .74rem; color: var(--muted);
+}
+.h-mt-an-l b { font-size: .9rem; margin-right: 3px; }
+.h-mt-an-l .is-auto b { color: var(--green); }
+.h-mt-an-l .is-known b { color: var(--text-dim); }
+.h-mt-an-l .is-learning b { color: var(--amber); }
+.h-mt-an-l .is-new b { color: var(--gray); }
+.h-mt-an-r {
+  display: flex; flex-direction: column; gap: 4px; margin-top: 12px;
+  padding-top: 12px; border-top: 1px solid var(--line);
+  font-family: var(--mono); font-size: .76rem; color: var(--muted);
+}
+.h-mt-an-r b { color: var(--text); }
+.h-mt-an-r i { font-style: normal; color: var(--gray); }
+.h-mt-an-next {
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);
+  font-size: .76rem; line-height: 1.45; color: var(--muted);
+}
+.h-mt-an-next b { font-family: var(--mono); color: var(--amber); }
+
 /* Важка дюжина — дванадцять фактів, які доводиться саме памʼятати */
 .h-mt-doz {
   display: block; width: 100%; text-align: left; cursor: pointer;
