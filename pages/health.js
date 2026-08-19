@@ -10,6 +10,7 @@ import {
   lessonProgress, partProgress, unlockedLessons,
   buildSession, partQueue, applyResults,
 } from '../lib/mult';
+import { pace, forecast, verdicts } from '../lib/weight';
 
 /*
  * Особистий розділ здоров'я. Свідомо окрема сторінка з власним кодом:
@@ -2336,6 +2337,79 @@ function CopyDayModal({ date, days, onClose, onDone }) {
 
 /* ---------- Вкладка «Вага» ---------- */
 
+/**
+ * Розумна вага: швидкість, темп, прогноз і висновки.
+ *
+ * Три числа вгорі — це відповідь на «чи туди я йду»: скільки кілограмів
+ * на тиждень, який це відсоток маси й коли за таким темпом буде ціль.
+ * Нижче — висновки словами, і кожен або хвалить за конкретне число, або
+ * називає дію. «Стежте за харчуванням» тут не висновок.
+ */
+function SmartWeight({ days, body, goals, last }) {
+  const goal = num(goals.weight);
+  const kcalGoal = num(goals.kcal);
+  const w = last ? last.weight : 0;
+
+  const p = pace(days, w);
+  const f = forecast(days, goal);
+  const list = verdicts({ days, body, goal, kcalGoal, weight: w });
+
+  // менш як за тиждень записів рахувати нема чого — і сказати про це
+  // чесніше, ніж показати швидкість, зібрану з двох зважувань
+  if (!p) {
+    return (
+      <div className="h-sw">
+        <div className="h-sw-none">
+          Зважуйтесь щодня — за тиждень записів тут з’явиться швидкість,
+          темп і прогноз. Денна вага стрибає, а висновки робить лише лінія.
+        </div>
+      </div>
+    );
+  }
+
+  const paceWord = {
+    fast: 'зашвидко',
+    good: 'здоровий темп',
+    slow: 'повільно',
+    flat: 'стоїть',
+  }[p.level];
+
+  return (
+    <div className="h-sw">
+      <div className="h-sw-top">
+        <div className="h-sw-c">
+          <div className="h-sw-l">За тиждень</div>
+          <div className={'h-sw-v is-' + p.dir}>
+            {p.kgWeek > 0 ? '+' : ''}{n1(p.kgWeek)} <i>кг</i>
+          </div>
+          <div className="h-sw-s">за {Math.round(p.days)} діб</div>
+        </div>
+        <div className="h-sw-c">
+          <div className="h-sw-l">Темп</div>
+          <div className={'h-sw-v is-' + p.level}>{n1(p.pctWeek)}<i>%</i></div>
+          <div className="h-sw-s">{paceWord}</div>
+        </div>
+        <div className="h-sw-c">
+          <div className="h-sw-l">Ціль</div>
+          <div className="h-sw-v">
+            {f?.done ? '✓' : f?.weeks ? Math.round(f.weeks) : '—'}
+            {f?.weeks && <i>тиж.</i>}
+          </div>
+          <div className="h-sw-s">{f?.date || (f?.stalled ? 'не наближається' : '—')}</div>
+        </div>
+      </div>
+
+      {list.length > 0 && (
+        <div className="h-sw-v-list">
+          {list.map((v, i) => (
+            <div key={i} className={'h-sw-say is-' + v.tone}>{v.text}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WeightTab({ data, reload }) {
   const [open, setOpen] = useState(null);   // дата, яку редагуємо, або 'new'
   const [shot, setShot] = useState(null);
@@ -2396,6 +2470,14 @@ function WeightTab({ data, reload }) {
           </div>
         )}
       </div>
+
+      {/*
+        Розумна вага. Число на вагах — найменш корисне, що вони дають:
+        денна вага гуляє на кілограм від солі й води, а жиру за добу не
+        набирається більше ніж сто-двісті грамів фізично. Тут з тих самих
+        записів рахується те, що справді відповідає на «чи туди я йду».
+      */}
+      <SmartWeight days={data.days} body={data.body} goals={g} last={last} />
 
       {avg7 !== null && (
         <div className="h-avg">

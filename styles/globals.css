@@ -2581,6 +2581,39 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-mt-tile.is-wide { color: var(--amber); }
 .h-mt-tiles-n { color: var(--muted); font-size: .74rem; margin-top: 8px; }
 
+/* Розумна вага: швидкість, темп, прогноз — і висновки словами */
+.h-sw {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 14px; margin-top: 12px;
+}
+.h-sw-none { color: var(--muted); font-size: .8rem; line-height: 1.5; }
+.h-sw-top { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.h-sw-c { min-width: 0; }
+.h-sw-l { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.h-sw-v {
+  font-family: var(--mono); font-size: 1.5rem; font-weight: 700;
+  color: var(--text); margin-top: 3px; white-space: nowrap;
+}
+.h-sw-v i { font-style: normal; font-size: .68rem; font-weight: 400; color: var(--muted); margin-left: 2px; }
+.h-sw-v.is-down { color: var(--green); }
+.h-sw-v.is-up { color: var(--amber); }
+.h-sw-v.is-fast { color: var(--red); }
+.h-sw-v.is-good { color: var(--green); }
+.h-sw-v.is-slow, .h-sw-v.is-flat { color: var(--amber); }
+.h-sw-s { font-size: .68rem; color: var(--gray); margin-top: 2px; overflow-wrap: anywhere; }
+
+.h-sw-v-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+/* Смужка кольором ліворуч: похвала, попередження й пояснення читаються
+   по-різному, і плутати їх не варто */
+.h-sw-say {
+  font-size: .82rem; line-height: 1.5; color: var(--text-dim);
+  padding: 9px 11px; border-radius: var(--r-sm);
+  background: var(--panel-3); border-left: 3px solid var(--line);
+}
+.h-sw-say.is-ok { border-left-color: var(--green); }
+.h-sw-say.is-warn { border-left-color: var(--amber); }
+.h-sw-say.is-note { border-left-color: var(--blue); }
+
 /* Аналітика: чотири щаблі одним рядком. Смуга показує не «скільки
    пройдено», а куди рухається робота — від «не бачив» до автоматизму. */
 .h-mt-an {
