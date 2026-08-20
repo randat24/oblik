@@ -1661,6 +1661,19 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .h-wgoal-n { margin-top: 8px; font-size: .8rem; color: var(--text-dim); }
 
+/* Відсоток жиру з розумних ваг — окремим рядком під вагою */
+.h-wfat {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft);
+}
+.h-wfat-l {
+  font-size: .72rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted);
+}
+.h-wfat-v { font-size: 1.05rem; font-weight: 700; color: var(--amber); }
+.h-wfat-v i { font-style: normal; font-size: .72rem; font-weight: 400; margin-left: 2px; }
+.h-wfat-d { margin-left: auto; font-size: .72rem; color: var(--muted); }
+
 .h-hist { display: flex; flex-direction: column; }
 .h-hrow {
   display: flex; align-items: center; gap: 12px;
