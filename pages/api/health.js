@@ -1,4 +1,4 @@
-import { withAuth, currentActor } from '../../lib/auth';
+import { withAuth, currentActor, isGuest } from '../../lib/auth';
 import {
   readAll, saveDay, addFood, delFood, recalcDay, saveBody, saveGoals,
   saveProduct, lookupBarcode, saveDish, delDish, copyDay,
@@ -11,12 +11,16 @@ import {
  * в пошуку чи на дашборді — ці дані живуть тільки тут.
  */
 export default withAuth(async (req, res) => {
-  if (!isOwner(currentActor())) {
-    return res.status(403).json({ error: 'Розділ доступний лише для ' + healthOwner() });
-  }
+  // Читання відкрите: хто має посилання, той дивиться. Запис лишається за
+  // господарем розділу — гість нічого не змінює й не видаляє.
+  const mine = !isGuest() && isOwner(currentActor());
 
   if (req.method === 'GET') {
-    return res.json(await readAll());
+    return res.json({ ...(await readAll()), canEdit: mine });
+  }
+
+  if (!mine) {
+    return res.status(403).json({ error: 'Змінювати може лише ' + healthOwner() });
   }
 
   if (req.method === 'POST') {
@@ -111,4 +115,4 @@ export default withAuth(async (req, res) => {
   }
 
   res.status(405).json({ error: 'Method not allowed' });
-});
+}, { openGet: true });

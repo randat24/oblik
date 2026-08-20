@@ -1273,6 +1273,19 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-gate-slow { font-size: .84rem; color: var(--muted) !important; }
 .h-gate .h-btn { margin: 0 4px; }
 
+/* Стрічка для гостя: розділ відкритий за посиланням, але тільки на перегляд */
+.h-ro {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  margin-bottom: 14px; padding: 7px 12px; border-radius: 10px;
+  background: rgba(240, 180, 60, .1); border: 1px solid rgba(240, 180, 60, .3);
+}
+.h-ro-t {
+  font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--amber);
+}
+.h-ro-a { font-size: .72rem; color: var(--text-dim); text-decoration: underline; }
+.h-ro-a:hover { color: var(--amber); }
+
 /* Верхня панель: вихід ліворуч, який день дивимось по центру, серія праворуч.
    Більше нічого — решта поїхала вниз або під «Ще». */
 .h-head {
