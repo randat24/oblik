@@ -1771,6 +1771,15 @@ function TodayBoard({ data, day, date }) {
             delta={dOf('hrv')} deltaGood="up" tone="var(--ring-stand)"
             sub="вище — краще відновлення" />
         )}
+        {/* Кільце «Рух» показує лише активні калорії. Разом зі спокоєм це
+            вже все, що тіло витратило за добу, — з цим числом і треба
+            порівнювати з'їдене, а не з самим рухом. */}
+        {has('restEnergy') && (
+          <Tile label="Разом спалено"
+            value={Math.round(num(day.burned) + num(day.restEnergy))} unit="ккал"
+            tone="var(--ring-move)"
+            sub={`рух ${Math.round(num(day.burned))} + спокій ${Math.round(num(day.restEnergy))}`} />
+        )}
       </div>
 
       <div className="h-weeks">
@@ -2447,6 +2456,11 @@ function WeightTab({ data, reload }) {
   // порівнювати є що лише коли фото є хоча б у двох днях
   const withPhotos = data.days.filter((d) => PHOTO_SIDES.some((s) => d[s.key]));
 
+  // відсоток жиру з розумних ваг. Береться окремо від останнього зважування:
+  // ваги пишуть його не щоразу, тож дата може розійтися — і тоді її видно.
+  const fats = data.days.filter((d) => num(d.bodyFat) > 0);
+  const lastFat = fats[fats.length - 1] || null;
+
   const avg7 = avgLast(data.days, 0);
   const avgPrev = avgLast(data.days, 1);
   const trend = avg7 !== null && avgPrev !== null ? n1(avg7 - avgPrev) : null;
@@ -2480,6 +2494,15 @@ function WeightTab({ data, reload }) {
               <div className="h-wgoal-n">
                 {toGoal > 0 ? `лишилось скинути ${toGoal} кг` : toGoal < 0 ? `нижче цілі на ${-toGoal} кг` : 'ціль досягнута'}
               </div>
+            )}
+          </div>
+        )}
+        {lastFat && (
+          <div className="h-wfat">
+            <span className="h-wfat-l">% жиру з ваг</span>
+            <span className="h-wfat-v">{n1(lastFat.bodyFat)}<i>%</i></span>
+            {(!last || lastFat.date !== last.date) && (
+              <span className="h-wfat-d">заміряно {lastFat.date}</span>
             )}
           </div>
         )}
@@ -3431,17 +3454,17 @@ function GoalsTab({ data, reload, setBusy }) {
             </thead>
             <tbody>
               <tr><td><code>steps</code></td><td>Шаги</td><td>Сумма</td></tr>
-              <tr><td><code>burned</code></td><td>Активная энергия</td><td>Сумма</td></tr>
+              <tr><td><code>burned</code></td><td>Энергия активности</td><td>Сумма</td></tr>
               <tr><td><code>restEnergy</code></td><td>Энергия покоя</td><td>Сумма</td></tr>
-              <tr><td><code>workout</code></td><td>Минуты тренировки</td><td>Сумма</td></tr>
-              <tr><td><code>stand</code></td><td>Часы стоя</td><td>Сумма</td></tr>
-              <tr><td><code>distance</code></td><td>Расстояние: ходьба и бег</td><td>Сумма</td></tr>
+              <tr><td><code>workout</code></td><td>Минуты упражнений</td><td>Сумма</td></tr>
+              <tr><td><code>stand</code></td><td>Минуты разминки</td><td>Сумма ÷ 60</td></tr>
+              <tr><td><code>distance</code></td><td>Дистанция ходьбы и бега</td><td>Сумма</td></tr>
               <tr><td><code>water</code></td><td>Вода</td><td>Сумма</td></tr>
-              <tr><td><code>sleep</code></td><td>Анализ сна</td><td>Сумма</td></tr>
+              <tr><td><code>sleep</code></td><td>Сон</td><td>Сумма</td></tr>
               <tr><td><code>pulse</code></td><td>Пульс в покое</td><td>Среднее</td></tr>
               <tr><td><code>hrv</code></td><td>Вариабельность пульса</td><td>Среднее</td></tr>
               <tr><td><code>weight</code></td><td>Вес</td><td>Среднее</td></tr>
-              <tr><td><code>bodyFat</code></td><td>Процент жира</td><td>Среднее</td></tr>
+              <tr><td><code>bodyFat</code></td><td>Процент жира в организме</td><td>Среднее</td></tr>
             </tbody>
           </table>
         </div>
@@ -3450,6 +3473,17 @@ function GoalsTab({ data, reload, setBusy }) {
         <u> Сумма</u> для…» — натисніть підкреслене слово. Пункту «Последнее»
         там немає, тому для ваги й жиру стоїть «Среднее»: хто зважується раз
         на день, отримає рівно своє число.
+
+        <div className="h-steps" style={{ marginTop: 12 }}>
+          <div>
+            <b>Розминка рахується окремо.</b> «Годин стоячи» у списку
+            «Здоровʼя» немає — кільце стояння по-російськи зветься
+            «Разминка», а дає воно хвилини. Тому після «Вычислить статистику»
+            додайте ще дію «Вычислить» і поділіть суму на 60: колонка чекає
+            години. Без ділення 280 хвилин або відсіються за межею, або тихо
+            запишуться як «22 години стоячи» — і це гірше, бо схоже на правду.
+          </div>
+        </div>
 
         <div className="h-steps" style={{ marginTop: 12 }}>
           <div>
