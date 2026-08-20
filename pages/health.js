@@ -195,11 +195,24 @@ const PHOTO_SIDES = [
 
 /* ---------- Дрібниці ---------- */
 
+/*
+ * Сторінка відкрита за посиланням, але змінювати щось може лише господар
+ * розділу. Прапорець живе поруч із `api`, а не в пропсах: інакше його
+ * довелося б протягувати крізь кожну вкладку й кожну картку, а перевірка
+ * потрібна рівно в одному місці — перед відправкою запису.
+ */
+let CAN_EDIT = true;
+
 /**
  * Запит із межею терпіння. Без неї застряглий запит виглядає як вічне
  * «Завантаження…»: сторінка ніби працює, а насправді вже нікуди не йде.
  */
 async function api(path, opts = {}) {
+  if (opts.method && opts.method !== 'GET' && !CAN_EDIT) {
+    const err = new Error('Тільки перегляд. Увійдіть у застосунок, щоб змінювати.');
+    err.status = 403;
+    throw err;
+  }
   const stop = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const bell = stop ? setTimeout(() => stop.abort(), opts.wait || 25000) : null;
   let res;
@@ -437,6 +450,7 @@ function PhotoSlot({ label, value, onChange }) {
     // не викличе подію і здаватиметься, що кнопка не працює
     if (input) input.value = '';
     if (!file) return;
+    if (!CAN_EDIT) { setErr('Тільки перегляд.'); return; }
     setBusy(true); setErr('');
     try {
       const small = await shrink(file);
@@ -5498,7 +5512,9 @@ export default function Health() {
     // ніж лишати людину перед написом «Завантаження…»
     const warn = setTimeout(() => setSlow(true), 10000);
     try {
-      setData(await api('/api/health'));
+      const fresh = await api('/api/health');
+      CAN_EDIT = fresh.canEdit !== false;
+      setData(fresh);
     } catch (e) {
       setError(e);
     } finally {
@@ -5554,6 +5570,14 @@ export default function Health() {
     <>
       <Head><title>Здоровʼя</title></Head>
       <div className={'h-wrap' + (busy ? ' is-busy' : '')}>
+        {/* Гість бачить розділ, але нічого не змінює — і має про це знати
+            одразу, а не після натискання кнопки, яка нічого не зробить. */}
+        {data.canEdit === false && (
+          <div className="h-ro">
+            <span className="h-ro-t">Тільки перегляд</span>
+            <a className="h-ro-a" href="/">Увійти</a>
+          </div>
+        )}
         {/* Угорі лише те, без чого не обійтися: вихід, який день дивимось і
             серія. Назва сторінки, номер збірки й перелік вкладок звідси
             прибрані — вкладки живуть унизу, під великим пальцем. */}
