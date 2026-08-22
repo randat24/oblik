@@ -154,6 +154,9 @@ async function deliverySummary() {
     // вага того, що ще везти, а не всіх посилок цілком
     kg: Math.round(weightLeft(onWay) * 10) / 10,
     delivered: list.filter((d) => d.done).length,
+    // місця, що вже приїхали, — разом із тими, чия посилка ще в дорозі:
+    // дві каністри з трьох доставлені, і це доставка, а не нуль
+    donePlaces: placesOf(list).done,
     week: deliveredWithin(list, 7).length,
     byStage,
     points: byPoint(list).filter((x) => x.name !== '—').slice(0, 6),

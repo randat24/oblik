@@ -40,22 +40,27 @@ async function searchDeliveries(qText) {
       driver: d.driver,
       point: d.point,
       weight: weightOf(d),
-      stage: STAGES[d.at]?.label || 'Нова',
+      // списана посилка стоїть у таблиці на своєму останньому етапі, але
+      // показувати «на точці вильоту» те, чого там немає, — обманювати
+      stage: d.isLost ? 'Втрачено' : (STAGES[d.at]?.label || 'Нова'),
       done: d.done,
+      lost: d.isLost,
       date: d.dates[STAGES[d.at]?.key] || d.created,
       parts: parts && {
-        done: parts.done, total: parts.total, left: parts.left,
+        done: parts.done, total: parts.total, left: parts.left, lost: parts.lost,
         kgLeft: parts.weighed ? Math.round(parts.kgLeft * 10) / 10 : null,
       },
       // знайшли конкретне місце — саме його й показуємо першим рядком
       matchedField: hitPart ? 'місце' : hit[0],
       matchedValue: hitPart
-        ? hitPart.name + (hitPart.done ? ` — доставлено ${hitPart.at}` : ' — ще не поставлено')
+        ? hitPart.name + (hitPart.lost ? ` — списано ${hitPart.at}`
+          : hitPart.done ? ` — доставлено ${hitPart.at}` : ' — ще не поставлено')
         : hit[1],
     });
   });
-  // те, що ще їде, потрібніше за вже закрите
-  out.sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
+  // те, що ще їде, потрібніше за вже закрите; списане — в самому кінці
+  const rank = (x) => (x.lost ? 2 : x.done ? 1 : 0);
+  out.sort((a, b) => rank(a) - rank(b));
   return out;
 }
 
