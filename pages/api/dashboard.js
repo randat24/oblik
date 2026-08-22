@@ -6,7 +6,7 @@ import { readActs } from '../../lib/acts';
 import { readAudits, STATUS } from '../../lib/audit';
 import {
   DELIVERY_SHEET, STAGES, parseDeliveries, partsLeft, partsOf,
-  stuck, byPoint, deliveredWithin, weightLeft,
+  stuck, byPoint, deliveredWithin, weightLeft, placesOf, lostOf,
 } from '../../lib/delivery';
 
 const WAREHOUSE = 'Склад';
@@ -137,15 +137,20 @@ async function deliverySummary() {
   const list = parseDeliveries(values);
   if (!list.length) return null;
 
-  const onWay = list.filter((d) => !d.done);
+  const onWay = list.filter((d) => !d.done && !d.isLost);
   const byStage = STAGES.map((s) => ({
     key: s.key, label: s.label,
-    n: list.filter((d) => d.stage === s.key && !d.done).length,
+    n: list.filter((d) => d.stage === s.key && !d.done && !d.isLost).length,
   }));
   const late = stuck(list);
 
   return {
     onWay: onWay.length,
+    // Посилка й місце — різні одиниці. «Вода, 3 шт» їде однією карткою, а
+    // прибуває трьома приїздами, і питання «скільки ще везти» рахується
+    // саме в місцях: посилками воно завжди «одна», хоч дві третини вже там.
+    places: placesOf(onWay),
+    lost: lostOf(list),
     // вага того, що ще везти, а не всіх посилок цілком
     kg: Math.round(weightLeft(onWay) * 10) / 10,
     delivered: list.filter((d) => d.done).length,
