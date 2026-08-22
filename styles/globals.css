@@ -2988,6 +2988,37 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .dlv-parts-head b.dlv-kg { color: var(--blue); }
 .dlv-kg-left { color: var(--amber); }
 
+/* Втрачене місце. Візуально це не «ще не приїхало» і не «приїхало» —
+   третій стан, і читатись він має як закреслений рядок у відомості:
+   позиція є, але за нею нічого не стоїть. */
+.dlv-part.lost {
+  background: var(--red-dim); border-color: var(--red); color: var(--red);
+  text-decoration: line-through; text-decoration-thickness: 1px;
+  text-decoration-color: rgba(196, 87, 74, .6);
+}
+.dlv-part.lost i {
+  background: var(--red); border-color: var(--red); color: var(--bg);
+  text-decoration: none;
+}
+.dlv-part.lost em, .dlv-part.lost .dlv-part-kg { color: var(--red); opacity: .75; }
+.dlv-parts-head b.dlv-kg.is-lost { color: var(--red); }
+.dlv-parts-foot.is-lost { color: var(--red); opacity: .85; }
+
+/* Списання всієї посилки — окремим рядком під маршрутом, зі штампом і
+   причиною: через півроку «17.08 списано» без пояснення нічого не каже */
+.dlv-lost {
+  margin-top: 10px; padding: 8px 10px;
+  border: 1px solid var(--red); border-radius: var(--r-sm);
+  background: var(--red-dim);
+  color: var(--text-dim); font-size: .78rem;
+}
+.dlv-lost b {
+  color: var(--red); text-transform: uppercase;
+  letter-spacing: .08em; font-size: .7rem; margin-right: 6px;
+}
+.act-btn.act-lost { color: var(--red); }
+.act-btn.act-lost:hover { background: var(--red-dim); border-color: var(--red); }
+
 .dlv-mv {
   background: var(--panel-2); border: 1px solid var(--line-soft);
   border-radius: var(--r-sm); padding: 12px 14px;

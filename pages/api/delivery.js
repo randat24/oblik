@@ -2,7 +2,7 @@ import { withAuth, currentActor } from '../../lib/auth';
 import { readSheet, writeRow, appendRow, deleteRow, ensureSheet } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
 import {
-  DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS,
+  DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS, LOST_WHY,
   parseDeliveries, deliveryRow, stampKyiv, suggestions, stageOf,
   splitParts, parseDone, joinDone, partsOf,
 } from '../../lib/delivery';
@@ -40,9 +40,15 @@ function syncDelivered(d, stamp) {
   const labels = splitParts(d.parts);
   if (!labels.length) return d.dates;
   const done = parseDone(d.partsDone);
-  const all = labels.every((_, i) => done.has(i + 1));
-  if (all && !d.dates.delivered) return { ...d.dates, delivered: stamp };
-  if (!all && d.dates.delivered) return { ...d.dates, delivered: '' };
+  const lost = parseDone(d.partsLost);
+  // по кожному місцю має бути відповідь: приїхало або списане. Списані теж
+  // закривають посилку — інакше вона висітиме «в дорозі» вічно, чекаючи
+  // ящик, якого більше немає.
+  const all = labels.every((_, i) => done.has(i + 1) || lost.has(i + 1));
+  const any = labels.some((_, i) => done.has(i + 1));
+  // усе списане — це не доставка: штамп «прибула» тут був би неправдою
+  if (all && any && !d.dates.delivered) return { ...d.dates, delivered: stamp };
+  if ((!all || !any) && d.dates.delivered) return { ...d.dates, delivered: '' };
   return d.dates;
 }
 
@@ -61,6 +67,7 @@ async function state(extra = {}) {
     drivers: suggestions(list, 'driver', DRIVERS),
     points: suggestions(list, 'point', POINTS),
     tos: suggestions(list, 'to', []),
+    whys: LOST_WHY,
     ...extra,
   };
 }
@@ -126,12 +133,16 @@ export default withAuth(async (req, res) => {
 
       // у кожного місця своя дата: решту відвезли через день — це має бути
       // видно, а не сховатись за спільною датою всієї посилки
-      const upd = { ...cur, partsDone: joinDone(done) };
+      // позначка «доставлено» знімає списання: місце знайшлось і приїхало
+      const lost = parseDone(cur.partsLost);
+      if (!was && lost.has(i)) lost.delete(i);
+
+      const upd = { ...cur, partsDone: joinDone(done), partsLost: joinDone(lost) };
       const next = deliveryRow({ ...upd, dates: syncDelivered(upd, now) }, prev);
       await writeRow(DELIVERY_SHEET, row, next);
       // у журналі має бути видно саме місце, а не «щось із трьох»:
       // назва, вага й скільки лишилось після цього руху
-      const p = partsOf({ ...cur, partsDone: upd.partsDone });
+      const p = partsOf(upd);
       const it = p.items[i - 1];
       await logChange({
         sheet: DELIVERY_SHEET, row,
@@ -142,6 +153,74 @@ export default withAuth(async (req, res) => {
           it.kg !== null && `${it.kg} кг`,
           `${done.size} з ${labels.length}`,
           p.left.length ? `лишилось: ${p.left.join(', ')}` : 'посилка закрита',
+        ].filter(Boolean).join(' · '),
+      });
+      return res.json(await state());
+    }
+
+    /*
+     * Списання. Ящик розбили при завантаженні, виліт скасували назовсім,
+     * вантаж забрали на іншу точку — таке місце не їде і не приїхало, і
+     * тримати його у «лишилось» означає щодня згадувати те, чого немає.
+     *
+     * Списують або окремі місця, або посилку цілком — і те, й те знімається
+     * повторним викликом, бо помилитись тут легко, а сліди в журналі
+     * лишаються в обох випадках.
+     */
+    if (action === 'lose') {
+      const { row, parts: pick, why, undo } = req.body;
+      if (!row) return res.status(400).json({ error: 'Не вказано рядок' });
+      const values = await readSheet(DELIVERY_SHEET);
+      const prev = values[row - 1];
+      if (!prev) return res.status(404).json({ error: 'Рядок не знайдено' });
+
+      const cur = parseDeliveries([DELIVERY_HEADERS, prev])[0];
+      const labels = splitParts(cur.parts);
+      const now = stampKyiv();
+      const nums = Array.isArray(pick) ? pick.map(Number).filter((n) => n >= 1 && n <= labels.length) : [];
+
+      if (labels.length && !nums.length && !undo) {
+        return res.status(400).json({ error: 'Оберіть, які місця списати' });
+      }
+
+      const lost = parseDone(cur.partsLost);
+      const done = parseDone(cur.partsDone);
+      let upd;
+
+      // причина живе поруч зі штампом: через півроку «17.08 списано» без
+      // пояснення — це не облік, а загадка
+      const mark = str(why) ? `${now} · ${str(why)}` : now;
+
+      if (!labels.length) {
+        // посилка без переліку — списується цілком, одним штампом
+        upd = { ...cur, lost: undo ? '' : mark };
+      } else if (undo) {
+        // повернення: якщо вказані місця — знімаємо їх, інакше все списання
+        if (nums.length) nums.forEach((n) => lost.delete(n));
+        else lost.clear();
+        upd = { ...cur, lost: '', partsLost: joinDone(lost) };
+      } else {
+        // списане місце не може лишатись доставленим: це взаємовиключні стани
+        nums.forEach((n) => { lost.set(n, mark); done.delete(n); });
+        upd = { ...cur, partsLost: joinDone(lost), partsDone: joinDone(done) };
+      }
+
+      const next = deliveryRow({ ...upd, dates: syncDelivered(upd, now) }, prev);
+      await writeRow(DELIVERY_SHEET, row, next);
+
+      const p = partsOf(upd);
+      const names = labels.length
+        ? nums.map((n) => partsOf(cur).items[n - 1].name).join(', ')
+        : cur.what;
+      await logChange({
+        sheet: DELIVERY_SHEET, row,
+        action: undo ? 'Списання скасовано' : 'Втрачено',
+        field: cur.what,
+        after: [
+          names,
+          !undo && str(why),
+          p && `списано ${p.lost} з ${p.total}`,
+          p && p.left.length ? `лишилось: ${p.left.join(', ')}` : null,
         ].filter(Boolean).join(' · '),
       });
       return res.json(await state());
@@ -182,9 +261,14 @@ export default withAuth(async (req, res) => {
        */
       const labels = splitParts(cur.parts);
       const done = parseDone(cur.partsDone);
+      const lostMap = parseDone(cur.partsLost);
       let closed = 0;
       if (stage === 'delivered') {
-        labels.forEach((_, i) => { if (!done.has(i + 1)) { done.set(i + 1, now); closed++; } });
+        // списані місця кнопка не чіпає: вони не приїхали й не приїдуть,
+        // і підмінити списання доставкою означало б сховати втрату
+        labels.forEach((_, i) => {
+          if (!done.has(i + 1) && !lostMap.has(i + 1)) { done.set(i + 1, now); closed++; }
+        });
       }
 
       // Проміжні етапи, які пропустили, лишаються порожніми навмисно:
@@ -194,9 +278,10 @@ export default withAuth(async (req, res) => {
         ...cur,
         driver: str(req.body.driver) || cur.driver,
         point: str(req.body.point) || cur.point,
-        // хто прийняв: вписане в формі, вже записане раніше, а як нема
-        // ні того, ні того — той, хто зараз закриває етап
-        taker: str(req.body.taker) || cur.taker || (stage === 'delivered' ? who : ''),
+        // Хто прийняв — це адресат, а не той, хто натиснув кнопку. Запис
+        // у застосунку часто робить черговий зі свого телефона, і його
+        // позивний у цьому полі означав би, що посилку прийняв він.
+        taker: str(req.body.taker) || cur.taker || (stage === 'delivered' ? cur.to : ''),
         giver: cur.giver || who,
         partsDone: joinDone(done),
         dates,

@@ -8,6 +8,7 @@ import {
 import {
   stuck, byDriver, byPoint, deliveredWithin, splitPoints, joinPoints,
   splitParts, joinParts, partsOf, partsLeft, weightOf, weightLeft, parsePart,
+  placesOf, lostOf,
 } from '../lib/delivery';
 
 // Сесія добігає кінця сама, тож будь-який запит може повернути 401.
@@ -660,17 +661,30 @@ function HomeView({ setState, onOpen, me }) {
         <div className="section">
           <h3 className="sec">Доставки<span className="count">{d.delivery.onWay}</span></h3>
 
+          {/* Головне число тут — місця, а не посилки. «Вода, 3 шт» їде однією
+              карткою, а прибуває трьома приїздами: питання «скільки ще
+              везти» посилками завжди «одна», хоч дві третини вже на місці. */}
           <div className="totals">
-            <span>У дорозі <b>{d.delivery.onWay}</b>{d.delivery.kg > 0 ? ` · ${d.delivery.kg} кг` : ''}</span>
-            {d.delivery.parts.total > 0 && (
-              <>
-                <span className="totals-sep">·</span>
-                <span>Місць лишилось <b>{d.delivery.parts.left}</b>{' '}
-                  <span className="totals-of">з {d.delivery.parts.total}</span></span>
-              </>
-            )}
+            <span>Місць у дорозі <b>{d.delivery.places.left}</b>{' '}
+              <span className="totals-of">з {d.delivery.places.total}</span>
+              {d.delivery.kg > 0 ? ` · ${d.delivery.kg} кг` : ''}</span>
+            <span className="totals-sep">·</span>
+            <span>Посилок <b>{d.delivery.onWay}</b>
+              {d.delivery.places.split > 0 && (
+                <span className="totals-of"> · {d.delivery.places.split} їде частинами</span>
+              )}
+            </span>
             <span className="totals-sep">·</span>
             <span>Доставлено за тиждень <b>{d.delivery.week}</b></span>
+            {d.delivery.lost.places > 0 && (
+              <>
+                <span className="totals-sep">·</span>
+                <span style={{ color: 'var(--red)' }}>
+                  Втрачено <b>{d.delivery.lost.places}</b>
+                  {d.delivery.lost.kg > 0 ? ` · ${d.delivery.lost.kg} кг` : ''}
+                </span>
+              </>
+            )}
           </div>
 
           <div className="chips">
@@ -681,8 +695,10 @@ function HomeView({ setState, onOpen, me }) {
             ))}
             {d.delivery.points.map((x) => (
               <div className="chip" key={'p' + x.name} style={{ color: 'var(--blue)' }}
-                onClick={() => onOpen(DELIVERY_VIEW)}>
-                → {x.name} <b style={{ marginLeft: 4 }}>{x.n}</b>
+                onClick={() => onOpen(DELIVERY_VIEW)}
+                title={`${x.places} місць у ${x.n} посилках`}>
+                → {x.name} <b style={{ marginLeft: 4 }}>{x.places}</b>
+                {x.places !== x.n && <span className="totals-of"> / {x.n}</span>}
               </div>
             ))}
           </div>
@@ -5740,6 +5756,7 @@ function DeliveryView({ setState, me = '' }) {
   const [add, setAdd] = useState(false);
   const [move, setMove] = useState(null);
   const [edit, setEdit] = useState(null);
+  const [lose, setLose] = useState(null);
 
   const load = useCallback(async () => {
     setState('завантаження…');
@@ -5779,13 +5796,14 @@ function DeliveryView({ setState, me = '' }) {
       .join(' ').toLowerCase().includes(t));
   }
 
-  const onWay = list.filter((d) => !d.done);
+  const onWay = list.filter((d) => !d.done && !d.isLost);
   const done = list.filter((d) => d.done);
+  const goneList = list.filter((d) => d.isLost);
 
   // Зведення рахуємо по всьому, а не по відфільтрованому: пошук звужує
   // список, але не змінює того, скільки коробок насправді в дорозі.
   const all = data.list;
-  const inTransit = all.filter((d) => !d.done);
+  const inTransit = all.filter((d) => !d.done && !d.isLost);
   // кілограми рахуємо по тому, що ще везти: половину посилки вже поставили,
   // і її вага в «у дорозі» більше не стоїть
   const weight = weightLeft(inTransit);
@@ -5799,6 +5817,8 @@ function DeliveryView({ setState, me = '' }) {
   const points = byPoint(all);
   const left = partsLeft(all);
   const atbaseLeft = partsLeft(atbase);
+  const places = placesOf(inTransit);
+  const gone = lostOf(all);
   const kg = (n) => Math.round(n * 10) / 10;
 
   const card = (d) => (
@@ -5808,6 +5828,7 @@ function DeliveryView({ setState, me = '' }) {
       stages={stages}
       onMove={(stage) => setMove({ item: d, stage })}
       onPart={(n) => send({ action: 'part', row: d.row, n })}
+      onLose={() => setLose(d)}
       onEdit={() => setEdit(d)}
       onDelete={async () => {
         if (!confirm(`Видалити посилку «${d.what}»?`)) return;
@@ -5839,14 +5860,22 @@ function DeliveryView({ setState, me = '' }) {
       </div>
 
       <div className="totals">
-        <span>У дорозі <b>{inTransit.length}</b>{weight > 0 ? ` · ${kg(weight)} кг` : ''}</span>
         {/* Посилок може бути п'ять, а місць у них — двадцять: коли відправку
             везуть частинами, «скільки коробок» і «скільки ще везти» — різні
             числа, і друге в логістиці головніше. */}
-        {left.total > 0 && (
+        <span>Місць у дорозі <b>{places.left}</b>{' '}
+          <span className="totals-of">з {places.total}</span>
+          {weight > 0 ? ` · ${kg(weight)} кг` : ''}</span>
+        <span className="totals-sep">·</span>
+        <span>Посилок <b>{inTransit.length}</b>
+          {places.split > 0 && <span className="totals-of"> · {places.split} їде частинами</span>}
+        </span>
+        {gone.places > 0 && (
           <>
             <span className="totals-sep">·</span>
-            <span>Місць лишилось <b>{left.left}</b> <span className="totals-of">з {left.total}</span></span>
+            <span style={{ color: 'var(--red)' }}>
+              Втрачено <b>{gone.places}</b>{gone.kg > 0 ? ` · ${kg(gone.kg)} кг` : ''}
+            </span>
           </>
         )}
       </div>
@@ -5931,6 +5960,14 @@ function DeliveryView({ setState, me = '' }) {
               <div className="grid">{done.map(card)}</div>
             </div>
           )}
+          {/* Втрачене стоїть окремо, а не серед доставленого: це не результат
+              роботи, а її недостача, і мішати їх — значить втратити рахунок */}
+          {goneList.length > 0 && (
+            <div className="section">
+              <h3>Втрачено<span className="count">{goneList.length}</span></h3>
+              <div className="grid">{goneList.map(card)}</div>
+            </div>
+          )}
         </>
       )}
 
@@ -5966,11 +6003,22 @@ function DeliveryView({ setState, me = '' }) {
           }}
         />
       )}
+
+      {lose && (
+        <DeliveryLose
+          item={lose}
+          whys={data.whys || []}
+          onCancel={() => setLose(null)}
+          onSave={async (body) => {
+            if (await send({ ...body, action: 'lose', row: lose.row })) setLose(null);
+          }}
+        />
+      )}
     </>
   );
 }
 
-function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
+function DeliveryCard({ item, stages, onMove, onPart, onLose, onEdit, onDelete }) {
   const next = item.at + 1 < stages.length ? stages[item.at + 1] : null;
   const pts = splitPoints(item.point);
   const parts = partsOf(item);
@@ -5984,6 +6032,8 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
     ['Прийняв', item.taker],
     ['Примітка', item.note],
   ].filter(([, v]) => v);
+  // списану посилку не рухають далі: наступного етапу в неї немає
+  const gone = item.isLost;
 
   return (
     <div className="card">
@@ -6004,9 +6054,9 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
         </div>
         <span
           className="pill dlv-pill"
-          style={{ color: item.done ? 'var(--green)' : 'var(--amber)' }}
+          style={{ color: gone ? 'var(--red)' : item.done ? 'var(--green)' : 'var(--amber)' }}
         >
-          {stages[item.at]?.short || stages[item.at]?.label || '—'}
+          {gone ? 'Втрачено' : (stages[item.at]?.short || stages[item.at]?.label || '—')}
         </span>
       </div>
 
@@ -6033,19 +6083,22 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
             {parts.weighed && parts.kgLeft > 0 && (
               <b className="dlv-kg">{Math.round(parts.kgLeft * 10) / 10} кг везти</b>
             )}
+            {parts.lost > 0 && <b className="dlv-kg is-lost">втрачено {parts.lost}</b>}
             {parts.left.length > 0 && <em>лишилось: {parts.left.join(', ')}</em>}
           </div>
           <div className="dlv-chips">
             {parts.items.map((p) => (
               <button
                 key={p.n}
-                className={'dlv-part' + (p.done ? ' on' : '')}
+                className={'dlv-part' + (p.done ? ' on' : '') + (p.lost ? ' lost' : '')}
                 onClick={() => onPart(p.n)}
-                title={p.done
-                  ? `Доставлено${p.at ? ' ' + p.at : ''} — натисніть, щоб зняти`
-                  : 'Позначити як доставлене'}
+                title={p.lost
+                  ? `Списано${p.at ? ' ' + p.at : ''} — натисніть, якщо все ж приїхало`
+                  : p.done
+                    ? `Доставлено${p.at ? ' ' + p.at : ''} — натисніть, щоб зняти`
+                    : 'Позначити як доставлене'}
               >
-                <i>{p.done ? '✓' : ''}</i>
+                <i>{p.lost ? '✕' : p.done ? '✓' : ''}</i>
                 <span>{p.name}</span>
                 {p.kg !== null && <em className="dlv-part-kg">{p.kg} кг</em>}
                 {/* на чипі досить дня й місяця — рік і час є в підказці */}
@@ -6056,9 +6109,21 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
           {parts.left.length > 0 && (
             <div className="dlv-parts-foot">
               Решта поїде пізніше — відмітьте її тоді. Посилка закриється,
-              коли прибуде останнє місце.
+              коли по кожному місцю буде відповідь: приїхало або списане.
             </div>
           )}
+          {parts.lost > 0 && (
+            <div className="dlv-parts-foot is-lost">
+              Не доїде: {parts.lostNames.join(', ')}. Ці місця не рахуються ні
+              в дорозі, ні в доставленому.
+            </div>
+          )}
+        </div>
+      )}
+
+      {item.lost && (
+        <div className="dlv-lost">
+          <b>Списано</b> {item.lost}
         </div>
       )}
 
@@ -6074,8 +6139,16 @@ function DeliveryCard({ item, stages, onMove, onPart, onEdit, onDelete }) {
       )}
 
       <div className="actions">
-        {next && (
+        {next && !gone && (
           <button className="act-btn act-accept" onClick={() => onMove(next.key)}>{next.action}</button>
+        )}
+        {/* Списання поруч із рухом уперед: не все, що не приїхало, ще їде,
+            і поки цієї кнопки не було, розбитий ящик доводилось або
+            вдавати доставленим, або тримати «в дорозі» назавжди. */}
+        {(!item.done || gone) && (
+          <button className="act-btn act-lost" onClick={onLose}>
+            {gone ? 'Повернути' : 'Втрачено'}
+          </button>
         )}
         <button className="act-btn" onClick={onEdit}>Правка</button>
         <button className="act-btn act-del" onClick={onDelete}>Видалити</button>
@@ -6182,10 +6255,10 @@ function DeliveryMove({ item, stage, drivers, points, me = '', onCancel, onSave 
   const [f, setF] = useState(() => ({
     driver: item.driver || '',
     point: item.point || '',
-    // «Хто прийняв» — це майже завжди той, хто зараз і закриває доставку в
-    // застосунку. Підставляємо його позивний, але лишаємо поле відкритим:
-    // буває, що приймав інший, а вносить запис черговий.
-    taker: item.taker || me || '',
+    // «Хто прийняв» — це адресат: посилку приймає той, кому її везли.
+    // Запис у застосунку часто робить черговий зі свого телефона, і його
+    // позивний тут означав би, що прийняв він.
+    taker: item.taker || item.to || '',
   }));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -6266,18 +6339,23 @@ function DeliveryMove({ item, stage, drivers, points, me = '', onCancel, onSave 
         </div>
       )}
 
-      {/* Хто прийняв — уже підставлений і нічого не блокує: у дев'яти
-          випадках із десяти доставку закриває той, хто її й прийняв. Поле
-          лишається на місці для десятого — коли приймав інший, а вносить
-          запис черговий. */}
+      {/* Хто прийняв — підставлений з «Кому»: посилку приймає адресат.
+          Поле лишається відкритим, бо буває, що за нього розписався
+          сусід по точці. */}
       {stage.key === 'delivered' && (
         <div style={{ marginTop: 10 }}>
           <label>
             Хто прийняв
-            {f.taker && f.taker === me && <span className="dlv-you">це ви</span>}
+            {f.taker && f.taker === item.to && <span className="dlv-you">адресат</span>}
           </label>
           <input type="text" value={f.taker} onChange={(e) => up('taker', e.target.value)}
-            placeholder={picked.length > 1 ? 'позивні через кому' : 'позивний'} />
+            placeholder={picked.length > 1 ? 'позивні через кому' : 'позивний адресата'} />
+          {!f.taker && (
+            <div className="dlv-tip" style={{ marginTop: 6 }}>
+              Впишіть, хто саме забрав. Ваш позивний сюди не підставляється:
+              запис часто вносить не той, хто приймав.
+            </div>
+          )}
         </div>
       )}
 
@@ -6285,6 +6363,95 @@ function DeliveryMove({ item, stage, drivers, points, me = '', onCancel, onSave 
         {needs.length === 0
           ? 'Нічого вписувати не треба — просто підтвердіть.'
           : 'Дата й час проставляться самі.'}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Списання.
+ *
+ * Ящик розбили при завантаженні, виліт скасували назовсім, вантаж забрали
+ * на іншу точку. Такого місця вже не буде — і поки його нема куди подіти,
+ * воно або вдає доставлене, або вічно висить у «лишилось». Тут його
+ * знімають з дороги, назвавши причину.
+ */
+function DeliveryLose({ item, whys = [], onCancel, onSave }) {
+  const parts = partsOf(item);
+  const gone = item.isLost;
+  // списують те, що ще в дорозі: доставлене місце знімати нема сенсу
+  const open = parts ? parts.items.filter((p) => !p.done || p.lost) : [];
+  const [pick, setPick] = useState(() => (parts ? open.filter((p) => p.lost).map((p) => p.n) : []));
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const toggle = (n) => setPick((p) => (p.includes(n) ? p.filter((x) => x !== n) : [...p, n]));
+  const undo = gone && (!parts || pick.length === 0);
+
+  return (
+    <Modal
+      title={gone ? 'Повернути в дорогу' : 'Списати втрачене'}
+      saveLabel={undo ? 'Повернути' : 'Списати'}
+      onCancel={onCancel}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        if (!undo && parts && pick.length === 0) return setErr('Оберіть, які місця списати');
+        setBusy(true); setErr('');
+        try { await onSave({ parts: pick, why, undo }); }
+        catch (e) { setErr(e.message); }
+        finally { setBusy(false); }
+      }}
+    >
+      <div className="dlv-mv">
+        <div className="title-line">
+          {item.to && <span className="id-badge">{item.to}</span>}
+          <b>{item.what}</b>
+        </div>
+        <p>
+          {gone && !parts
+            ? 'Посилка повернеться в дорогу на той самий етап, де стояла.'
+            : parts
+              ? 'Відмітьте місця, яких не буде. Решта лишиться в дорозі — списання не закриває всю посилку.'
+              : 'Посилка буде знята з дороги цілком.'}
+        </p>
+      </div>
+
+      {parts && open.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <label>Що не доїде</label>
+          <div className="chips">
+            {open.map((p) => (
+              <div key={p.n}
+                className={'chip' + (pick.includes(p.n) ? ' on' : '')}
+                onClick={() => toggle(p.n)}
+              >
+                {p.name}{p.kg !== null ? ` · ${p.kg} кг` : ''}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!undo && (
+        <div style={{ marginTop: 10 }}>
+          <label>Причина</label>
+          <div className="chips">
+            {whys.map((v) => (
+              <div key={v} className={'chip' + (why === v ? ' on' : '')} onClick={() => setWhy(v)}>{v}</div>
+            ))}
+          </div>
+          <input type="text" value={why} style={{ marginTop: 8 }}
+            onChange={(e) => setWhy(e.target.value)}
+            placeholder="або своїми словами" />
+        </div>
+      )}
+
+      <div className="dlv-tip">
+        {undo
+          ? 'Місця повернуться в «лишилось», наче списання не було.'
+          : 'Списане не рахується ні в дорозі, ні в доставленому — воно піде окремим рядком «втрачено».'}
       </div>
     </Modal>
   );
