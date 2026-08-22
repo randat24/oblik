@@ -675,7 +675,8 @@ function HomeView({ setState, onOpen, me }) {
               )}
             </span>
             <span className="totals-sep">·</span>
-            <span>Доставлено за тиждень <b>{d.delivery.week}</b></span>
+            <span>Доставлено місць <b>{d.delivery.donePlaces}</b>{' '}
+              <span className="totals-of">посилок за тиждень {d.delivery.week}</span></span>
             {d.delivery.lost.places > 0 && (
               <>
                 <span className="totals-sep">·</span>
@@ -5786,10 +5787,17 @@ function DeliveryView({ setState, me = '' }) {
   if (!data) return <div className="loading">Завантаження…</div>;
 
   const stages = data.stages;
-  const counts = stages.map((s) => data.list.filter((d) => d.stage === s.key).length);
+  // Списана посилка зберігає свій останній етап — але стоїть вона там уже
+  // тільки в таблиці. Рахувати її як «на точці вильоту» означає щоранку
+  // шукати на точці ящик, якого немає.
+  const alive = data.list.filter((d) => !d.isLost);
+  const counts = stages.map((s) => alive.filter((d) => d.stage === s.key).length);
 
   let list = data.list;
-  if (only) list = list.filter((d) => d.stage === only);
+  // фільтр за етапом показує те, що там справді стоїть: списане має свій
+  // окремий фільтр, а не ховається серед живих етапів
+  if (only === 'lost') list = list.filter((d) => d.isLost);
+  else if (only) list = list.filter((d) => d.stage === only && !d.isLost);
   if (q.trim()) {
     const t = q.trim().toLowerCase();
     list = list.filter((d) => [d.to, d.what, d.driver, d.point, d.giver, d.taker, d.note, d.parts]
@@ -5807,9 +5815,9 @@ function DeliveryView({ setState, me = '' }) {
   // кілограми рахуємо по тому, що ще везти: половину посилки вже поставили,
   // і її вага в «у дорозі» більше не стоїть
   const weight = weightLeft(inTransit);
-  const waiting = all.filter((d) => d.stage === 'packed');
-  const handed = all.filter((d) => d.stage === 'handed');
-  const atbase = all.filter((d) => d.stage === 'atbase');
+  const waiting = alive.filter((d) => d.stage === 'packed');
+  const handed = alive.filter((d) => d.stage === 'handed');
+  const atbase = alive.filter((d) => d.stage === 'atbase');
   const waitKg = weightLeft(waiting);
   const late = stuck(all);
   const week = deliveredWithin(all, 7);
@@ -5819,6 +5827,11 @@ function DeliveryView({ setState, me = '' }) {
   const atbaseLeft = partsLeft(atbase);
   const places = placesOf(inTransit);
   const gone = lostOf(all);
+  const lostCount = all.length - alive.length;
+  // доставлені місця рахуємо по всьому: половина посилки, що приїхала
+  // вчора, — це вже доставка, хай навіть картка ще стоїть «у дорозі»
+  const donePlaces = placesOf(all).done;
+  const closed = all.filter((d) => d.done).length;
   const kg = (n) => Math.round(n * 10) / 10;
 
   const card = (d) => (
@@ -5855,8 +5868,11 @@ function DeliveryView({ setState, me = '' }) {
             ? `місць до розвезення: ${atbaseLeft.left}`
               + (weightLeft(atbase) > 0 ? ` · ${kg(weightLeft(atbase))} кг` : '')
             : 'чекає на виліт'} />
-        <Stat label="Доставлено" value={all.filter((d) => d.done).length} tone="ok"
-          sub={`за тиждень ${week.length}`} />
+        {/* Місця, а не посилки: коли з трьох каністр приїхали дві, доставка
+            вже відбулась — двічі. Порахувати це посилками неможливо, там
+            досі «нуль», і плитка розходиться з галочками на картках. */}
+        <Stat label="Доставлено місць" value={donePlaces} tone="ok"
+          sub={`посилок закрито ${closed} · за тиждень ${week.length}`} />
       </div>
 
       <div className="totals">
@@ -5936,6 +5952,15 @@ function DeliveryView({ setState, me = '' }) {
             {s.label}<span className="count">{counts[i]}</span>
           </div>
         ))}
+        {lostCount > 0 && (
+          <div
+            className={'chip' + (only === 'lost' ? ' on' : '')}
+            style={{ color: 'var(--red)' }}
+            onClick={() => setOnly(only === 'lost' ? '' : 'lost')}
+          >
+            Втрачено<span className="count">{lostCount}</span>
+          </div>
+        )}
       </div>
 
       <div className="toolbar">
