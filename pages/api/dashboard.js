@@ -151,6 +151,12 @@ async function deliverySummary() {
     // саме в місцях: посилками воно завжди «одна», хоч дві третини вже там.
     places: placesOf(onWay),
     lost: lostOf(list),
+    // черговість: те, що чекає найближчого борту, має бути видно з головної,
+    // а не всередині розділу серед двох десятків карток
+    urgent: onWay.filter((d) => d.urgent).map((d) => ({
+      what: d.what, to: d.to, stage: STAGES[d.at]?.label || 'Нова',
+      kg: Math.round(weightLeft([d]) * 10) / 10,
+    })),
     // вага того, що ще везти, а не всіх посилок цілком
     kg: Math.round(weightLeft(onWay) * 10) / 10,
     delivered: list.filter((d) => d.done).length,
