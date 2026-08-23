@@ -4,7 +4,7 @@ import { logChange } from '../../lib/log';
 import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS, LOST_WHY, PRIO_FIRST,
   parseDeliveries, deliveryRow, stampKyiv, suggestions, stageOf,
-  splitParts, parseDone, joinDone, partsOf,
+  splitParts, parseDone, joinDone, partsOf, parseHot, joinHot,
 } from '../../lib/delivery';
 
 const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
@@ -17,15 +17,27 @@ const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
  */
 let headersFixed = false;
 
-/** Позначки доставлених місць після правки переліку — за назвами, не за номерами */
-function remapDone(cur, parts) {
-  const was = splitParts(cur.parts);
-  const done = parseDone(cur.partsDone);
+/**
+ * Позначки місць після правки переліку — за назвами, не за номерами.
+ * Дописана на початку каністра зсуває всі номери, і галочка з третього
+ * місця опинилась би на четвертому.
+ */
+function remapMarks(wasLabels, marks, parts) {
   const kept = new Map();
-  was.forEach((label, i) => { if (done.has(i + 1)) kept.set(label, done.get(i + 1)); });
+  wasLabels.forEach((label, i) => { if (marks.has(i + 1)) kept.set(label, marks.get(i + 1)); });
   const next = new Map();
   splitParts(parts).forEach((label, i) => { if (kept.has(label)) next.set(i + 1, kept.get(label)); });
-  return joinDone(next);
+  return next;
+}
+
+function remapDone(cur, parts) {
+  return joinDone(remapMarks(splitParts(cur.parts), parseDone(cur.partsDone), parts));
+}
+
+/** Те саме для першочергових: у них замість дати просто позначка */
+function remapHot(cur, parts) {
+  const asMap = new Map([...parseHot(cur.partsHot)].map((n) => [n, '1']));
+  return joinHot(new Set(remapMarks(splitParts(cur.parts), asMap, parts).keys()));
 }
 
 /**
@@ -86,22 +98,24 @@ export default withAuth(async (req, res) => {
     // Нова посилка одразу на першому етапі: складена — значить зібрана,
     // окремої кнопки «підтвердити збирання» тут не треба.
     if (action === 'add') {
-      const { what, weight, note, to, parts, prio } = req.body;
+      const { what, weight, note, to, parts, prio, partsHot } = req.body;
       if (!str(what)) return res.status(400).json({ error: 'Не вказано назву' });
       const now = stampKyiv();
+      const hot = joinHot(parseHot(partsHot));
       const row = deliveryRow({
-        created: now, what, weight, note, to, parts, prio,
+        created: now, what, weight, note, to, parts, prio, partsHot: hot,
         giver: who, dates: { packed: now },
       });
       await appendRow(DELIVERY_SHEET, row, { raw: true });
       const n = splitParts(parts).length;
+      const hotN = parseHot(hot).size;
       await logChange({
         sheet: DELIVERY_SHEET, action: 'Зібрано', field: str(what),
         after: [
           `${str(weight) || '?'} кг`,
           n > 1 && `${n} місць`,
           str(to) && `для ${str(to)}`,
-          str(prio) && PRIO_FIRST,
+          hotN > 0 ? `${PRIO_FIRST}: ${hotN} з ${n}` : (str(prio) && PRIO_FIRST),
         ].filter(Boolean).join(' · '),
       });
       return res.json(await state());
@@ -315,17 +329,30 @@ export default withAuth(async (req, res) => {
       // Перелік місць правлять і після відправки — дописують забуту
       // каністру. Позначки прив'язані до номерів, тож переносимо їх за
       // назвами: інакше дописане на початку зсуває всі галочки.
-      const partsDone = 'parts' in req.body
-        ? remapDone(cur, str(req.body.parts))
-        : cur.partsDone;
-      const next = deliveryRow({ ...cur, ...req.body, partsDone, dates: cur.dates }, prev);
+      const edited = 'parts' in req.body;
+      const partsDone = edited ? remapDone(cur, str(req.body.parts)) : cur.partsDone;
+      // Позначки черговості переносяться так само за назвами. Якщо форма
+      // прислала свій список — беремо його, він уже про новий перелік.
+      const partsHot = 'partsHot' in req.body
+        ? joinHot(parseHot(req.body.partsHot))
+        : (edited ? remapHot(cur, str(req.body.parts)) : cur.partsHot);
+
+      const next = deliveryRow({ ...cur, ...req.body, partsDone, partsHot, dates: cur.dates }, prev);
       await writeRow(DELIVERY_SHEET, row, next);
+
       // зміну черговості видно окремо: це рішення, а не описка в назві
-      const prioNow = 'prio' in req.body ? !!str(req.body.prio) : cur.urgent;
+      const hotWas = parseHot(cur.partsHot).size + (cur.prio ? 1 : 0);
+      const hotNow = parseHot(partsHot).size + (str(next[DL.prio]) ? 1 : 0);
       await logChange({
         sheet: DELIVERY_SHEET, row,
-        action: prioNow !== cur.urgent ? (prioNow ? 'Перша черга' : 'Звичайна черга') : 'Правка',
-        field: str(req.body.what), before: cur.what, after: str(req.body.what),
+        action: hotNow !== hotWas
+          ? (hotNow > hotWas ? 'Перша черга' : 'Звичайна черга')
+          : 'Правка',
+        field: str(req.body.what),
+        before: cur.what,
+        after: hotNow !== hotWas
+          ? `${str(req.body.what)} · першочергових місць: ${hotNow}`
+          : str(req.body.what),
       });
       return res.json(await state());
     }

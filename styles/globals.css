@@ -3033,6 +3033,24 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   background: var(--amber-dim); border-color: var(--amber); color: var(--amber);
 }
 
+/* Мішок, що летить найближчим бортом. Не заливка, а рамка: заливкою вже
+   позначені доставлені й списані, і третій суцільний колір поруч читався
+   б як ще один стан, а це не стан — це черга. */
+.dlv-part.hot {
+  border-color: var(--amber); color: var(--amber);
+}
+.dlv-part.hot i {
+  border-color: var(--amber); background: var(--amber-dim);
+}
+.dlv-part.hot::after {
+  content: '1'; order: 99;
+  font-family: var(--mono); font-size: .58rem; font-weight: 700;
+  background: var(--amber); color: var(--bg);
+  width: 13px; height: 13px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dlv-parts-head b.dlv-kg.is-hot { color: var(--amber); }
+
 .dlv-mv {
   background: var(--panel-2); border: 1px solid var(--line-soft);
   border-radius: var(--r-sm); padding: 12px 14px;
