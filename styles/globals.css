@@ -3280,3 +3280,13 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   background: var(--panel-2); color: var(--text-dim);
   font-family: var(--mono); font-size: .76rem; line-height: 1.65;
 }
+
+/* Знімок екрана в підказці. Не весь телефон, а вирізаний шматок — саме те
+   місце, про яке крок: екран цілком забрав би пів сторінки й розсунув
+   текст, заради якого підказку й відкрили. */
+.z-shot {
+  display: block; margin-top: 8px;
+  border: 1px solid var(--line); border-radius: 8px;
+  overflow: hidden; background: #000; line-height: 0;
+}
+.z-shot img { width: 100%; height: auto; display: block; }
