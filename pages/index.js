@@ -8,7 +8,7 @@ import {
 import {
   stuck, byDriver, byPoint, deliveredWithin, splitPoints, joinPoints,
   splitParts, joinParts, partsOf, partsLeft, weightOf, weightLeft, parsePart,
-  placesOf, lostOf, orderForRoad, PRIO_FIRST,
+  placesOf, lostOf, orderForRoad, hotOf, PRIO_FIRST,
 } from '../lib/delivery';
 
 // Сесія добігає кінця сама, тож будь-який запит може повернути 401.
@@ -674,11 +674,13 @@ function HomeView({ setState, onOpen, me }) {
                 <span className="totals-of"> · {d.delivery.places.split} їде частинами</span>
               )}
             </span>
-            {d.delivery.urgent.length > 0 && (
+            {d.delivery.hot.places > 0 && (
               <>
                 <span className="totals-sep">·</span>
                 <span style={{ color: 'var(--amber)' }}>
-                  В першу чергу <b>{d.delivery.urgent.length}</b>
+                  В першу чергу <b>{d.delivery.hot.places}</b>
+                  <span className="totals-of"> {bagWord(d.delivery.hot.places)}</span>
+                  {d.delivery.hot.kg > 0 ? ` · ${d.delivery.hot.kg} кг` : ''}
                 </span>
               </>
             )}
@@ -700,8 +702,10 @@ function HomeView({ setState, onOpen, me }) {
             {d.delivery.urgent.slice(0, 4).map((x, i) => (
               <div className="chip dlv-prio-chip on" key={'u' + i}
                 onClick={() => onOpen(DELIVERY_VIEW)}
-                title={`${x.stage}${x.kg ? ` · ${x.kg} кг` : ''}`}>
-                1 черга: {x.what}{x.to ? ` → ${x.to}` : ''}
+                title={[x.stage, x.names.length && x.names.join(', '), x.kg && `${x.kg} кг`]
+                  .filter(Boolean).join(' · ')}>
+                {x.what}{x.to ? ` → ${x.to}` : ''}
+                <b style={{ marginLeft: 5 }}>{x.places}</b>
               </div>
             ))}
             {d.delivery.byStage.filter((s) => s.n > 0).map((s) => (
@@ -5744,6 +5748,16 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
 /* ---------- Доставки ---------- */
 
 /** «1 добу / 2 доби / 5 діб» — за останньою цифрою, крім підлітків */
+/** «1 мішок», «2 мішки», «5 мішків» — інакше лічильник читається як помилка */
+function bagWord(n) {
+  const t = n % 100;
+  const o = n % 10;
+  if (t >= 11 && t <= 14) return 'мішків';
+  if (o === 1) return 'мішок';
+  if (o >= 2 && o <= 4) return 'мішки';
+  return 'мішків';
+}
+
 function dayWord(n) {
   const t = n % 100;
   const o = n % 10;
@@ -5848,7 +5862,9 @@ function DeliveryView({ setState, me = '' }) {
   // вчора, — це вже доставка, хай навіть картка ще стоїть «у дорозі»
   const donePlaces = placesOf(all).done;
   const closed = all.filter((d) => d.done).length;
-  const urgent = inTransit.filter((d) => d.urgent);
+  // черговість рахуємо мішками: борт бере не посилки, а стільки мішків,
+  // скільки підніме
+  const hot = hotOf(all);
   const kg = (n) => Math.round(n * 10) / 10;
 
   const card = (d) => (
@@ -5903,12 +5919,13 @@ function DeliveryView({ setState, me = '' }) {
         <span>Посилок <b>{inTransit.length}</b>
           {places.split > 0 && <span className="totals-of"> · {places.split} їде частинами</span>}
         </span>
-        {urgent.length > 0 && (
+        {hot.places > 0 && (
           <>
             <span className="totals-sep">·</span>
             <span style={{ color: 'var(--amber)' }}>
-              В першу чергу <b>{urgent.length}</b>
-              {weightLeft(urgent) > 0 ? ` · ${kg(weightLeft(urgent))} кг` : ''}
+              В першу чергу <b>{hot.places}</b>
+              <span className="totals-of"> {bagWord(hot.places)}</span>
+              {hot.kg > 0 ? ` · ${hot.kg} кг` : ''}
             </span>
           </>
         )}
@@ -6095,7 +6112,10 @@ function DeliveryCard({ item, stages, onMove, onPart, onLose, onEdit, onDelete }
             {/* першочергове видно ще до того, як прочитали назву: у списку
                 з двадцяти карток шукати позначку в тексті ніхто не буде */}
             {item.urgent && !item.done && !gone && (
-              <span className="dlv-prio" title="В першу чергу">1&nbsp;черга</span>
+              <span className="dlv-prio"
+                title={parts ? `Першочергових мішків: ${parts.hotLeft}` : 'В першу чергу'}>
+                1&nbsp;черга{parts && parts.hotLeft > 0 ? ` · ${parts.hotLeft}` : ''}
+              </span>
             )}
             <span className="dlv-name">{item.what}</span>
           </div>
@@ -6140,19 +6160,27 @@ function DeliveryCard({ item, stages, onMove, onPart, onLose, onEdit, onDelete }
               <b className="dlv-kg">{Math.round(parts.kgLeft * 10) / 10} кг везти</b>
             )}
             {parts.lost > 0 && <b className="dlv-kg is-lost">втрачено {parts.lost}</b>}
+            {parts.hotLeft > 0 && (
+              <b className="dlv-kg is-hot">
+                1 черга: {parts.hotLeft}{parts.kgHot > 0 ? ` · ${Math.round(parts.kgHot * 10) / 10} кг` : ''}
+              </b>
+            )}
             {parts.left.length > 0 && <em>лишилось: {parts.left.join(', ')}</em>}
           </div>
           <div className="dlv-chips">
             {parts.items.map((p) => (
               <button
                 key={p.n}
-                className={'dlv-part' + (p.done ? ' on' : '') + (p.lost ? ' lost' : '')}
+                className={'dlv-part' + (p.done ? ' on' : '') + (p.lost ? ' lost' : '')
+                  + (p.hot && !p.done && !p.lost ? ' hot' : '')}
                 onClick={() => onPart(p.n)}
                 title={p.lost
                   ? `Списано${p.at ? ' ' + p.at : ''} — натисніть, якщо все ж приїхало`
                   : p.done
                     ? `Доставлено${p.at ? ' ' + p.at : ''} — натисніть, щоб зняти`
-                    : 'Позначити як доставлене'}
+                    : p.hot
+                      ? 'В першу чергу — натисніть, щоб позначити доставленим'
+                      : 'Позначити як доставлене'}
               >
                 <i>{p.lost ? '✕' : p.done ? '✓' : ''}</i>
                 <span>{p.name}</span>
@@ -6226,6 +6254,20 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
   // («7,7 л»), тож кома розділювачем бути не може.
   const [parts, setParts] = useState(() => splitParts(item?.parts).join('\n'));
   const partList = parts.split(/[\n;]/).map((x) => x.trim()).filter(Boolean);
+  // Черговість стоїть на мішку: партія «Для Тигра» — це чотири мішки на
+  // один борт, і першочерговими бувають два з них. Тримаємо позначки за
+  // назвами, бо номери зсуваються, щойно допишуть рядок посередині.
+  const [hot, setHot] = useState(() => {
+    const p = partsOf(item || {});
+    return new Set(p ? p.items.filter((x) => x.hot).map((x) => x.label) : []);
+  });
+  const hotIn = (label) => hot.has(label);
+  const toggleHot = (label) => setHot((s) => {
+    const n = new Set(s);
+    if (n.has(label)) n.delete(label); else n.add(label);
+    return n;
+  });
+  const hotNums = partList.map((l, i) => (hotIn(l) ? i + 1 : 0)).filter(Boolean);
   // вага, порахована з місць: коли вона є, окреме поле ваги зайве —
   // два числа про одне й те саме завжди рано чи пізно розходяться
   const weighed = partList.map(parsePart);
@@ -6251,6 +6293,10 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
             what: f.what.trim(),
             weight: partsKg !== null ? partsKg : f.weight,
             parts: joinParts(partList),
+            partsHot: hotNums.join('; '),
+            // позначка на самій посилці лишається тільки коли місць немає:
+            // тоді вся посилка і є той один мішок
+            prio: partList.length ? '' : f.prio,
           });
         }
         catch (e) { setErr(e.message); }
@@ -6269,21 +6315,23 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
           placeholder="Вода, Їжа, Акумулятори…" />
       </div>
 
-      {/* Черговість. Рівнів два: там, де їх п'ять, через місяць усе стає
-          «високим». «В першу чергу» — заявка на місце в найближчому борті,
-          а не оцінка важливості вантажу. */}
-      <div style={{ marginTop: 10 }}>
-        <label>Черговість</label>
-        <div className="chips">
-          <div className={'chip' + (!f.prio ? ' on' : '')} onClick={() => up('prio', '')}>
-            Звичайна
-          </div>
-          <div className={'chip dlv-prio-chip' + (f.prio ? ' on' : '')}
-            onClick={() => up('prio', PRIO_FIRST)}>
-            В першу чергу
+      {/* Черговість, коли посилка — один мішок. Коли їх кілька, позначка
+          переїжджає на самі мішки: борт бере не посилку цілком, а стільки,
+          скільки підніме. */}
+      {partList.length === 0 && (
+        <div style={{ marginTop: 10 }}>
+          <label>Черговість</label>
+          <div className="chips">
+            <div className={'chip' + (!f.prio ? ' on' : '')} onClick={() => up('prio', '')}>
+              Звичайна
+            </div>
+            <div className={'chip dlv-prio-chip' + (f.prio ? ' on' : '')}
+              onClick={() => up('prio', PRIO_FIRST)}>
+              В першу чергу
+            </div>
           </div>
         </div>
-      </div>
+      )}
       <div style={{ marginTop: 10 }}>
         <label>
           Вага, кг
@@ -6309,6 +6357,36 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
           сама, а на картці буде видно, скільки кілограмів ще везти.
         </div>
       </div>
+
+      {/* Які мішки летять найближчим бортом. Тиснути тут, а не вписувати
+          значок у рядок: перелік уже набраний, лишилось показати пальцем. */}
+      {partList.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <label>
+            В першу чергу
+            {hotNums.length > 0 && (
+              <span className="count" style={{ marginLeft: 6 }}>{hotNums.length} з {partList.length}</span>
+            )}
+          </label>
+          <div className="chips">
+            {partList.map((label, i) => {
+              const { name } = parsePart(label);
+              return (
+                <div key={label + i}
+                  className={'chip dlv-prio-chip' + (hotIn(label) ? ' on' : '')}
+                  onClick={() => toggleHot(label)}
+                >
+                  {name}
+                </div>
+              );
+            })}
+          </div>
+          <div className="dlv-tip" style={{ marginTop: 6 }}>
+            Відмітьте мішки, які мають полетіти найближчим бортом. Борт бере
+            не посилку цілком, а скільки підніме, — і саме ці поїдуть першими.
+          </div>
+        </div>
+      )}
       <div style={{ marginTop: 10 }}>
         <label>Примітка</label>
         <input type="text" value={f.note} onChange={(e) => up('note', e.target.value)}
