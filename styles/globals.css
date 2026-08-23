@@ -3239,3 +3239,44 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   background: var(--red-dim); border: 1px solid var(--red);
   color: var(--red); font-size: .84rem;
 }
+
+/* Підказка «як заповнювати». Кнопка стоїть поруч із головною, а не під
+   меню: до порядку дій повертаються не раз, і шукати його щоразу — це
+   робота понад ту, заради якої сюди зайшли. */
+.z-help-b {
+  flex: 0 0 auto; min-height: 46px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: transparent; color: var(--amber);
+  font: inherit; font-size: .84rem; font-weight: 600; cursor: pointer;
+}
+.z-help-b:hover { background: var(--amber-dim); border-color: var(--amber); }
+
+/* Кроки — справжня послідовність, тому нумеровані */
+.z-steps {
+  list-style: none; counter-reset: z; margin: 6px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.z-steps li {
+  counter-increment: z; position: relative; padding-left: 30px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.z-steps li::before {
+  content: counter(z);
+  position: absolute; left: 0; top: 1px;
+  width: 21px; height: 21px; border-radius: 50%;
+  background: var(--amber); color: var(--bg);
+  font-family: var(--mono); font-size: .7rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.z-steps b { font-size: .95rem; font-weight: 600; }
+.z-steps span { font-size: .88rem; color: var(--text-dim); line-height: 1.5; }
+.z-steps .z-warn {
+  color: var(--amber); border-left: 2px solid var(--amber-dim);
+  padding-left: 9px; margin-top: 2px;
+}
+.z-code {
+  margin: 4px 0 0; padding: 9px 11px; overflow-x: auto;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--panel-2); color: var(--text-dim);
+  font-family: var(--mono); font-size: .76rem; line-height: 1.65;
+}

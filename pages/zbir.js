@@ -18,6 +18,7 @@ import { partsOf, parsePart, splitParts, joinParts } from '../lib/delivery';
 
 const KEY = 'oblik_pack_key';
 const WHO = 'oblik_pack_who';
+const SEEN = 'oblik_pack_help';
 
 const load = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
 const save = (k, v) => { try { localStorage.setItem(k, v); } catch { /* приватне вікно */ } };
@@ -50,6 +51,7 @@ export default function Zbir() {
   const [busy, setBusy] = useState(false);
   const [add, setAdd] = useState(false);
   const [hand, setHand] = useState(null);
+  const [help, setHelp] = useState(false);
 
   // Ключ приходить у посиланні один раз, далі живе в цьому браузері:
   // просити людину щоразу відкривати довгий рядок — це просити її його
@@ -125,7 +127,13 @@ export default function Zbir() {
   if (!me) {
     return (
       <Shell>
-        <WhoAsk onSet={(v) => { save(WHO, v); setMe(v); }} />
+        <WhoAsk onSet={(v) => {
+          save(WHO, v);
+          setMe(v);
+          // новачкові показуємо порядок дій одразу: шукати підказку в
+          // застосунку, який бачиш уперше, — це вже задача понад роботу
+          if (!load(SEEN)) { save(SEEN, '1'); setHelp(true); }
+        }} />
       </Shell>
     );
   }
@@ -145,6 +153,12 @@ export default function Zbir() {
             {me} <i>змінити</i>
           </button>
         </div>
+        {/* Підказка стоїть поруч із головною кнопкою, а не ховається під
+            меню: до неї повертаються не раз, і шукати її щоразу — це
+            робота понад ту, заради якої сюди зайшли. */}
+        <button className="z-help-b" onClick={() => setHelp(true)} title="Як заповнювати">
+          Як заповнювати
+        </button>
         <button className="z-btn z-btn-main" onClick={() => setAdd(true)}>+ Нова посилка</button>
       </header>
 
@@ -190,6 +204,8 @@ export default function Zbir() {
         />
       )}
 
+      {help && <HelpSheet onClose={() => setHelp(false)} />}
+
       {hand && (
         <HandForm
           d={hand}
@@ -210,6 +226,77 @@ function Shell({ children, busy }) {
       <Head><title>Пункт збору</title></Head>
       <div className={'z-wrap' + (busy ? ' is-busy' : '')}>{children}</div>
     </>
+  );
+}
+
+/**
+ * Порядок дій.
+ *
+ * Написано не про кнопки, а про роботу: людина приходить сюди з коробкою
+ * в руках, а не з питанням «що робить ця кнопка». Кожен крок названий тим
+ * словом, яке стоїть на екрані, — щоб не доводилось перекладати.
+ */
+const HELP = [
+  {
+    t: 'Зібрали коробку',
+    d: 'Натисніть «+ Нова посилка». Заводьте, коли вже зважили: потім дописувати доведеться через чергового.',
+  },
+  {
+    t: 'Кому призначена',
+    d: 'Позиція, куди це поїде: Тигр, Рись, Білий. Почніть вводити — підкаже те, що вже вписували.',
+    warn: 'Одна посилка — одна позиція. Якщо частина мішків їде на Тигр, а частина на Рись, заводьте дві.',
+  },
+  {
+    t: 'Назва',
+    d: 'Коротко, щоб упізнати в списку: «Вода і їжа», «Акумулятори». Не опис вмісту, а назва партії.',
+  },
+  {
+    t: 'Мішки — кожен з нового рядка',
+    d: 'Один рядок — один мішок, саме так, як їх понесуть. Після «=» можна вписати вагу: тоді вага посилки складеться сама.',
+    code: 'Вода 7,7 л = 7.7\nВода 7,8 л = 7.8\nЇжа = 12\nАкумулятори = 4',
+  },
+  {
+    t: 'В першу чергу',
+    d: 'Під переліком зʼявляться кнопки з назвами мішків. Натисніть ті, що мають полетіти найближчим бортом — борт бере не посилку цілком, а скільки підніме.',
+    warn: 'Нічого термінового немає — не тисніть нічого. Коли першочергове все, черга перестає щось означати.',
+  },
+  {
+    t: 'Приїхав водій',
+    d: 'На картці — «Передати на відправку». Оберіть, кому саме віддали, і підтвердіть. Дата й час проставляться самі.',
+    warn: 'Тисніть у момент передачі, а не заздалегідь: повернути позначку звідси не можна.',
+  },
+  {
+    t: 'Далі веде черговий',
+    d: 'Доставку до пілотів і прибуття на позицію відмічає він. Помилка в картці, коробка не поїхала, мішок розбили — теж до нього: правити й видаляти звідси не можна.',
+  },
+];
+
+function HelpSheet({ onClose }) {
+  return (
+    <div className="z-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="z-sheet">
+        <div className="z-sheet-h">Як заповнювати</div>
+        <div className="z-sheet-b">
+          <ol className="z-steps">
+            {HELP.map((s) => (
+              <li key={s.t}>
+                <b>{s.t}</b>
+                <span>{s.d}</span>
+                {s.code && <pre className="z-code">{s.code}</pre>}
+                {s.warn && <span className="z-warn">{s.warn}</span>}
+              </li>
+            ))}
+          </ol>
+          <div className="z-tip" style={{ marginTop: 14 }}>
+            Посилання на цю сторінку нікому не пересилайте: хто його отримає,
+            зможе заводити посилки від вашого імені.
+          </div>
+        </div>
+        <div className="z-sheet-f">
+          <button className="z-btn z-btn-main" onClick={onClose}>Зрозуміло</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
