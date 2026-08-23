@@ -3019,6 +3019,20 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .act-btn.act-lost { color: var(--red); }
 .act-btn.act-lost:hover { background: var(--red-dim); border-color: var(--red); }
 
+/* Черговість. Позначка стоїть у заголовку картки, поруч із адресатом:
+   у списку з двадцяти коробок її шукають очима, а не читанням. */
+.dlv-prio {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center;
+  padding: 2px 7px; border-radius: 4px;
+  background: var(--amber); color: var(--bg);
+  font-family: var(--mono); font-size: .62rem; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+}
+.chip.dlv-prio-chip.on {
+  background: var(--amber-dim); border-color: var(--amber); color: var(--amber);
+}
+
 .dlv-mv {
   background: var(--panel-2); border: 1px solid var(--line-soft);
   border-radius: var(--r-sm); padding: 12px 14px;

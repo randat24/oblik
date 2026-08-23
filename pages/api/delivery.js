@@ -2,7 +2,7 @@ import { withAuth, currentActor } from '../../lib/auth';
 import { readSheet, writeRow, appendRow, deleteRow, ensureSheet } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
 import {
-  DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS, LOST_WHY,
+  DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS, LOST_WHY, PRIO_FIRST,
   parseDeliveries, deliveryRow, stampKyiv, suggestions, stageOf,
   splitParts, parseDone, joinDone, partsOf,
 } from '../../lib/delivery';
@@ -86,11 +86,11 @@ export default withAuth(async (req, res) => {
     // Нова посилка одразу на першому етапі: складена — значить зібрана,
     // окремої кнопки «підтвердити збирання» тут не треба.
     if (action === 'add') {
-      const { what, weight, note, to, parts } = req.body;
-      if (!str(what)) return res.status(400).json({ error: 'Не вказано вміст' });
+      const { what, weight, note, to, parts, prio } = req.body;
+      if (!str(what)) return res.status(400).json({ error: 'Не вказано назву' });
       const now = stampKyiv();
       const row = deliveryRow({
-        created: now, what, weight, note, to, parts,
+        created: now, what, weight, note, to, parts, prio,
         giver: who, dates: { packed: now },
       });
       await appendRow(DELIVERY_SHEET, row, { raw: true });
@@ -101,6 +101,7 @@ export default withAuth(async (req, res) => {
           `${str(weight) || '?'} кг`,
           n > 1 && `${n} місць`,
           str(to) && `для ${str(to)}`,
+          str(prio) && PRIO_FIRST,
         ].filter(Boolean).join(' · '),
       });
       return res.json(await state());
@@ -308,7 +309,7 @@ export default withAuth(async (req, res) => {
       const values = await readSheet(DELIVERY_SHEET);
       const prev = values[row - 1];
       if (!prev) return res.status(404).json({ error: 'Рядок не знайдено' });
-      if (!str(req.body.what)) return res.status(400).json({ error: 'Не вказано вміст' });
+      if (!str(req.body.what)) return res.status(400).json({ error: 'Не вказано назву' });
 
       const cur = parseDeliveries([DELIVERY_HEADERS, prev])[0];
       // Перелік місць правлять і після відправки — дописують забуту
@@ -319,8 +320,11 @@ export default withAuth(async (req, res) => {
         : cur.partsDone;
       const next = deliveryRow({ ...cur, ...req.body, partsDone, dates: cur.dates }, prev);
       await writeRow(DELIVERY_SHEET, row, next);
+      // зміну черговості видно окремо: це рішення, а не описка в назві
+      const prioNow = 'prio' in req.body ? !!str(req.body.prio) : cur.urgent;
       await logChange({
-        sheet: DELIVERY_SHEET, row, action: 'Правка',
+        sheet: DELIVERY_SHEET, row,
+        action: prioNow !== cur.urgent ? (prioNow ? 'Перша черга' : 'Звичайна черга') : 'Правка',
         field: str(req.body.what), before: cur.what, after: str(req.body.what),
       });
       return res.json(await state());

@@ -8,7 +8,7 @@ import {
 import {
   stuck, byDriver, byPoint, deliveredWithin, splitPoints, joinPoints,
   splitParts, joinParts, partsOf, partsLeft, weightOf, weightLeft, parsePart,
-  placesOf, lostOf,
+  placesOf, lostOf, orderForRoad, PRIO_FIRST,
 } from '../lib/delivery';
 
 // Сесія добігає кінця сама, тож будь-який запит може повернути 401.
@@ -674,6 +674,14 @@ function HomeView({ setState, onOpen, me }) {
                 <span className="totals-of"> · {d.delivery.places.split} їде частинами</span>
               )}
             </span>
+            {d.delivery.urgent.length > 0 && (
+              <>
+                <span className="totals-sep">·</span>
+                <span style={{ color: 'var(--amber)' }}>
+                  В першу чергу <b>{d.delivery.urgent.length}</b>
+                </span>
+              </>
+            )}
             <span className="totals-sep">·</span>
             <span>Доставлено місць <b>{d.delivery.donePlaces}</b>{' '}
               <span className="totals-of">посилок за тиждень {d.delivery.week}</span></span>
@@ -689,6 +697,13 @@ function HomeView({ setState, onOpen, me }) {
           </div>
 
           <div className="chips">
+            {d.delivery.urgent.slice(0, 4).map((x, i) => (
+              <div className="chip dlv-prio-chip on" key={'u' + i}
+                onClick={() => onOpen(DELIVERY_VIEW)}
+                title={`${x.stage}${x.kg ? ` · ${x.kg} кг` : ''}`}>
+                1 черга: {x.what}{x.to ? ` → ${x.to}` : ''}
+              </div>
+            ))}
             {d.delivery.byStage.filter((s) => s.n > 0).map((s) => (
               <div className="chip" key={s.key} onClick={() => onOpen(DELIVERY_VIEW)}>
                 {s.label}<span className="count">{s.n}</span>
@@ -5804,7 +5819,8 @@ function DeliveryView({ setState, me = '' }) {
       .join(' ').toLowerCase().includes(t));
   }
 
-  const onWay = list.filter((d) => !d.done && !d.isLost);
+  // першочергове — вгору списку, далі те, що довше стоїть без руху
+  const onWay = orderForRoad(list.filter((d) => !d.done && !d.isLost));
   const done = list.filter((d) => d.done);
   const goneList = list.filter((d) => d.isLost);
 
@@ -5832,6 +5848,7 @@ function DeliveryView({ setState, me = '' }) {
   // вчора, — це вже доставка, хай навіть картка ще стоїть «у дорозі»
   const donePlaces = placesOf(all).done;
   const closed = all.filter((d) => d.done).length;
+  const urgent = inTransit.filter((d) => d.urgent);
   const kg = (n) => Math.round(n * 10) / 10;
 
   const card = (d) => (
@@ -5886,6 +5903,15 @@ function DeliveryView({ setState, me = '' }) {
         <span>Посилок <b>{inTransit.length}</b>
           {places.split > 0 && <span className="totals-of"> · {places.split} їде частинами</span>}
         </span>
+        {urgent.length > 0 && (
+          <>
+            <span className="totals-sep">·</span>
+            <span style={{ color: 'var(--amber)' }}>
+              В першу чергу <b>{urgent.length}</b>
+              {weightLeft(urgent) > 0 ? ` · ${kg(weightLeft(urgent))} кг` : ''}
+            </span>
+          </>
+        )}
         {gone.places > 0 && (
           <>
             <span className="totals-sep">·</span>
@@ -6066,6 +6092,11 @@ function DeliveryCard({ item, stages, onMove, onPart, onLose, onEdit, onDelete }
         <div className="card-title">
           <div className="title-line">
             {item.to && <span className="id-badge" title="Кому призначена">{item.to}</span>}
+            {/* першочергове видно ще до того, як прочитали назву: у списку
+                з двадцяти карток шукати позначку в тексті ніхто не буде */}
+            {item.urgent && !item.done && !gone && (
+              <span className="dlv-prio" title="В першу чергу">1&nbsp;черга</span>
+            )}
             <span className="dlv-name">{item.what}</span>
           </div>
           {kg !== null && (
@@ -6188,6 +6219,7 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
     what: item?.what || '',
     weight: item?.weight ?? '',
     note: item?.note || '',
+    prio: item?.prio || '',
   }));
   // Місця вводяться рядками, а зберігаються через «;»: набирати список
   // з Enter простіше, ніж пам'ятати розділювач, а в самих назвах повно ком
@@ -6211,7 +6243,7 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
       busy={busy}
       error={err}
       onSave={async () => {
-        if (!f.what.trim()) return setErr('Вкажіть, що всередині');
+        if (!f.what.trim()) return setErr('Вкажіть назву');
         setBusy(true); setErr('');
         try {
           await onSave({
@@ -6232,9 +6264,25 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
         <datalist id="dlvTo">{(tos || []).map((v) => <option key={v} value={v} />)}</datalist>
       </div>
       <div style={{ marginTop: 10 }}>
-        <label>Що всередині</label>
+        <label>Назва</label>
         <input type="text" value={f.what} onChange={(e) => up('what', e.target.value)}
-          placeholder="Напр. акумулятори 6S, 4 шт." />
+          placeholder="Вода, Їжа, Акумулятори…" />
+      </div>
+
+      {/* Черговість. Рівнів два: там, де їх п'ять, через місяць усе стає
+          «високим». «В першу чергу» — заявка на місце в найближчому борті,
+          а не оцінка важливості вантажу. */}
+      <div style={{ marginTop: 10 }}>
+        <label>Черговість</label>
+        <div className="chips">
+          <div className={'chip' + (!f.prio ? ' on' : '')} onClick={() => up('prio', '')}>
+            Звичайна
+          </div>
+          <div className={'chip dlv-prio-chip' + (f.prio ? ' on' : '')}
+            onClick={() => up('prio', PRIO_FIRST)}>
+            В першу чергу
+          </div>
+        </div>
       </div>
       <div style={{ marginTop: 10 }}>
         <label>
