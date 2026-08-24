@@ -3415,6 +3415,23 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   overflow-x: auto; white-space: pre;
 }
 
+/* «Далі почитати» — стримано, доки урок не зроблено, і помітно після */
+.cd-next {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  text-decoration: none; color: var(--text-dim);
+  transition: border-color .15s, color .15s;
+}
+.cd-next:hover { border-color: var(--blue); color: var(--text); }
+.cd-next b { font-size: .92rem; color: var(--blue); }
+.cd-next-l {
+  font-size: .68rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .08em;
+}
+.cd-next-d { font-size: .82rem; line-height: 1.45; }
+.cd-next.is-done { border-color: var(--blue); background: var(--blue-dim); }
+
 /* ─────────────────────────────────────────────────────────────
    Довідник. Друга половина вкладки «Код»: уроки проходять один раз,
    а сюди повертаються щоразу, коли забули, як пишеться те, що вже
