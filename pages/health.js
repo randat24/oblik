@@ -12,6 +12,7 @@ import {
 } from '../lib/mult';
 import { pace, forecast, verdicts } from '../lib/weight';
 import { CODE_LESSONS, TRACKS, openUpTo, courseStats } from '../lib/code';
+import { REF_GROUPS, REF_CARDS, findCards } from '../lib/ref';
 
 /*
  * Особистий розділ здоров'я. Свідомо окрема сторінка з власним кодом:
@@ -5490,6 +5491,9 @@ function CodeTab({ data, reload, toast }) {
   const [prog, setProg] = useState(() => data.code || {});
   const [openId, setOpenId] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Курс проходять один раз, а довідник відкривають щотижня — тож це не
+  // підрозділ уроків, а рівноправний режим вкладки.
+  const [mode, setMode] = useState('learn');
 
   useEffect(() => { setProg(data.code || {}); }, [data.code]);
 
@@ -5548,6 +5552,10 @@ function CodeTab({ data, reload, toast }) {
     );
   }
 
+  if (mode === 'ref') {
+    return <RefBook onBack={() => setMode('learn')} />;
+  }
+
   return (
     <div className="cd-home">
       <div className="cd-intro">
@@ -5558,6 +5566,17 @@ function CodeTab({ data, reload, toast }) {
           там, де без них уже не обійтись.
         </p>
       </div>
+
+      {/* Довідник — не додаток до уроків, а друга половина вкладки: уроки
+          проходять один раз, а сюди повертаються щоразу, коли забули, як
+          саме пишеться те, що вже колись робив. */}
+      <button className="cd-refb" onClick={() => setMode('ref')}>
+        <span className="cd-refb-t">Довідник</span>
+        <span className="cd-refb-d">
+          {REF_CARDS.length} карток: як поставити по центру, як перебрати
+          список, як надіслати запит
+        </span>
+      </button>
 
       <div className="cd-prog">
         <div className="cd-prog-t">
@@ -5602,6 +5621,91 @@ function CodeTab({ data, reload, toast }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Довідник.
+ *
+ * Побудований за питаннями, а не за темами: у роботі згадується не
+ * «flexbox», а «як поставити по центру». Тому пошук іде і по назві, і по
+ * питанню, і по самому коду — знайдеться і так, і так.
+ *
+ * У кожній картці є рядок «у застосунку»: приклад із підручника
+ * забувається, а «ось так зроблено в моєму «Обліку» — ні.
+ */
+function RefBook({ onBack }) {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(null);
+
+  const found = findCards(q);
+  const searching = q.trim().length > 0;
+
+  return (
+    <div className="cd-ref">
+      <div className="cd-ref-top">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+        <input
+          className="cd-ref-q"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Що потрібно згадати?"
+        />
+      </div>
+
+      {searching && (
+        <div className="cd-ref-n">
+          {found.length === 0
+            ? 'Нічого не знайшлось. Спробуйте іншими словами — пошук іде і по коду.'
+            : `Знайдено: ${found.length}`}
+        </div>
+      )}
+
+      {REF_GROUPS.map((g) => {
+        const cards = found.filter((c) => c.g === g.key);
+        if (!cards.length) return null;
+        return (
+          <div className="cd-ref-g" key={g.key}>
+            <div className="cd-ref-h">
+              <b>{g.label}</b>
+              <em>{g.hint}</em>
+            </div>
+            <div className="cd-ref-list">
+              {cards.map((c) => (
+                <RefCard
+                  key={c.id}
+                  c={c}
+                  open={open === c.id || searching}
+                  onToggle={() => setOpen(open === c.id ? null : c.id)}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Картка згорнута, поки не потрібна: список із тридцяти розгорнутих не гортається */
+function RefCard({ c, open, onToggle }) {
+  return (
+    <div className={'cd-card' + (open ? ' is-open' : '')}>
+      <button className="cd-card-h" onClick={onToggle}>
+        <span className="cd-card-t">{c.t}</span>
+        <span className="cd-card-q">{c.q}</span>
+      </button>
+      {open && (
+        <div className="cd-card-b">
+          <pre className="cd-card-code">{c.code}</pre>
+          {c.note && <p className="cd-card-n">{c.note}</p>}
+          {c.note2 && <p className="cd-card-n">{c.note2}</p>}
+          {c.here && (
+            <p className="cd-card-here"><b>У застосунку:</b> {c.here}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
