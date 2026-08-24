@@ -3414,3 +3414,80 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   font-family: var(--mono); font-size: .84rem; color: var(--green);
   overflow-x: auto; white-space: pre;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Довідник. Друга половина вкладки «Код»: уроки проходять один раз,
+   а сюди повертаються щоразу, коли забули, як пишеться те, що вже
+   колись робив.
+   ───────────────────────────────────────────────────────────── */
+
+/* Вхід у довідник стоїть просто під вступом, а не в кінці списку уроків:
+   шукати довідник під тридцятьма картками — це вже пошук, а не довідка. */
+.cd-refb {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  width: 100%; padding: 13px 15px; margin-top: 4px;
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel); color: var(--text);
+  font: inherit; cursor: pointer;
+}
+.cd-refb:hover { border-color: var(--blue); background: var(--panel-2); }
+.cd-refb-t {
+  font-size: .82rem; font-weight: 700; color: var(--blue);
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.cd-refb-d { font-size: .84rem; color: var(--muted); line-height: 1.5; }
+
+.cd-ref { display: flex; flex-direction: column; gap: 16px; }
+.cd-ref-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cd-ref-q {
+  flex: 1 1 220px; min-height: 40px; padding: 8px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--panel-2); color: var(--text); font: inherit; font-size: .92rem;
+}
+.cd-ref-q:focus { outline: none; border-color: var(--blue); }
+.cd-ref-n { font-size: .82rem; color: var(--muted); }
+
+.cd-ref-g { display: flex; flex-direction: column; gap: 8px; }
+.cd-ref-h { display: flex; align-items: baseline; gap: 9px; }
+.cd-ref-h b {
+  font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--blue);
+}
+.cd-ref-h em { font-style: normal; font-size: .78rem; color: var(--muted); }
+.cd-ref-list { display: flex; flex-direction: column; gap: 6px; }
+
+.cd-card {
+  border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  background: var(--panel); overflow: hidden;
+}
+.cd-card.is-open { border-color: var(--line); }
+.cd-card-h {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+  width: 100%; padding: 11px 14px;
+  background: none; border: 0; color: var(--text); font: inherit; cursor: pointer;
+}
+.cd-card-h:hover { background: var(--panel-2); }
+.cd-card-t { font-size: .95rem; font-weight: 600; }
+.cd-card-q { font-size: .8rem; color: var(--muted); }
+
+.cd-card-b {
+  padding: 0 14px 13px;
+  display: flex; flex-direction: column; gap: 9px;
+}
+/* Код читають, а не гортають убік: горизонтальна прокрутка живе
+   всередині блока, щоб сторінка не їхала. */
+.cd-card-code {
+  margin: 0; padding: 11px 13px; overflow-x: auto;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--bg); color: var(--text-dim);
+  font-family: var(--mono); font-size: .78rem; line-height: 1.7;
+}
+.cd-card-n { margin: 0; font-size: .86rem; color: var(--text-dim); line-height: 1.55; }
+/* Рядок «у застосунку» — головне в картці: приклад із підручника
+   забувається, а власний код ні. */
+.cd-card-here {
+  margin: 0; padding: 8px 11px;
+  border-left: 2px solid var(--green); border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--green-dim);
+  font-size: .84rem; color: var(--text-dim); line-height: 1.5;
+}
+.cd-card-here b { color: var(--green); }
