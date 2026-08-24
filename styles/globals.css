@@ -3433,6 +3433,92 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .cd-next.is-done { border-color: var(--blue); background: var(--blue-dim); }
 
 /* ─────────────────────────────────────────────────────────────
+   Щоденник практики. Третя частина вкладки «Код»: уроки закінчуються,
+   довідник відповідає на питання, а сюди пишуть свої зміни — те, з чого
+   й починається вміння.
+   ───────────────────────────────────────────────────────────── */
+
+.cd-refb.is-diary:hover { border-color: var(--amber); }
+.cd-refb.is-diary .cd-refb-t { color: var(--amber); }
+.cd-refb-n {
+  display: inline-block; margin-left: 8px; padding: 0 7px;
+  border-radius: 999px; background: var(--amber-dim); color: var(--amber);
+  font-size: .74rem; font-style: normal; font-weight: 700;
+}
+
+.dy-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.dy-stat {
+  flex: 1 1 84px; padding: 9px 11px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.dy-stat b { font-size: 1.16rem; color: var(--text); }
+.dy-stat span { font-size: .74rem; color: var(--muted); }
+
+.dy-form {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 12px 14px; border-radius: var(--r);
+  background: var(--panel); border: 1px solid var(--line-soft);
+}
+.dy-field { display: flex; flex-direction: column; gap: 4px; }
+.dy-field.is-short { max-width: 200px; }
+.dy-lab { font-size: .82rem; color: var(--text-dim); font-weight: 600; }
+.dy-req {
+  margin-left: 8px; padding: 0 6px; border-radius: 999px;
+  background: var(--amber-dim); color: var(--amber);
+  font-size: .68rem; font-style: normal; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.dy-field textarea, .dy-field input {
+  width: 100%; padding: 8px 10px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  color: var(--text); font-family: var(--sans); font-size: .9rem;
+  line-height: 1.45; resize: vertical;
+}
+.dy-field textarea:focus, .dy-field input:focus { outline: none; border-color: var(--blue); }
+.dy-hint { font-size: .76rem; color: var(--muted); font-style: normal; }
+
+.dy-ideas {
+  padding: 12px 14px; border-radius: var(--r);
+  background: var(--panel-2); border: 1px dashed var(--line);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.dy-ideas-h {
+  font-size: .72rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .08em;
+}
+.dy-idea { display: flex; flex-direction: column; gap: 2px; }
+.dy-idea b { font-size: .9rem; color: var(--text); }
+.dy-idea span { font-size: .84rem; color: var(--text-dim); line-height: 1.45; }
+.dy-idea code { font-family: var(--mono); font-size: .78rem; color: var(--green); }
+
+.dy-list { display: flex; flex-direction: column; gap: 10px; }
+.dy-entry {
+  padding: 11px 13px; border-radius: var(--r);
+  background: var(--panel); border: 1px solid var(--line-soft);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.dy-entry-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.dy-entry-h b { font-size: .94rem; color: var(--text); line-height: 1.35; }
+.dy-entry-h span { flex: none; font-size: .74rem; color: var(--muted); }
+.dy-line {
+  display: flex; gap: 8px; align-items: baseline;
+  font-size: .86rem; color: var(--text-dim); line-height: 1.5;
+}
+.dy-line i {
+  flex: none; width: 82px; font-style: normal; font-size: .7rem;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+}
+.dy-line code { font-family: var(--mono); font-size: .8rem; color: var(--green); }
+.dy-line.is-broke { color: var(--amber); }
+.dy-line.is-learn { color: var(--green); }
+
+@media (max-width: 560px) {
+  .dy-line { flex-direction: column; gap: 1px; }
+  .dy-line i { width: auto; }
+}
+
+/* ─────────────────────────────────────────────────────────────
    Довідник. Друга половина вкладки «Код»: уроки проходять один раз,
    а сюди повертаються щоразу, коли забули, як пишеться те, що вже
    колись робив.

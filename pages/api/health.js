@@ -2,7 +2,7 @@ import { withAuth, currentActor, isGuest } from '../../lib/auth';
 import {
   readAll, saveDay, addFood, delFood, recalcDay, saveBody, saveGoals,
   saveProduct, lookupBarcode, saveDish, delDish, copyDay,
-  saveMed, takeMed, restockMed, delMed, saveMult, saveCode,
+  saveMed, takeMed, restockMed, delMed, saveMult, saveCode, addPractice,
   isOwner, healthOwner, todayKyiv,
 } from '../../lib/health';
 
@@ -108,6 +108,17 @@ export default withAuth(async (req, res) => {
 
     if (action === 'code') {
       await saveCode(req.body.code || {});
+      return res.json(await readAll());
+    }
+
+    if (action === 'practice') {
+      const e = req.body.entry || {};
+      // без задачі запис нічого не варт: через місяць «правив картку» не
+      // скаже ні що робилось, ні навіщо
+      if (!String(e.want || '').trim()) {
+        return res.status(400).json({ error: 'Напишіть, що саме хотіли зробити' });
+      }
+      await addPractice({ ...e, date: String(e.date || '').trim() || todayKyiv() });
       return res.json(await readAll());
     }
 

@@ -12,6 +12,7 @@ import {
 } from '../lib/mult';
 import { pace, forecast, verdicts } from '../lib/weight';
 import { CODE_LESSONS, TRACKS, openUpTo, courseStats, nextLink } from '../lib/code';
+import { FIELDS as PRACTICE_FIELDS, statsOf, freshIdeas } from '../lib/practice';
 import { REF_GROUPS, REF_CARDS, findCards } from '../lib/ref';
 import { TOURS, tourById } from '../lib/tour';
 
@@ -645,14 +646,18 @@ function Bar({ label, value, goal, unit = 'г', tone }) {
 
 const DOW = ['НД', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
 
-/** «21 день», «22 дні», «25 днів» — за останньою цифрою, крім підлітків */
-function plural(n) {
+/**
+ * «21 день», «22 дні», «25 днів» — за останньою цифрою, крім підлітків.
+ * Дні тут за замовчуванням, бо їх рахують найчастіше, але форми можна
+ * передати й свої: `plural(n, 'зміна', 'зміни', 'змін')`.
+ */
+function plural(n, one = 'день', few = 'дні', many = 'днів') {
   const t = n % 100;
   const o = n % 10;
-  if (t >= 11 && t <= 14) return 'днів';
-  if (o === 1) return 'день';
-  if (o >= 2 && o <= 4) return 'дні';
-  return 'днів';
+  if (t >= 11 && t <= 14) return many;
+  if (o === 1) return one;
+  if (o >= 2 && o <= 4) return few;
+  return many;
 }
 
 /** Чи є за цей день хоч якийсь запис — саме це й означає «вів щоденник» */
@@ -5514,6 +5519,7 @@ function CodeTab({ data, reload, toast }) {
 
   const upIdx = openUpTo(prog);
   const stats = courseStats(prog);
+  const diary = statsOf(data.practice || [], today());
 
   const save = async (next) => {
     setProg(next);
@@ -5575,6 +5581,21 @@ function CodeTab({ data, reload, toast }) {
     return <TourBook onBack={() => setMode('learn')} />;
   }
 
+  if (mode === 'diary') {
+    return (
+      <Diary
+        list={data.practice || []}
+        canEdit={data.canEdit}
+        onBack={() => setMode('learn')}
+        onAdd={async (entry) => {
+          await api('/api/health', { method: 'POST', body: { action: 'practice', entry } });
+          await reload();
+        }}
+        toast={toast}
+      />
+    );
+  }
+
   return (
     <div className="cd-home">
       <div className="cd-intro">
@@ -5605,6 +5626,22 @@ function CodeTab({ data, reload, toast }) {
         <span className="cd-refb-d">
           {TOURS.length} розборів справжніх файлів «Обліку» — рядок за рядком,
           із поясненням, чому саме так
+        </span>
+      </button>
+
+      {/* Третя частина вкладки — і найважливіша після того, як уроки
+          скінчаться. Курс закінчується, довідник відповідає на питання,
+          а вміння починається на першій зміні, якої ніхто не задавав. */}
+      <button className="cd-refb is-diary" onClick={() => setMode('diary')}>
+        <span className="cd-refb-t">
+          Щоденник практики
+          {diary.entries > 0 && <em className="cd-refb-n">{diary.entries}</em>}
+        </span>
+        <span className="cd-refb-d">
+          {diary.entries > 0
+            ? `${diary.entries} ${plural(diary.entries, 'зміна', 'зміни', 'змін')} за ${diary.days} ${plural(diary.days, 'день', 'дні', 'днів')}`
+              + (diary.fixed ? `, з них ${diary.fixed} з розібраною поломкою` : '')
+            : 'Свої зміни в цьому застосунку: що хотів, що зробив, на чому спіткнувся'}
         </span>
       </button>
 
@@ -5960,6 +5997,138 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
       {showSolution && <CodeBlock code={lesson.solution} />}
 
       <NextRead lesson={lesson} done={passed} />
+    </div>
+  );
+}
+
+/**
+ * Щоденник практики.
+ *
+ * Уроки закінчуються, і саме там зупиняється більшість. Вміння
+ * починається на першій зміні, якої ніхто не задавав, — і от її треба
+ * записати: що хотів, що зробив, на чому спіткнувся.
+ *
+ * Форма навмисно вимагає лише одне поле. Щоденник, який просить
+ * заповнити сім клітинок, кидають на третьому записі.
+ */
+function Diary({ list, canEdit, onBack, onAdd, toast }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({});
+  const [busy, setBusy] = useState(false);
+
+  const s = statsOf(list, today());
+  const ideas = freshIdeas(list);
+
+  const send = async () => {
+    if (!String(form.want || '').trim()) { toast?.('Напишіть, що саме хотіли зробити'); return; }
+    setBusy(true);
+    try {
+      await onAdd(form);
+      setForm({});
+      setOpen(false);
+    } catch (e) {
+      toast?.(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="cd-room">
+      <div className="cd-room-h">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+        <b>Щоденник практики</b>
+      </div>
+
+      <div className="cd-intro-box">
+        <Prose text={'Сюди йдуть власні зміни в цьому застосунку, а не пройдені уроки. Через пів року це готова відповідь на «що ви робили», а вже наступного тижня — спосіб не витратити вечір на помилку, яку колись уже розібрали.'} />
+      </div>
+
+      {s.entries > 0 && (
+        <div className="dy-stats">
+          <div className="dy-stat"><b>{s.entries}</b><span>{plural(s.entries, 'зміна', 'зміни', 'змін')}</span></div>
+          <div className="dy-stat"><b>{s.days}</b><span>{plural(s.days)}</span></div>
+          {s.streak > 1 && <div className="dy-stat"><b>{s.streak}</b><span>поспіль</span></div>}
+          {s.fixed > 0 && <div className="dy-stat"><b>{s.fixed}</b><span>розібраних поломок</span></div>}
+          {s.hours > 0 && <div className="dy-stat"><b>{s.hours}</b><span>годин</span></div>}
+        </div>
+      )}
+
+      {canEdit && !open && (
+        <div className="cd-actions">
+          <button className="act-btn act-accept" onClick={() => setOpen(true)}>Записати зміну</button>
+        </div>
+      )}
+
+      {canEdit && open && (
+        <div className="dy-form">
+          {PRACTICE_FIELDS.map((f) => (
+            <label key={f.key} className="dy-field">
+              <span className="dy-lab">
+                {f.label}
+                {f.required && <i className="dy-req">обовʼязково</i>}
+              </span>
+              <textarea
+                rows={f.key === 'want' || f.key === 'broke' ? 2 : 1}
+                value={form[f.key] || ''}
+                placeholder={f.example}
+                onChange={(e) => setForm((v) => ({ ...v, [f.key]: e.target.value }))}
+              />
+              <em className="dy-hint">{f.hint}</em>
+            </label>
+          ))}
+          <label className="dy-field is-short">
+            <span className="dy-lab">Скільки часу зайняло, хв</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={form.mins || ''}
+              onChange={(e) => setForm((v) => ({ ...v, mins: e.target.value }))}
+            />
+          </label>
+          <div className="cd-actions">
+            <button className="act-btn act-accept" onClick={send} disabled={busy}>
+              {busy ? 'Записую…' : 'Зберегти'}
+            </button>
+            <button className="act-btn" onClick={() => { setOpen(false); setForm({}); }}>Скасувати</button>
+          </div>
+        </div>
+      )}
+
+      {!open && (
+        <div className="dy-ideas">
+          <div className="dy-ideas-h">Якщо не знаєте, з чого почати</div>
+          {ideas.map((i) => (
+            <div key={i.t} className="dy-idea">
+              <b>{i.t}</b>
+              <span>{i.d}</span>
+              <code>{i.where}</code>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {list.length === 0 && !open && (
+        <div className="h-empty">
+          Поки порожньо. Перший запис варто зробити навіть про однорядкову зміну —
+          саме з них і починається рахунок.
+        </div>
+      )}
+
+      <div className="dy-list">
+        {list.map((e) => (
+          <div key={e.row} className="dy-entry">
+            <div className="dy-entry-h">
+              <b>{e.want}</b>
+              <span>{e.date}{e.mins ? ` · ${e.mins} хв` : ''}</span>
+            </div>
+            {e.did && <div className="dy-line"><i>Зробив</i>{e.did}</div>}
+            {e.where && <div className="dy-line"><i>Де</i><code>{e.where}</code></div>}
+            {e.broke && <div className="dy-line is-broke"><i>Зламалось</i>{e.broke}</div>}
+            {e.learned && <div className="dy-line is-learn"><i>Зрозумів</i>{e.learned}</div>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
