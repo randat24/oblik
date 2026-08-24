@@ -2,7 +2,7 @@ import { withAuth, currentActor, isGuest } from '../../lib/auth';
 import {
   readAll, saveDay, addFood, delFood, recalcDay, saveBody, saveGoals,
   saveProduct, lookupBarcode, saveDish, delDish, copyDay,
-  saveMed, takeMed, restockMed, delMed, saveMult,
+  saveMed, takeMed, restockMed, delMed, saveMult, saveCode,
   isOwner, healthOwner, todayKyiv,
 } from '../../lib/health';
 
@@ -103,6 +103,11 @@ export default withAuth(async (req, res) => {
 
     if (action === 'mult') {
       await saveMult(req.body.mult || {});
+      return res.json(await readAll());
+    }
+
+    if (action === 'code') {
+      await saveCode(req.body.code || {});
       return res.json(await readAll());
     }
 

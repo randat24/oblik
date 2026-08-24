@@ -3290,3 +3290,127 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   overflow: hidden; background: #000; line-height: 0;
 }
 .z-shot img { width: 100%; height: auto; display: block; }
+
+/* ─────────────────────────────────────────────────────────────
+   Вкладка «Код» — уроки програмування.
+   ───────────────────────────────────────────────────────────── */
+.cd-home { display: flex; flex-direction: column; gap: 18px; }
+.cd-intro h2 {
+  margin: 0 0 6px; font-size: 1rem; letter-spacing: .1em; text-transform: uppercase;
+}
+.cd-intro p { margin: 0; color: var(--text-dim); font-size: .88rem; line-height: 1.6; max-width: 60ch; }
+
+.cd-prog { display: flex; flex-direction: column; gap: 6px; }
+.cd-prog-t {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+}
+.cd-prog-t b { color: var(--amber); font-family: var(--mono); font-size: .9rem; text-transform: none; letter-spacing: 0; }
+.cd-prog-bar { height: 6px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.cd-prog-bar i { display: block; height: 100%; background: var(--amber); border-radius: 4px; }
+
+.cd-track-legend { display: flex; flex-wrap: wrap; gap: 6px; }
+.cd-tag {
+  font-size: .68rem; font-weight: 600; letter-spacing: .04em;
+  padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--line-soft); color: var(--muted); white-space: nowrap;
+}
+.cd-tag.is-web { border-color: rgba(102,144,171,.4); color: var(--blue); }
+.cd-tag.is-script { border-color: rgba(122,166,83,.4); color: var(--green); }
+.cd-tag.is-base { border-color: rgba(217,173,37,.4); color: var(--amber); }
+
+.cd-list { display: flex; flex-direction: column; gap: 6px; }
+.cd-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: var(--r);
+  border: 1px solid var(--line-soft); background: var(--panel);
+  text-align: left; cursor: pointer; font: inherit; color: var(--text);
+}
+.cd-item .cd-tag { flex: 0 0 auto; }
+.cd-item:hover:not(:disabled) { border-color: var(--line); background: var(--panel-2); }
+.cd-item:disabled { cursor: default; opacity: .55; }
+.cd-item.is-current { border-color: var(--amber); }
+.cd-item.is-done { border-color: var(--green-dim); }
+.cd-item-i {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-style: normal; font-family: var(--mono); font-size: .78rem;
+  background: var(--panel-2); color: var(--muted);
+}
+.cd-item.is-done .cd-item-i { background: var(--green-dim); color: var(--green); }
+.cd-item.is-current .cd-item-i { background: var(--amber-dim); color: var(--amber); }
+.cd-item-b { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.cd-item-b b { font-size: .92rem; font-weight: 600; }
+.cd-item-b em { font-style: normal; font-size: .76rem; color: var(--muted); }
+
+/* Кімната уроку */
+.cd-room { display: flex; flex-direction: column; gap: 14px; }
+.cd-room-h { display: flex; align-items: center; gap: 12px; }
+.cd-room-h b { font-size: 1rem; }
+.cd-back {
+  border: 0; background: none; color: var(--amber); font: inherit;
+  font-size: .84rem; cursor: pointer; padding: 0;
+}
+
+.cd-intro-box { display: flex; flex-direction: column; gap: 8px; }
+.cd-intro-box p { margin: 0; color: var(--text-dim); font-size: .9rem; line-height: 1.6; }
+.cd-inline {
+  font-family: var(--mono); font-size: .88em; color: var(--amber);
+  background: var(--panel-2); padding: 1px 5px; border-radius: 4px;
+}
+
+.cd-task {
+  padding: 10px 12px; border-radius: var(--r);
+  background: var(--amber-dim); border: 1px solid rgba(217,173,37,.3);
+  font-size: .88rem; line-height: 1.5;
+}
+.cd-task b { color: var(--amber); }
+
+.cd-work { display: flex; flex-direction: column; gap: 10px; }
+.cd-editor {
+  width: 100%; resize: vertical;
+  padding: 12px 14px; border-radius: var(--r);
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); font-family: var(--mono); font-size: .86rem; line-height: 1.6;
+}
+.cd-editor:focus { outline: none; border-color: var(--amber); }
+.cd-frame {
+  width: 100%; height: 220px; border: 1px solid var(--line);
+  border-radius: var(--r); background: #fff;
+}
+@media (min-width: 760px) {
+  .cd-work.is-page { flex-direction: row; align-items: stretch; }
+  .cd-work.is-page .cd-editor { flex: 1 1 50%; }
+  .cd-work.is-page .cd-frame { flex: 1 1 50%; height: auto; }
+}
+
+.cd-out { border: 1px solid var(--line-soft); border-radius: var(--r); background: var(--panel); padding: 10px 12px; }
+.cd-out-h { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+.cd-out pre {
+  margin: 0; font-family: var(--mono); font-size: .84rem; color: var(--text-dim);
+  white-space: pre-wrap; word-break: break-word;
+}
+
+.cd-err {
+  padding: 9px 12px; border-radius: var(--r-sm);
+  background: var(--red-dim); border: 1px solid var(--red);
+  color: var(--red); font-size: .86rem; line-height: 1.5;
+}
+.cd-ok {
+  padding: 9px 12px; border-radius: var(--r-sm);
+  background: var(--green-dim); border: 1px solid var(--green);
+  color: var(--green); font-size: .86rem;
+}
+
+.cd-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cd-hint {
+  padding: 9px 12px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  color: var(--text-dim); font-size: .86rem; line-height: 1.5;
+}
+.cd-block {
+  margin: 0; padding: 12px 14px; border-radius: var(--r);
+  background: var(--panel); border: 1px solid var(--line-soft);
+  font-family: var(--mono); font-size: .84rem; color: var(--green);
+  overflow-x: auto; white-space: pre;
+}
