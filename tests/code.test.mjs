@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  CODE_LESSONS, TRACKS, CODE_HEADERS, CD,
+  CODE_LESSONS, TRACKS, CODE_HEADERS, CD, JS_INFO,
   lessonById, openUpTo, isOpen, nextLesson, courseStats,
-  parseCode, codeRows,
+  nextLink, parseCode, codeRows,
 } from '../lib/code.js';
 
 /**
@@ -68,6 +68,37 @@ test('доріжки наповнені рівномірно', () => {
 test('lessonById знаходить урок і не вигадує неіснуючий', () => {
   assert.equal(lessonById('w1').title, 'Перша сторінка');
   assert.equal(lessonById('нема такого'), null);
+});
+
+/* ── що почитати далі ──────────────────────────────────────────────────── */
+
+test('у кожного уроку є посилання на розділ підручника', () => {
+  CODE_LESSONS.forEach((l) => {
+    const n = nextLink(l);
+    assert.ok(n, `${l.id}: немає «далі почитати»`);
+    assert.ok(n.t && n.t.length > 2, `${l.id}: порожня назва розділу`);
+    assert.match(n.url, /^https:\/\//, `${l.id}: адреса не https — ${n.url}`);
+  });
+});
+
+test('посилання на підручник збираються з однієї адреси', () => {
+  const own = CODE_LESSONS.map(nextLink).filter((n) => n.url.startsWith(JS_INFO));
+  // майже все має бути з одного джерела — інакше сенс єдиної змінної зникає
+  assert.ok(own.length >= CODE_LESSONS.length - 2, 'забагато сторонніх посилань');
+  own.forEach((n) => {
+    const path = n.url.split('://')[1];
+    assert.ok(!path.includes('//'), `подвійний слеш у ${n.url}`);
+  });
+});
+
+test('уроки не ведуть двічі в те саме місце', () => {
+  const urls = CODE_LESSONS.map((l) => nextLink(l).url);
+  assert.equal(new Set(urls).size, urls.length, 'два уроки посилаються на один розділ');
+});
+
+test('nextLink нічого не вигадує для невідомого уроку', () => {
+  assert.equal(nextLink({ id: 'нема' }), null);
+  assert.equal(nextLink(null), null);
 });
 
 /* ── рішення справді розвʼязують завдання ──────────────────────────────── */

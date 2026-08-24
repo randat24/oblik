@@ -11,7 +11,7 @@ import {
   buildSession, partQueue, applyResults,
 } from '../lib/mult';
 import { pace, forecast, verdicts } from '../lib/weight';
-import { CODE_LESSONS, TRACKS, openUpTo, courseStats } from '../lib/code';
+import { CODE_LESSONS, TRACKS, openUpTo, courseStats, nextLink } from '../lib/code';
 import { REF_GROUPS, REF_CARDS, findCards } from '../lib/ref';
 import { TOURS, tourById } from '../lib/tour';
 
@@ -5958,7 +5958,32 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
 
       {showHint && <div className="cd-hint">{lesson.hint}</div>}
       {showSolution && <CodeBlock code={lesson.solution} />}
+
+      <NextRead lesson={lesson} done={passed} />
     </div>
+  );
+}
+
+/**
+ * «Що почитати далі». Стоїть унизу уроку й до розвʼязання виглядає
+ * стримано: спершу треба зробити завдання руками, а вже потім читати,
+ * як воно влаштоване насправді. Після «зроблено» посилання підсвічується —
+ * саме тоді від нього найбільше користі.
+ */
+function NextRead({ lesson, done }) {
+  const n = nextLink(lesson);
+  if (!n) return null;
+  return (
+    <a
+      className={'cd-next' + (done ? ' is-done' : '')}
+      href={n.url}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <span className="cd-next-l">Далі почитати</span>
+      <b>{n.t}</b>
+      {n.d && <span className="cd-next-d">{n.d}</span>}
+    </a>
   );
 }
 
