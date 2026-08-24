@@ -11,6 +11,7 @@ import {
   buildSession, partQueue, applyResults,
 } from '../lib/mult';
 import { pace, forecast, verdicts } from '../lib/weight';
+import { CODE_LESSONS, TRACKS, openUpTo, courseStats } from '../lib/code';
 
 /*
  * Особистий розділ здоров'я. Свідомо окрема сторінка з власним кодом:
@@ -5382,6 +5383,354 @@ function MultArcade({ prog, best, onBack, onDone }) {
   );
 }
 
+/* ---------- Вкладка «Код» ---------- */
+
+/**
+ * Пісочниця для JS-завдань. Виконується у Web Worker — окремому потоці,
+ * а не в цій вкладці, — тож нескінченний цикл у власному коді підвісить
+ * тільки воркер, який просто вб'ють по таймауту, а не сторінку.
+ *
+ * `console.log` усередині воркера підмінений: замість друку в консоль він
+ * складає рядки в масив і повертає їх одним повідомленням.
+ */
+const WORKER_SRC = `
+self.onmessage = (e) => {
+  const logs = [];
+  const put = (a) => a.map((x) => {
+    if (typeof x === 'string') return x;
+    try { return JSON.stringify(x); } catch { return String(x); }
+  }).join(' ');
+  const orig = console.log;
+  console.log = (...a) => { logs.push(put(a)); };
+  try {
+    (0, eval)(e.data);
+    self.postMessage({ ok: true, output: logs.join('\\n') });
+  } catch (err) {
+    self.postMessage({ ok: false, output: logs.join('\\n'), error: String((err && err.message) || err) });
+  } finally {
+    console.log = orig;
+  }
+};
+`;
+
+function runJS(code, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    let worker;
+    try {
+      const blob = new Blob([WORKER_SRC], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      worker = new Worker(url);
+      let done = false;
+      const finish = (r) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        worker.terminate();
+        URL.revokeObjectURL(url);
+        resolve(r);
+      };
+      const timer = setTimeout(
+        () => finish({ ok: false, output: '', error: 'Код виконувався надто довго — можливо, нескінченний цикл.' }),
+        timeoutMs
+      );
+      worker.onmessage = (e) => finish(e.data);
+      worker.onerror = (e) => finish({ ok: false, output: '', error: e.message || 'Помилка виконання' });
+      worker.postMessage(code);
+    } catch (e) {
+      resolve({ ok: false, output: '', error: 'Браузер не підтримує виконання коду тут.' });
+    }
+  });
+}
+
+/**
+ * Пісочниця для сторінкових завдань. Рамка без `allow-same-origin` — у
+ * неї немає доступу ні до кукі, ні до застосунку, лише до того, що
+ * написано в самому коді. Тому єдиний спосіб дізнатись, що вийшло, —
+ * дочекатись, доки рамка сама розповість про себе через postMessage.
+ */
+function runPage(html, timeoutMs = 3000) {
+  const ping = `<script>window.addEventListener('load',()=>{try{parent.postMessage({__lesson:true,text:document.body?document.body.innerText:''},'*');}catch(e){parent.postMessage({__lesson:true,text:''},'*');}});</script>`;
+  const promise = new Promise((resolve) => {
+    let done = false;
+    const finish = (text) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      window.removeEventListener('message', onMsg);
+      resolve(text);
+    };
+    const onMsg = (e) => {
+      if (!e.data || !e.data.__lesson) return;
+      finish(e.data.text || '');
+    };
+    const timer = setTimeout(() => finish(''), timeoutMs);
+    window.addEventListener('message', onMsg);
+  });
+  return { promise, srcdoc: html + ping };
+}
+
+/** Підсвітка синтаксису для читання, не для редагування — просто фарбує рядки */
+function CodeBlock({ code }) {
+  return <pre className="cd-block"><code>{code}</code></pre>;
+}
+
+/** Текст пояснення з `код` у зворотних лапках — підсвічений моноширинним */
+function Prose({ text }) {
+  const parts = String(text).split(/(`[^`]+`)/g);
+  return (
+    <p>
+      {parts.map((p, i) => (p.startsWith('`')
+        ? <code key={i} className="cd-inline">{p.slice(1, -1)}</code>
+        : <span key={i}>{p}</span>))}
+    </p>
+  );
+}
+
+function CodeTab({ data, reload, toast }) {
+  const [prog, setProg] = useState(() => data.code || {});
+  const [openId, setOpenId] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setProg(data.code || {}); }, [data.code]);
+
+  const upIdx = openUpTo(prog);
+  const stats = courseStats(prog);
+
+  const save = async (next) => {
+    setProg(next);
+    setSaving(true);
+    try {
+      await api('/api/health', { method: 'POST', body: { action: 'code', code: next } });
+      await reload();
+    } catch (e) {
+      toast?.(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (openId) {
+    const idx = CODE_LESSONS.findIndex((l) => l.id === openId);
+    const lesson = CODE_LESSONS[idx];
+    return (
+      <LessonRoom
+        lesson={lesson}
+        saved={prog[lesson.id]}
+        locked={idx > upIdx}
+        onBack={() => setOpenId(null)}
+        onNext={() => {
+          const nxt = CODE_LESSONS[idx + 1];
+          setOpenId(nxt ? nxt.id : null);
+        }}
+        onDone={async (code) => {
+          const next = {
+            ...prog,
+            [lesson.id]: {
+              id: lesson.id, state: 'done',
+              date: new Date().toLocaleDateString('uk-UA'),
+              tries: (prog[lesson.id]?.tries || 0) + 1,
+              code,
+            },
+          };
+          await save(next);
+        }}
+        onTry={async () => {
+          const next = {
+            ...prog,
+            [lesson.id]: {
+              ...(prog[lesson.id] || { id: lesson.id, state: '' }),
+              tries: (prog[lesson.id]?.tries || 0) + 1,
+            },
+          };
+          setProg(next);   // рахунок спроб не варто чекати на мережу
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="cd-home">
+      <div className="cd-intro">
+        <h2>Код</h2>
+        <p>
+          Одна мова — JavaScript: нею ж написано цей застосунок. Спершу
+          сторінка, бо результат видно очима; скрипти й основи підключаються
+          там, де без них уже не обійтись.
+        </p>
+      </div>
+
+      <div className="cd-prog">
+        <div className="cd-prog-t">
+          <div className="cd-prog-t">Пройдено</div>
+          <b>{stats.done} з {stats.total}</b>
+        </div>
+        <div className="cd-prog-bar"><i style={{ width: `${(stats.done / stats.total) * 100}%` }} /></div>
+      </div>
+
+      {/* Три доріжки прогріваються по черзі: сторінка → скрипти → основи,
+          коли без них уже не обійтись. Ділити список на три коробки за
+          назвою доріжки означало б показати «наступний урок» унизу зовсім
+          іншого розділу — тож список один, а доріжка лишається міткою на
+          кожній картці, щоб було видно, звідки урок і що там ще лишилось. */}
+      <div className="cd-track-legend">
+        {stats.byTrack.map((t) => (
+          <span key={t.key} className={'cd-tag is-' + t.key}>{t.label} {t.done}/{t.total}</span>
+        ))}
+      </div>
+
+      <div className="cd-list">
+        {CODE_LESSONS.map((l, i) => {
+          const st = prog[l.id];
+          const locked = i > upIdx;
+          const done = st?.state === 'done';
+          const current = i === upIdx && !done;
+          const track = TRACKS.find((t) => t.key === l.track);
+          return (
+            <button
+              key={l.id}
+              className={'cd-item' + (done ? ' is-done' : '') + (locked ? ' is-locked' : '') + (current ? ' is-current' : '')}
+              onClick={() => !locked && setOpenId(l.id)}
+              disabled={locked}
+            >
+              <i className="cd-item-i">{done ? '✓' : locked ? '🔒' : i + 1}</i>
+              <span className="cd-item-b">
+                <b>{l.title}</b>
+                <em>{l.goal}</em>
+              </span>
+              <span className={'cd-tag is-' + l.track}>{track.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Кімната одного уроку. Пояснення й підказка ліворуч, редактор і
+ * результат праворуч — на телефоні одне під одним. Перевірка не блокує
+ * поле вводу: поки код виконується, можна вже читати, що вийшло минулого
+ * разу.
+ */
+function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
+  const [code, setCode] = useState(saved?.code || lesson.start);
+  const [out, setOut] = useState(null);        // { ok, text }
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [passed, setPassed] = useState(saved?.state === 'done');
+  const [showHint, setShowHint] = useState(false);
+  const [showSolution, setShowSolution] = useState(false);
+  const iframeRef = useRef(null);
+
+  useEffect(() => {
+    setCode(saved?.code || lesson.start);
+    setPassed(saved?.state === 'done');
+    setOut(null); setErr(''); setShowHint(false); setShowSolution(false);
+  }, [lesson.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (locked) {
+    return (
+      <div className="cd-room">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+        <div className="h-empty">Цей урок ще закритий. Пройдіть попередні по черзі.</div>
+      </div>
+    );
+  }
+
+  const run = async () => {
+    setBusy(true); setErr(''); onTry?.();
+    try {
+      if (lesson.kind === 'js') {
+        const r = await runJS(code);
+        if (!r.ok && r.error) { setErr(r.error); setOut({ text: r.output }); }
+        else {
+          setOut({ text: r.output });
+          const ok = lesson.check(r.output, code);
+          if (ok) { setPassed(true); await onDone(code); }
+          else setErr(lesson.why || 'Поки що не те. Спробуйте ще.');
+        }
+      } else {
+        const { promise, srcdoc } = runPage(code);
+        // рамку монтуємо тут, а не через runPage: їй потрібен реальний DOM
+        if (iframeRef.current) iframeRef.current.srcdoc = srcdoc;
+        const text = await promise;
+        const ok = lesson.check(code, text);
+        if (ok) { setPassed(true); await onDone(code); }
+        else setErr(lesson.why || 'Поки що не те. Спробуйте ще.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="cd-room">
+      <div className="cd-room-h">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+        <b>{lesson.title}</b>
+      </div>
+
+      <div className="cd-intro-box">
+        {lesson.intro.map((t, i) => <Prose key={i} text={t} />)}
+      </div>
+
+      <div className="cd-task">
+        <b>Завдання.</b> {lesson.task}
+      </div>
+
+      <div className={'cd-work' + (lesson.kind === 'page' ? ' is-page' : '')}>
+        <textarea
+          className="cd-editor"
+          value={code}
+          onChange={(e) => { setCode(e.target.value); setErr(''); }}
+          spellCheck={false}
+          rows={lesson.kind === 'page' ? 10 : 8}
+        />
+        {lesson.kind === 'page' && (
+          <iframe
+            ref={iframeRef}
+            className="cd-frame"
+            sandbox="allow-scripts"
+            title="Перегляд"
+          />
+        )}
+      </div>
+
+      {lesson.kind === 'js' && out && (
+        <div className="cd-out">
+          <div className="cd-out-h">Надруковано</div>
+          <pre>{out.text || '(нічого не надруковано)'}</pre>
+        </div>
+      )}
+
+      {err && <div className="cd-err">{err}</div>}
+      {passed && !err && (
+        <div className="cd-ok">✓ Зроблено. Можна йти далі — або лишитись і поекспериментувати.</div>
+      )}
+
+      <div className="cd-actions">
+        <button className="act-btn act-accept" onClick={run} disabled={busy}>
+          {busy ? 'Виконую…' : 'Запустити'}
+        </button>
+        {passed && (
+          <button className="act-btn act-accept" onClick={onNext}>Далі →</button>
+        )}
+        <button className="act-btn" onClick={() => setShowHint((v) => !v)}>
+          {showHint ? 'Сховати підказку' : 'Підказка'}
+        </button>
+        {passed && (
+          <button className="act-btn" onClick={() => setShowSolution((v) => !v)}>
+            {showSolution ? 'Сховати розвʼязок' : 'Показати розвʼязок'}
+          </button>
+        )}
+      </div>
+
+      {showHint && <div className="cd-hint">{lesson.hint}</div>}
+      {showSolution && <CodeBlock code={lesson.solution} />}
+    </div>
+  );
+}
+
 /* ---------- Вкладка «Підсумки» ---------- */
 
 /**
@@ -5475,6 +5824,7 @@ const TABS = [
   { key: 'body', label: 'Заміри' },
   { key: 'meds', label: 'Ліки' },
   { key: 'mult', label: 'Множення' },
+  { key: 'code', label: 'Код' },
   { key: 'stats', label: 'Підсумки' },
   { key: 'goals', label: 'Цілі' },
 ];
@@ -5504,6 +5854,7 @@ const BNAV = [
 const MORE = [
   { key: 'meds', label: 'Ліки й курси' },
   { key: 'mult', label: 'Таблиця множення' },
+  { key: 'code', label: 'Уроки коду' },
   { key: 'dishes', label: 'Свої страви' },
   { key: 'body', label: 'Заміри тіла' },
   { key: 'goals', label: 'Цілі й профіль' },
@@ -5668,6 +6019,7 @@ export default function Health() {
         {tab === 'body' && <BodyTab data={data} reload={load} />}
         {tab === 'meds' && <MedsTab data={data} reload={load} setBusy={setBusy} toast={toast} />}
         {tab === 'mult' && <MultTab data={data} reload={load} toast={toast} />}
+        {tab === 'code' && <CodeTab data={data} reload={load} toast={toast} />}
         {tab === 'stats' && <StatsTab data={data} />}
         {tab === 'goals' && <GoalsTab data={data} reload={load} setBusy={setBusy} />}
       </div>
