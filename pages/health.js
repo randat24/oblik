@@ -5404,13 +5404,27 @@ self.onmessage = (e) => {
   }).join(' ');
   const orig = console.log;
   console.log = (...a) => { logs.push(put(a)); };
-  try {
-    (0, eval)(e.data);
-    self.postMessage({ ok: true, output: logs.join('\\n') });
-  } catch (err) {
-    self.postMessage({ ok: false, output: logs.join('\\n'), error: String((err && err.message) || err) });
-  } finally {
+
+  const done = (ok, error) => {
     console.log = orig;
+    self.postMessage({ ok: ok, output: logs.join('\\n'), error: error });
+  };
+
+  try {
+    const result = (0, eval)(e.data);
+    // Коли останній рядок коду — виклик async-функції, у цю мить надруковано
+    // ще нічого: обіцянка тільки видана. Чекаємо на неї, а потім даємо ще
+    // один оберт черги — інакше загубиться друк із самого кінця ланцюжка.
+    if (result && typeof result.then === 'function') {
+      result.then(
+        () => setTimeout(() => done(true), 0),
+        (err) => done(false, String((err && err.message) || err))
+      );
+    } else {
+      done(true);
+    }
+  } catch (err) {
+    done(false, String((err && err.message) || err));
   }
 };
 `;
