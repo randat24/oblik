@@ -13,6 +13,7 @@ import {
 import { pace, forecast, verdicts } from '../lib/weight';
 import { CODE_LESSONS, TRACKS, openUpTo, courseStats } from '../lib/code';
 import { REF_GROUPS, REF_CARDS, findCards } from '../lib/ref';
+import { TOURS, tourById } from '../lib/tour';
 
 /*
  * Особистий розділ здоров'я. Свідомо окрема сторінка з власним кодом:
@@ -5556,6 +5557,10 @@ function CodeTab({ data, reload, toast }) {
     return <RefBook onBack={() => setMode('learn')} />;
   }
 
+  if (mode === 'tour') {
+    return <TourBook onBack={() => setMode('learn')} />;
+  }
+
   return (
     <div className="cd-home">
       <div className="cd-intro">
@@ -5575,6 +5580,17 @@ function CodeTab({ data, reload, toast }) {
         <span className="cd-refb-d">
           {REF_CARDS.length} карток: як поставити по центру, як перебрати
           список, як надіслати запит
+        </span>
+      </button>
+
+      {/* Читати чуже — половина роботи розробника, і навчитись цього на
+          вигаданих прикладах не можна: вигаданий приклад завжди зрозумілий,
+          а робочий файл — ні. Тут розбирається код цього ж застосунку. */}
+      <button className="cd-refb is-tour" onClick={() => setMode('tour')}>
+        <span className="cd-refb-t">Розбір свого коду</span>
+        <span className="cd-refb-d">
+          {TOURS.length} розборів справжніх файлів «Обліку» — рядок за рядком,
+          із поясненням, чому саме так
         </span>
       </button>
 
@@ -5685,6 +5701,103 @@ function RefBook({ onBack }) {
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Розбори власного коду.
+ *
+ * Уроки вчать писати, довідник нагадує як — а тут читають чуже. У роботі
+ * це половина справи: правити наявне доводиться частіше, ніж писати з
+ * нуля, і незнайомий файл лякає рівно доти, доки хтось не проведе по
+ * ньому пальцем.
+ */
+function TourBook({ onBack }) {
+  const [openId, setOpenId] = useState(null);
+  const tour = openId ? tourById(openId) : null;
+
+  if (tour) return <TourRoom tour={tour} onBack={() => setOpenId(null)} />;
+
+  return (
+    <div className="cd-ref">
+      <div className="cd-ref-top">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+      </div>
+
+      <div className="cd-intro">
+        <h2>Розбір свого коду</h2>
+        <p>
+          Тут не спрощені приклади, а справжні файли цього застосунку.
+          Спрощений приклад завжди виглядає зрозумілим — а потім відкриваєш
+          робочий файл, і він не схожий ні на що.
+        </p>
+      </div>
+
+      <div className="cd-tours">
+        {TOURS.map((t, i) => (
+          <button className="cd-tour" key={t.id} onClick={() => setOpenId(t.id)}>
+            <span className="cd-tour-n">{i + 1}</span>
+            <span className="cd-tour-b">
+              <b>{t.title}</b>
+              <em>{t.goal}</em>
+              <code>{t.file}</code>
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Один розбір: вступ, кроки з кодом, висновок і одна зміна, яку варто спробувати */
+function TourRoom({ tour, onBack }) {
+  return (
+    <div className="cd-troom">
+      <button className="cd-back" onClick={onBack}>← До розборів</button>
+
+      <div className="cd-thead">
+        <h2>{tour.title}</h2>
+        <code className="cd-tfile">{tour.file}</code>
+        <div className="cd-tlevel">{tour.level}</div>
+      </div>
+
+      {tour.intro.map((p, i) => <p className="cd-tp" key={i}>{p}</p>)}
+
+      <div className="cd-tsteps">
+        {tour.steps.map((s, i) => (
+          <div className="cd-tstep" key={i}>
+            <pre className="cd-card-code">{s.code}</pre>
+            <p className="cd-tsay"><Marked text={s.say} /></p>
+          </div>
+        ))}
+      </div>
+
+      <div className="cd-twhy">
+        <h3>Що з цього забрати</h3>
+        {tour.why.map((p, i) => <p key={i}><Marked text={p} /></p>)}
+      </div>
+
+      {/* Читання без спроби не лишається в голові, тож кожен розбір
+          закінчується однією зміною, яку можна внести за хвилину. */}
+      <div className="cd-ttry">
+        <h3>Спробуйте</h3>
+        <p>{tour.try}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Дві зірочки — жирним, зворотні лапки — кодом. Більше в поясненнях не треба. */
+function Marked({ text }) {
+  const parts = String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return (
+    <>
+      {parts.map((p, i) => {
+        if (p.startsWith('**') && p.endsWith('**')) return <b key={i}>{p.slice(2, -2)}</b>;
+        if (p.startsWith('`') && p.endsWith('`')) return <code key={i}>{p.slice(1, -1)}</code>;
+        return p;
+      })}
+    </>
   );
 }
 
