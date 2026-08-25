@@ -1528,6 +1528,127 @@ function FinishAuditModal({ counts, total, done, onCancel, onSave }) {
 }
 
 /* ---------- Хто працює із застосунком ---------- */
+/**
+ * Перелік СП.
+ *
+ * Веде його адміністратор, і саме тому в решті форм СП лише обирають.
+ * Видалення тут немає навмисно: назва стоїть у вже написаних картках, і
+ * прибрати її з переліку означало б лишити ті картки з посиланням на те,
+ * чого немає. Вимкнений СП просто перестає пропонуватись у нових
+ * посилках, а історія лишається читабельною.
+ */
+function SpBlock({ toast, setState }) {
+  const [points, setPoints] = useState(null);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [editRow, setEditRow] = useState(null);
+  const [editName, setEditName] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      const d = await api('/api/points');
+      setPoints(d.points);
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  }, [setState]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const call = async (opts, ok) => {
+    setBusy(true);
+    try {
+      const d = await api('/api/points', opts);
+      setPoints(d.points);
+      toast(ok);
+      return true;
+    } catch (e) {
+      toast(e.message, { type: 'err' });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!points) return null;
+
+  const live = points.filter((p) => p.active).length;
+
+  return (
+    <>
+      <div className="sec-h">СП</div>
+
+      <div className="empty-note">
+        Ці назви й тільки вони пропонуються у формі посилки — і тут, і в
+        пункті збору. Вписати свій варіант там не можна: інакше «Тигр»,
+        «тигр» і «Тирг» рахувались би як три різні напрямки.
+      </div>
+
+      <div className="toolbar">
+        <input
+          type="text"
+          value={name}
+          placeholder="назва нового СП"
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          style={{ maxWidth: 220 }}
+        />
+        <button
+          className="btn"
+          disabled={busy || !name.trim()}
+          onClick={async () => {
+            if (await call({ method: 'POST', body: { name: name.trim() } }, `Додано ${name.trim()}`)) setName('');
+          }}
+        >
+          + Додати СП
+        </button>
+        <div className="spacer" />
+        <span className="pill">{live} з {points.length} у переліку</span>
+      </div>
+
+      <div className="sp-list">
+        {points.map((p) => (
+          <div className={'sp-item' + (p.active ? '' : ' is-off')} key={p.row}>
+            {editRow === p.row ? (
+              <>
+                <input
+                  type="text"
+                  value={editName}
+                  autoFocus
+                  onChange={(e) => setEditName(e.target.value)}
+                />
+                <button className="act-btn act-accept" disabled={busy}
+                  onClick={async () => {
+                    if (await call({ method: 'PATCH', body: { row: p.row, name: editName.trim() } }, 'Перейменовано')) {
+                      setEditRow(null);
+                    }
+                  }}>Зберегти</button>
+                <button className="act-btn" onClick={() => setEditRow(null)}>Скасувати</button>
+              </>
+            ) : (
+              <>
+                <span className="sp-name">{p.name}</span>
+                {!p.active && <span className="pill" style={{ color: 'var(--gray)' }}>вимкнений</span>}
+                <div className="spacer" />
+                <button className="act-btn" onClick={() => { setEditRow(p.row); setEditName(p.name); }}>
+                  Перейменувати
+                </button>
+                <button className={'act-btn ' + (p.active ? 'act-del' : 'act-accept')} disabled={busy}
+                  onClick={() => call(
+                    { method: 'PATCH', body: { row: p.row, active: !p.active } },
+                    p.active ? `${p.name} більше не пропонується` : `${p.name} знову в переліку`
+                  )}>
+                  {p.active ? 'Вимкнути' : 'Увімкнути'}
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 function PeopleView({ setState }) {
   const [data, setData] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -1560,6 +1681,9 @@ function PeopleView({ setState }) {
 
   return (
     <>
+      <SpBlock toast={toast} setState={setState} />
+
+      <div className="sec-h">Люди</div>
       <div className="toolbar">
         <div className="spacer" />
         <button className="btn" onClick={() => setAdding(true)}>+ Додати людину</button>
@@ -2524,7 +2648,7 @@ export default function Home({ startView }) {
               className={'tab' + (view.kind === 'people' ? ' active' : '')}
               onClick={() => setView({ kind: 'people', name: null })}
             >
-              Люди
+              Налаштування
             </div>
           )}
         </div>
@@ -2572,7 +2696,7 @@ export default function Home({ startView }) {
           { label: 'Доставки', kind: 'delivery', run: () => setView({ kind: 'delivery', name: null }) },
           { label: 'Журнал змін', kind: 'log', run: () => setView({ kind: 'log', name: null }) },
           ...(me.role === 'admin'
-            ? [{ label: 'Люди', kind: 'people', run: () => setView({ kind: 'people', name: null }) }]
+            ? [{ label: 'Налаштування', kind: 'people', run: () => setView({ kind: 'people', name: null }) }]
             : []),
         ]}
       />
@@ -6313,11 +6437,26 @@ function DeliveryAdd({ item, tos, drivers, onCancel, onSave }) {
         finally { setBusy(false); }
       }}
     >
+      {/* СП обирають зі списку, який ведеться окремо. Текстове поле тут
+          колись було, і кожна описка ставала новим напрямком: «Тигр»,
+          «тигр» і «Тирг» рахувались як три різні. Нову назву заводять у
+          «Налаштуваннях», а не в цій формі. */}
       <div style={{ marginTop: 10 }}>
-        <label>Кому призначена</label>
-        <input type="text" list="dlvTo" value={f.to} onChange={(e) => up('to', e.target.value)}
-          placeholder="позивний або підрозділ" />
-        <datalist id="dlvTo">{(tos || []).map((v) => <option key={v} value={v} />)}</datalist>
+        <label>
+          На СП
+          {!f.to && <span className="dlv-you">оберіть</span>}
+        </label>
+        <div className="chips">
+          {(tos || []).map((v) => (
+            <div key={v} className={'chip' + (f.to === v ? ' on' : '')}
+              onClick={() => up('to', f.to === v ? '' : v)}>{v}</div>
+          ))}
+        </div>
+        {(tos || []).length === 0 && (
+          <div className="dlv-tip" style={{ marginTop: 6 }}>
+            Перелік СП порожній — додайте його у «Налаштуваннях».
+          </div>
+        )}
       </div>
       <div style={{ marginTop: 10 }}>
         <label>Назва</label>
@@ -6431,9 +6570,12 @@ function DeliveryAdd({ item, tos, drivers, onCancel, onSave }) {
               Хто прийняв
               {f.taker && f.taker === f.to && <span className="dlv-you">адресат</span>}
             </span>
-            <input type="text" list="dlvTo" value={f.taker}
+            <input type="text" list="dlvTakers" value={f.taker}
               onChange={(e) => up('taker', e.target.value)}
               placeholder="той, кому везли" />
+            {/* тут поле лишається текстовим: прийняти може конкретна
+                людина, а не СП, і її позивного в переліку немає */}
+            <datalist id="dlvTakers">{(tos || []).map((v) => <option key={v} value={v} />)}</datalist>
           </div>
 
           <div className="dlv-tip" style={{ marginTop: 6 }}>

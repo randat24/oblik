@@ -1,9 +1,10 @@
 import { session, sameSecret, keyFrom } from '../../lib/auth';
 import { readSheet, writeRow, appendRow, ensureSheet } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
+import { readPoints, activeNames } from '../../lib/points';
 import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, PRIO_FIRST,
-  parseDeliveries, deliveryRow, stampKyiv, suggestions, partsOf,
+  parseDeliveries, deliveryRow, stampKyiv, partsOf,
   splitParts, parseHot, joinHot, stampOf,
 } from '../../lib/delivery';
 
@@ -99,7 +100,7 @@ export default async function handler(req, res) {
     return {
       ok: true,
       list: visible(fresh),
-      tos: suggestions(fresh, 'to', []),
+      tos: activeNames(await readPoints()),
     };
   };
 

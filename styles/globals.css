@@ -3451,6 +3451,25 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .cd-next-d { font-size: .82rem; line-height: 1.45; }
 .cd-next.is-done { border-color: var(--blue); background: var(--blue-dim); }
 
+/* Заголовок розділу в налаштуваннях — їх там два, і межу між ними
+   має бути видно без прокрутки вгору */
+.sec-h {
+  margin: 22px 0 10px; font-size: .78rem; font-weight: 700;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .1em;
+}
+.sec-h:first-child { margin-top: 4px; }
+
+/* Перелік СП у налаштуваннях: рядок на кожен, дії праворуч */
+.sp-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+.sp-item {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; border-radius: var(--r-sm);
+  background: var(--panel); border: 1px solid var(--line-soft);
+}
+.sp-item.is-off { opacity: .6; }
+.sp-name { font-weight: 600; }
+.sp-item input { flex: 1 1 140px; min-width: 0; }
+
 /* Три поля людей у правці посилки: підпис зліва вузький, поле — на решту */
 .dlv-who-f { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .dlv-who-l {
