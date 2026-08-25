@@ -114,7 +114,6 @@ export default async function handler(req, res) {
   if (action === 'add') {
     const { what, weight, note, to, parts, partsHot, prio } = req.body;
     if (!str(what)) return res.status(400).json({ error: 'Не вказано назву' });
-    if (!me) return res.status(400).json({ error: 'Вкажіть свій позивний' });
 
     const now = stampKyiv();
     const hot = joinHot(parseHot(partsHot));
@@ -139,5 +138,52 @@ export default async function handler(req, res) {
     return res.json(await state());
   }
 
-    return res.status(400).json({ error: 'Невідома дія: ' + action });
+  /*
+   * Правка щойно зібраної посилки.
+   *
+   * Помилку в назві чи в переліку мішків знаходять за хвилину після
+   * збереження, і просити заради цього чергового — довше, ніж набрати
+   * заново. Тому правити можна, але лише доки посилка ще тут: щойно її
+   * забрали, картку бачили інші люди й діяли за нею, і мовчки міняти під
+   * ними написане не можна.
+   *
+   * Дата збирання, дата створення й той, хто зібрав, лишаються старі:
+   * правка — це виправлення запису, а не нова посилка.
+   */
+  if (action === 'edit') {
+    const { row, what, weight, note, to, parts, partsHot, prio } = req.body;
+    if (!row) return res.status(400).json({ error: 'Не вказано посилку' });
+    if (!str(what)) return res.status(400).json({ error: 'Не вказано назву' });
+
+    const prev = values[row - 1];
+    if (!prev) return res.status(404).json({ error: 'Посилку не знайдено' });
+    const cur = parseDeliveries([DELIVERY_HEADERS, prev])[0];
+
+    if (cur.stage !== 'packed') {
+      return res.status(400).json({
+        error: 'Посилку вже забрали — виправити може лише черговий',
+      });
+    }
+
+    const hot = joinHot(parseHot(partsHot));
+    const next = deliveryRow({
+      ...cur,
+      what, weight, note, to, parts, prio, partsHot: hot,
+      // перелік мішків міг змінитись, а позначки доставленого й
+      // списаного стоять на номерах — на цьому етапі їх ще немає, тож
+      // чистимо, щоб вони не з'їхали на чужі мішки
+      partsDone: '', partsLost: '',
+    }, prev);
+    await writeRow(DELIVERY_SHEET, row, next);
+
+    await logChange({
+      sheet: DELIVERY_SHEET, row, action: 'Виправлено', who: me,
+      field: str(what),
+      before: [cur.what, cur.parts && `місця: ${cur.parts}`].filter(Boolean).join(' · '),
+      after: [str(parts) && `місця: ${str(parts)}`, 'з пункту збору'].filter(Boolean).join(' · '),
+    });
+    return res.json(await state());
+  }
+
+  return res.status(400).json({ error: 'Невідома дія: ' + action });
 }

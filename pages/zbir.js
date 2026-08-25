@@ -17,8 +17,18 @@ import { partsOf, parsePart, splitParts, joinParts } from '../lib/delivery';
  */
 
 const KEY = 'oblik_pack_key';
-const WHO = 'oblik_pack_who';
 const SEEN = 'oblik_pack_help';
+
+/*
+ * Хто збирав.
+ *
+ * Раніше сторінка питала позивний. Виявилось, що питання розуміють
+ * навпаки: люди вписували туди позивний того, кому посилка, — і в картці
+ * виходило «здав Білий, прийняв Білий». Позивний збирача однаково нічого
+ * не вирішує (за посиланням заходить пункт збору, а не конкретна людина),
+ * тож питання прибране, а в журнал іде чесна загальна назва.
+ */
+const WHO = 'Збирач посилок';
 
 const load = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
 const save = (k, v) => { try { localStorage.setItem(k, v); } catch { /* приватне вікно */ } };
@@ -45,11 +55,11 @@ const kgOf = (n) => Math.round(n * 10) / 10;
 export default function Zbir() {
   const router = useRouter();
   const [key, setKey] = useState(null);      // null — ще не прочитали
-  const [me, setMe] = useState('');
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [add, setAdd] = useState(false);
+  const [edit, setEdit] = useState(null);   // посилка, яку правимо
   const [help, setHelp] = useState(false);
 
   // Ключ приходить у посиланні один раз, далі живе в цьому браузері:
@@ -65,7 +75,7 @@ export default function Zbir() {
       router.replace('/zbir', undefined, { shallow: true });
     }
     setKey(fromUrl || load(KEY));
-    setMe(load(WHO));
+    if (!load(SEEN)) { save(SEEN, '1'); setHelp(true); }
   }, [router.isReady, router.query.k]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const reload = useCallback(async (k = key) => {
@@ -86,7 +96,7 @@ export default function Zbir() {
   const send = async (body) => {
     setBusy(true);
     try {
-      setData(await api('/api/pack', { method: 'POST', body: { ...body, token: key, me } }));
+      setData(await api('/api/pack', { method: 'POST', body: { ...body, token: key, me: WHO } }));
       return true;
     } catch (e) {
       alert(e.message);
@@ -123,20 +133,6 @@ export default function Zbir() {
     );
   }
 
-  if (!me) {
-    return (
-      <Shell>
-        <WhoAsk onSet={(v) => {
-          save(WHO, v);
-          setMe(v);
-          // новачкові показуємо порядок дій одразу: шукати підказку в
-          // застосунку, який бачиш уперше, — це вже задача понад роботу
-          if (!load(SEEN)) { save(SEEN, '1'); setHelp(true); }
-        }} />
-      </Shell>
-    );
-  }
-
   if (!data) return <Shell><div className="z-gate"><p>Завантаження…</p></div></Shell>;
 
   const waiting = data.list.filter((d) => d.stage === 'packed');
@@ -146,12 +142,7 @@ export default function Zbir() {
   return (
     <Shell busy={busy}>
       <header className="z-head">
-        <div>
-          <div className="z-title">Пункт збору</div>
-          <button className="z-who" onClick={() => { save(WHO, ''); setMe(''); }}>
-            {me} <i>змінити</i>
-          </button>
-        </div>
+        <div className="z-title">Пункт збору</div>
         {/* Підказка стоїть поруч із головною кнопкою, а не ховається під
             меню: до неї повертаються не раз, і шукати її щоразу — це
             робота понад ту, заради якої сюди зайшли. */}
@@ -171,7 +162,7 @@ export default function Zbir() {
       ) : (
         <div className="z-list">
           {waiting.map((d) => (
-            <PackCard key={d.row} d={d} />
+            <PackCard key={d.row} d={d} onEdit={() => setEdit(d)} />
           ))}
         </div>
       )}
@@ -200,6 +191,17 @@ export default function Zbir() {
           tos={data.tos}
           onCancel={() => setAdd(false)}
           onSave={async (body) => { if (await send({ ...body, action: 'add' })) setAdd(false); }}
+        />
+      )}
+
+      {edit && (
+        <AddForm
+          tos={data.tos}
+          from={edit}
+          onCancel={() => setEdit(null)}
+          onSave={async (body) => {
+            if (await send({ ...body, action: 'edit', row: edit.row })) setEdit(null);
+          }}
         />
       )}
 
@@ -250,6 +252,10 @@ const HELP = [
   {
     t: 'Збережено',
     d: 'Посилка стала карткою: видно кому, скільки мішків, скільки кілограмів і які з них першочергові. На цьому ваша частина роботи закінчується.',
+  },
+  {
+    t: 'Помилились — виправте',
+    d: 'На картці внизу є «Виправити»: відкриється та сама форма з тим, що вже вписано. Правити можна, доки посилка тут. Щойно її заберуть, кнопка зникає: картку вже бачили інші й діяли за нею, тож далі виправляє черговий.',
     img: '06-card',
   },
   {
@@ -296,24 +302,7 @@ function HelpSheet({ onClose }) {
 }
 
 /** Позивний питаємо один раз: без нього в таблиці нема кого спитати */
-function WhoAsk({ onSet }) {
-  const [v, setV] = useState('');
-  return (
-    <div className="z-gate">
-      <h1>Хто ви?</h1>
-      <p>Позивний піде в графу «Хто здав». Запитаємо один раз.</p>
-      <input className="z-inp" value={v} autoFocus
-        onChange={(e) => setV(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter' && v.trim()) onSet(v.trim()); }}
-        placeholder="ваш позивний" />
-      <button className="z-btn z-btn-main" disabled={!v.trim()} onClick={() => onSet(v.trim())}>
-        Далі
-      </button>
-    </div>
-  );
-}
-
-function PackCard({ d }) {
+function PackCard({ d, onEdit }) {
   const kg = d.parts?.kg || d.weight;
   const hot = d.parts?.names.filter((x) => x.hot) || [];
   return (
@@ -338,14 +327,36 @@ function PackCard({ d }) {
         </div>
       )}
       {d.note && <div className="z-note">{d.note}</div>}
+      <button className="z-btn z-wide" onClick={onEdit}>Виправити</button>
     </div>
   );
 }
 
-function AddForm({ tos, onCancel, onSave }) {
-  const [f, setF] = useState({ to: '', what: '', weight: '', note: '' });
-  const [parts, setParts] = useState('');
-  const [hot, setHot] = useState(() => new Set());
+/**
+ * Форма посилки — і для нової, і для правки.
+ *
+ * Це навмисно одна форма, а не дві схожі: поля, підказки й підрахунок
+ * ваги мають лишатись однаковими, інакше правка починає поводитись
+ * інакше за створення саме тоді, коли людина поспішає щось виправити.
+ * `from` — посилка, яку відкрили правити; без неї форма порожня.
+ */
+function AddForm({ tos, from, onCancel, onSave }) {
+  const [f, setF] = useState(() => ({
+    to: from?.to || '',
+    what: from?.what || '',
+    // вага з поля потрібна лише для незважених посилок: у зважених вона
+    // складається з мішків, і два числа рано чи пізно розійшлися б
+    weight: from && !from.parts ? String(from.weight ?? '') : '',
+    note: from?.note || '',
+  }));
+  const [parts, setParts] = useState(() => (from?.parts
+    ? from.parts.names.map((x) => (x.kg === null ? x.name : `${x.name} = ${x.kg}`)).join('\n')
+    : ''));
+  const [hot, setHot] = useState(() => new Set(
+    (from?.parts?.names || [])
+      .filter((x) => x.hot)
+      .map((x) => (x.kg === null ? x.name : `${x.name} = ${x.kg}`))
+  ));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const up = (k, v) => setF((p) => ({ ...p, [k]: v }));
@@ -364,8 +375,8 @@ function AddForm({ tos, onCancel, onSave }) {
   });
 
   return (
-    <Sheet title="Нова посилка" onCancel={onCancel} busy={busy} error={err}
-      saveLabel="Зібрано"
+    <Sheet title={from ? 'Виправити посилку' : 'Нова посилка'} onCancel={onCancel} busy={busy} error={err}
+      saveLabel={from ? 'Зберегти' : 'Зібрано'}
       onSave={async () => {
         if (!f.what.trim()) return setErr('Вкажіть назву');
         setBusy(true); setErr('');
