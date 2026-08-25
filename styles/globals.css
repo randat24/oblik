@@ -3451,6 +3451,19 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .cd-next-d { font-size: .82rem; line-height: 1.45; }
 .cd-next.is-done { border-color: var(--blue); background: var(--blue-dim); }
 
+/* Три поля людей у правці посилки: підпис зліва вузький, поле — на решту */
+.dlv-who-f { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.dlv-who-l {
+  flex: 0 0 118px; font-size: .82rem; color: var(--muted);
+  display: flex; align-items: baseline; gap: 6px;
+}
+.dlv-who-f input { flex: 1 1 auto; min-width: 0; }
+
+@media (max-width: 520px) {
+  .dlv-who-f { flex-direction: column; align-items: stretch; gap: 3px; }
+  .dlv-who-l { flex: none; }
+}
+
 /* ─────────────────────────────────────────────────────────────
    Щоденник практики. Третя частина вкладки «Код»: уроки закінчуються,
    довідник відповідає на питання, а сюди пишуть свої зміни — те, з чого

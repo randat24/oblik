@@ -343,16 +343,31 @@ export default withAuth(async (req, res) => {
       // зміну черговості видно окремо: це рішення, а не описка в назві
       const hotWas = parseHot(cur.partsHot).size + (cur.prio ? 1 : 0);
       const hotNow = parseHot(partsHot).size + (str(next[DL.prio]) ? 1 : 0);
+
+      /*
+       * Зміну людей теж видно окремо. «Хто здав» і «хто прийняв» — це
+       * відповідальність: якщо їх поправили, у журналі має лишитись, що
+       * саме стояло раніше, інакше правка нічим не відрізняється від
+       * описки в назві.
+       */
+      const PEOPLE = [['driver', 'відправляє'], ['giver', 'здав'], ['taker', 'прийняв']];
+      const moved = PEOPLE
+        .filter(([k]) => k in req.body && str(req.body[k]) !== str(cur[k]))
+        .map(([k, label]) => `${label}: ${str(cur[k]) || '—'} → ${str(req.body[k]) || '—'}`);
+
       await logChange({
         sheet: DELIVERY_SHEET, row,
-        action: hotNow !== hotWas
-          ? (hotNow > hotWas ? 'Перша черга' : 'Звичайна черга')
-          : 'Правка',
+        action: moved.length ? 'Правка людей'
+          : hotNow !== hotWas
+            ? (hotNow > hotWas ? 'Перша черга' : 'Звичайна черга')
+            : 'Правка',
         field: str(req.body.what),
         before: cur.what,
-        after: hotNow !== hotWas
-          ? `${str(req.body.what)} · першочергових місць: ${hotNow}`
-          : str(req.body.what),
+        after: moved.length
+          ? moved.join(' · ')
+          : hotNow !== hotWas
+            ? `${str(req.body.what)} · першочергових місць: ${hotNow}`
+            : str(req.body.what),
       });
       return res.json(await state());
     }

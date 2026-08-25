@@ -6065,6 +6065,7 @@ function DeliveryView({ setState, me = '' }) {
         <DeliveryAdd
           item={edit}
           tos={data.tos}
+          drivers={data.drivers}
           onCancel={() => setEdit(null)}
           onSave={async (body) => {
             if (await send({ ...body, action: 'update', row: edit.row })) setEdit(null);
@@ -6241,13 +6242,18 @@ function DeliveryCard({ item, stages, onMove, onPart, onLose, onEdit, onDelete }
   );
 }
 
-function DeliveryAdd({ item, tos, onCancel, onSave }) {
+function DeliveryAdd({ item, tos, drivers, onCancel, onSave }) {
   const [f, setF] = useState(() => ({
     to: item?.to || '',
     what: item?.what || '',
     weight: item?.weight ?? '',
     note: item?.note || '',
     prio: item?.prio || '',
+    // Люди правляться лише в наявній посилці: у новій їх ще немає, а
+    // «хто здав» проставляється сам при створенні.
+    driver: item?.driver || '',
+    giver: item?.giver || '',
+    taker: item?.taker || '',
   }));
   // Місця вводяться рядками, а зберігаються через «;»: набирати список
   // з Enter простіше, ніж пам'ятати розділювач, а в самих назвах повно ком
@@ -6288,7 +6294,7 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
         if (!f.what.trim()) return setErr('Вкажіть назву');
         setBusy(true); setErr('');
         try {
-          await onSave({
+          const body = {
             ...f,
             what: f.what.trim(),
             weight: partsKg !== null ? partsKg : f.weight,
@@ -6297,7 +6303,11 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
             // позначка на самій посилці лишається тільки коли місць немає:
             // тоді вся посилка і є той один мішок
             prio: partList.length ? '' : f.prio,
-          });
+          };
+          // у новій посилці цих полів у формі не було — не надсилаємо
+          // порожнечу, щоб не затерти те, що проставляє сам маршрут
+          if (!item) { delete body.driver; delete body.giver; delete body.taker; }
+          await onSave(body);
         }
         catch (e) { setErr(e.message); }
         finally { setBusy(false); }
@@ -6392,6 +6402,46 @@ function DeliveryAdd({ item, tos, onCancel, onSave }) {
         <input type="text" value={f.note} onChange={(e) => up('note', e.target.value)}
           placeholder="крихке, тримати сухим…" />
       </div>
+
+      {/* Люди. Правити їх доводиться частіше, ніж здається: позивний
+          вписують у сусіднє поле, посилку передають не тому водієві, на
+          точці приймає не той, кого чекали. Тут три поля поспіль, щоб
+          виправити все за один захід, а не ганяти форму тричі. */}
+      {item && (
+        <div style={{ marginTop: 16 }}>
+          <label>Люди</label>
+
+          <div className="dlv-who-f">
+            <span className="dlv-who-l">Хто відправляє</span>
+            <input type="text" list="dlvDrivers" value={f.driver}
+              onChange={(e) => up('driver', e.target.value)}
+              placeholder="водій або НРК" />
+            <datalist id="dlvDrivers">{(drivers || []).map((v) => <option key={v} value={v} />)}</datalist>
+          </div>
+
+          <div className="dlv-who-f">
+            <span className="dlv-who-l">Хто здав</span>
+            <input type="text" value={f.giver}
+              onChange={(e) => up('giver', e.target.value)}
+              placeholder="хто зібрав і віддав" />
+          </div>
+
+          <div className="dlv-who-f">
+            <span className="dlv-who-l">
+              Хто прийняв
+              {f.taker && f.taker === f.to && <span className="dlv-you">адресат</span>}
+            </span>
+            <input type="text" list="dlvTo" value={f.taker}
+              onChange={(e) => up('taker', e.target.value)}
+              placeholder="той, кому везли" />
+          </div>
+
+          <div className="dlv-tip" style={{ marginTop: 6 }}>
+            Порожнє поле так і лишиться порожнім — це спосіб прибрати
+            вписане помилково.
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
