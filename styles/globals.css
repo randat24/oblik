@@ -1335,6 +1335,27 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-back { margin-left: auto; color: var(--muted); text-decoration: none; font-size: .82rem; }
 .h-back:hover { color: var(--amber); }
 
+/* Перемикач світів. Головний поділ розділу, тож стоїть над вкладками й
+   видно його завжди — і на телефоні, і на широкому екрані. */
+.h-fire.is-quiet {
+  cursor: default; opacity: .75; display: inline-flex; align-items: baseline; gap: 1px;
+}
+
+.h-worlds {
+  display: flex; gap: 6px; margin-bottom: 10px;
+}
+.h-world {
+  flex: 1; background: none; cursor: pointer; font: inherit;
+  padding: 8px 10px; border-radius: var(--r);
+  border: 1px solid var(--line-soft); color: var(--muted);
+  transition: border-color .15s, color .15s, background .15s;
+}
+.h-world:hover { color: var(--text-dim); }
+.h-world.on {
+  background: var(--panel-2); border-color: var(--green);
+  color: var(--text); font-weight: 600;
+}
+
 .h-tabs {
   display: flex; gap: 4px; margin-bottom: 16px;
   background: var(--panel-2); padding: 3px; border-radius: var(--r);
