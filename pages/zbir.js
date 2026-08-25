@@ -28,7 +28,7 @@ const SEEN = 'oblik_pack_help';
  * не вирішує (за посиланням заходить пункт збору, а не конкретна людина),
  * тож питання прибране, а в журнал іде чесна загальна назва.
  */
-const WHO = 'Збирач посилок';
+const WHO = 'Пакувальник';
 
 const load = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
 const save = (k, v) => { try { localStorage.setItem(k, v); } catch { /* приватне вікно */ } };

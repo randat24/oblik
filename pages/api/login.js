@@ -1,4 +1,4 @@
-import { setSessionCookie, clearSessionCookie, session } from '../../lib/auth';
+import { setSessionCookie, clearSessionCookie, session, isChief } from '../../lib/auth';
 import { readPeople, verifyPin } from '../../lib/people';
 
 export default async function handler(req, res) {
@@ -21,6 +21,7 @@ export default async function handler(req, res) {
       callsigns,
       callsign: who?.callsign || '',
       role: who?.role || 'admin',
+      chief: isChief(who?.callsign),
       expires: who?.expires || 0,
     });
   }
