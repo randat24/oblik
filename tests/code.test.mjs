@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  CODE_LESSONS, TRACKS, CODE_HEADERS, CD, JS_INFO,
+  CODE_LESSONS, TRACKS, CODE_HEADERS, CD, JS_INFO, REACT_DOCS,
   lessonById, openUpTo, isOpen, nextLesson, courseStats,
   nextLink, parseCode, codeRows,
 } from '../lib/code.js';
@@ -48,7 +48,7 @@ test('у кожного уроку є все, без чого сторінка �
     assert.ok(Array.isArray(l.intro) && l.intro.length >= 2, `${l.id}: замало пояснення`);
     assert.equal(typeof l.check, 'function', `${l.id}: немає перевірки`);
     assert.ok(TRACKS.some((t) => t.key === l.track), `${l.id}: невідома доріжка ${l.track}`);
-    assert.ok(['js', 'page'].includes(l.kind), `${l.id}: невідомий вид ${l.kind}`);
+    assert.ok(['js', 'page', 'react'].includes(l.kind), `${l.id}: невідомий вид ${l.kind}`);
   });
 });
 
@@ -62,6 +62,31 @@ test('доріжки наповнені рівномірно', () => {
   TRACKS.forEach((t) => {
     const n = CODE_LESSONS.filter((l) => l.track === t.key).length;
     assert.ok(n >= 5, `${t.key}: лише ${n} уроків`);
+  });
+});
+
+test('React іде після основ, а сервер — після React', () => {
+  const at = (track) => CODE_LESSONS.findIndex((l) => l.track === track);
+  const last = (track) => CODE_LESSONS.map((l) => l.track).lastIndexOf(track);
+  // React поверх незрозумілого JavaScript — це копіювання чужих шматків
+  assert.ok(at('react') > last('base'), 'React починається раніше за кінець основ');
+  assert.ok(at('node') > last('react'), 'сервер починається раніше за кінець React');
+});
+
+test('React-уроки мають компонент App — його монтує пісочниця', () => {
+  CODE_LESSONS.filter((l) => l.kind === 'react').forEach((l) => {
+    assert.match(l.start, /function App\s*\(/, `${l.id}: у стартовому коді немає App`);
+    assert.match(l.solution, /function App\s*\(/, `${l.id}: у рішенні немає App`);
+  });
+});
+
+test('clicks стоять лише там, де є що натискати', () => {
+  CODE_LESSONS.filter((l) => l.clicks).forEach((l) => {
+    assert.equal(l.kind, 'react', `${l.id}: clicks не в React-уроці`);
+    l.clicks.forEach((sel) => {
+      const id = sel.replace(/^#/, '');
+      assert.ok(l.solution.includes(`id="${id}"`), `${l.id}: у рішенні немає ${sel}`);
+    });
   });
 });
 
@@ -81,13 +106,22 @@ test('у кожного уроку є посилання на розділ пі�
   });
 });
 
-test('посилання на підручник збираються з однієї адреси', () => {
-  const own = CODE_LESSONS.map(nextLink).filter((n) => n.url.startsWith(JS_INFO));
-  // майже все має бути з одного джерела — інакше сенс єдиної змінної зникає
-  assert.ok(own.length >= CODE_LESSONS.length - 2, 'забагато сторонніх посилань');
-  own.forEach((n) => {
+test('посилання збираються з адрес, винесених у змінні', () => {
+  CODE_LESSONS.map(nextLink).forEach((n) => {
     const path = n.url.split('://')[1];
     assert.ok(!path.includes('//'), `подвійний слеш у ${n.url}`);
+  });
+  // основна маса — з одного підручника, інакше сенс єдиної змінної зникає
+  const own = CODE_LESSONS.map(nextLink).filter((n) => n.url.startsWith(JS_INFO));
+  assert.ok(own.length >= 25, `лише ${own.length} посилань на підручник`);
+});
+
+test('React відсилає до офіційної документації, і це позначено', () => {
+  CODE_LESSONS.filter((l) => l.track === 'react').forEach((l) => {
+    const n = nextLink(l);
+    assert.ok(n.url.startsWith(REACT_DOCS), `${l.id}: ${n.url}`);
+    // документація англійською — читач має знати про це до кліку
+    assert.equal(n.foreign, true, `${l.id}: не позначено як англомовне`);
   });
 });
 

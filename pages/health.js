@@ -5490,6 +5490,73 @@ function runPage(html, timeoutMs = 3000) {
   return { promise, srcdoc: html + ping };
 }
 
+/**
+ * Пісочниця для React.
+ *
+ * Та сама рамка, що й для сторінкових завдань, але спершу в неї
+ * вантажиться зібраний файл із React, react-dom і перетворювачем JSX:
+ * браузер JSX не розуміє, а React 19 більше не постачає готових файлів
+ * для браузера. Збирає їх `scripts/build-sandbox.mjs`.
+ *
+ * Монтуємо компонент `App` самі — щоб урок був про компонент, а не про
+ * три однакові рядки запуску, які в справжньому застосунку пише
+ * фреймворк.
+ *
+ * `clicks` — селектори, по яких треба клацнути після показу. Саме це й
+ * робить перевірку справжньою: видно не те, що написано, а те, що
+ * сталося після натискання. Клацаємо по черзі з паузою, бо React
+ * складає кілька змін в одному такті в одну.
+ */
+function runReact(code, clicks = [], timeoutMs = 6000) {
+  const shell = `
+<div id="root"></div>
+<script src="/vendor/react-sandbox.js"><\/script>
+<script>
+(function () {
+  var say = function (text, error) {
+    try { parent.postMessage({ __lesson: true, text: text || '', error: error || '' }, '*'); } catch (e) {}
+  };
+  window.addEventListener('load', function () {
+    if (!window.React) { say('', 'Не вдалося завантажити React — оновіть сторінку.'); return; }
+    try {
+      var js = window.__jsx(${JSON.stringify(code)});
+      var make = new Function('React', 'ReactDOM', js + '\\n;return typeof App === "function" ? App : null;');
+      var App = make(window.React, window.ReactDOM);
+      if (!App) { say('', 'Не знайдено компонент App — назвіть свій компонент саме так.'); return; }
+      window.ReactDOM.createRoot(document.getElementById('root'))
+        .render(window.React.createElement(App));
+      var list = ${JSON.stringify(clicks)};
+      var step = function (i) {
+        if (i >= list.length) { setTimeout(function () { say(document.body.innerText); }, 80); return; }
+        var el = document.querySelector(list[i]);
+        if (el) el.click();
+        setTimeout(function () { step(i + 1); }, 60);
+      };
+      setTimeout(function () { step(0); }, 60);
+    } catch (e) { say('', String((e && e.message) || e)); }
+  });
+})();
+<\/script>`;
+
+  const promise = new Promise((resolve) => {
+    let done = false;
+    const finish = (r) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      window.removeEventListener('message', onMsg);
+      resolve(r);
+    };
+    const onMsg = (e) => {
+      if (!e.data || !e.data.__lesson) return;
+      finish({ text: e.data.text || '', error: e.data.error || '' });
+    };
+    const timer = setTimeout(() => finish({ text: '', error: 'Не дочекались відповіді від рамки.' }), timeoutMs);
+    window.addEventListener('message', onMsg);
+  });
+  return { promise, srcdoc: shell };
+}
+
 /** Підсвітка синтаксису для читання, не для редагування — просто фарбує рядки */
 function CodeBlock({ code }) {
   return <pre className="cd-block"><code>{code}</code></pre>;
@@ -5603,7 +5670,8 @@ function CodeTab({ data, reload, toast }) {
         <p>
           Одна мова — JavaScript: нею ж написано цей застосунок. Спершу
           сторінка, бо результат видно очима; скрипти й основи підключаються
-          там, де без них уже не обійтись.
+          там, де без них уже не обійтись. Далі React — те, чим написані ці
+          екрани, — і сервер, який віддає їм дані.
         </p>
       </div>
 
@@ -5917,6 +5985,16 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
           if (ok) { setPassed(true); await onDone(code); }
           else setErr(lesson.why || 'Поки що не те. Спробуйте ще.');
         }
+      } else if (lesson.kind === 'react') {
+        const { promise, srcdoc } = runReact(code, lesson.clicks);
+        if (iframeRef.current) iframeRef.current.srcdoc = srcdoc;
+        const r = await promise;
+        if (r.error) setErr(r.error);
+        else {
+          const ok = lesson.check(code, r.text);
+          if (ok) { setPassed(true); await onDone(code); }
+          else setErr(lesson.why || 'Поки що не те. Спробуйте ще.');
+        }
       } else {
         const { promise, srcdoc } = runPage(code);
         // рамку монтуємо тут, а не через runPage: їй потрібен реальний DOM
@@ -5946,15 +6024,15 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
         <b>Завдання.</b> {lesson.task}
       </div>
 
-      <div className={'cd-work' + (lesson.kind === 'page' ? ' is-page' : '')}>
+      <div className={'cd-work' + (lesson.kind === 'js' ? '' : ' is-page')}>
         <textarea
           className="cd-editor"
           value={code}
           onChange={(e) => { setCode(e.target.value); setErr(''); }}
           spellCheck={false}
-          rows={lesson.kind === 'page' ? 10 : 8}
+          rows={lesson.kind === 'js' ? 8 : 12}
         />
-        {lesson.kind === 'page' && (
+        {lesson.kind !== 'js' && (
           <iframe
             ref={iframeRef}
             className="cd-frame"
@@ -6149,7 +6227,9 @@ function NextRead({ lesson, done }) {
       target="_blank"
       rel="noopener noreferrer"
     >
-      <span className="cd-next-l">Далі почитати</span>
+      <span className="cd-next-l">
+        Далі почитати{n.foreign && ' · англійською'}
+      </span>
       <b>{n.t}</b>
       {n.d && <span className="cd-next-d">{n.d}</span>}
     </a>

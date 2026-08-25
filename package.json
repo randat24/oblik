@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "predev": "node scripts/build-sandbox.mjs",
+    "prebuild": "node scripts/build-sandbox.mjs",
     "build": "next build",
+    "build:sandbox": "node scripts/build-sandbox.mjs",
     "start": "next start",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test 'tests/*.test.mjs'",
     "test:watch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --watch 'tests/*.test.mjs'"
@@ -18,5 +21,9 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "sucrase": "^3.35.1"
   }
 }
