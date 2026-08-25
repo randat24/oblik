@@ -1,6 +1,7 @@
 import { withAuth, currentActor } from '../../lib/auth';
 import { readSheet, writeRow, appendRow, deleteRow, ensureSheet } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
+import { readPoints, activeNames } from '../../lib/points';
 import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS, LOST_WHY, PRIO_FIRST,
   parseDeliveries, deliveryRow, stampKyiv, suggestions, stageOf,
@@ -78,7 +79,9 @@ async function state(extra = {}) {
     stages: STAGES.map(({ key, label, short, action, hint, needs }) => ({ key, label, short, action, hint, needs: needs || [] })),
     drivers: suggestions(list, 'driver', DRIVERS),
     points: suggestions(list, 'point', POINTS),
-    tos: suggestions(list, 'to', []),
+    // Куди возять — не з того, що вже вписали, а з переліку, який веде
+    // адміністратор: інакше кожна описка ставала новим напрямком.
+    tos: activeNames(await readPoints()),
     whys: LOST_WHY,
     ...extra,
   };
