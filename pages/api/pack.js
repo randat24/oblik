@@ -2,7 +2,7 @@ import { session, sameSecret, keyFrom } from '../../lib/auth';
 import { readSheet, writeRow, appendRow, ensureSheet } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
 import {
-  DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, PRIO_FIRST,
+  DELIVERY_SHEET, DELIVERY_HEADERS, DL, PRIO_FIRST,
   parseDeliveries, deliveryRow, stampKyiv, suggestions, partsOf,
   splitParts, parseHot, joinHot, stampOf,
 } from '../../lib/delivery';
@@ -10,14 +10,15 @@ import {
 /**
  * Пункт збору — окремий вхід за посиланням.
  *
- * Той, хто складає посилки й віддає їх на відправку, не має справи ні з
- * майном, ні зі складом, ні з рештою розділів: його робота — зібрати
- * коробку й записати, кому передав. Заводити йому позивний з PIN заради
- * двох дій — зайве, тож він заходить за ключем у посиланні.
+ * Той, хто складає посилки, не має справи ні з майном, ні зі складом, ні
+ * з рештою розділів: його робота — зібрати коробку й записати, що в ній.
+ * Заводити йому позивний з PIN заради однієї дії — зайве, тож він
+ * заходить за ключем у посиланні.
  *
- * Ключ відкриває рівно дві дії: створити посилку й позначити передачу.
- * Ані правити чуже, ані видаляти, ані закривати доставку звідси не можна —
- * це вже робота чергового, і вона лишається за входом.
+ * Ключ відкриває рівно одну дію: створити посилку. Кому її віддали — НРК
+ * чи комусь із пілотів — відмічає черговий: збирач цього однаково не
+ * вирішує, а зайве поле у формі означає зайву можливість помилитись.
+ * Правити чуже, видаляти й закривати доставку звідси теж не можна.
  *
  * Без PACK_TOKEN маршрут не існує: поки змінної немає, посилання просто
  * нікуди не веде.
@@ -41,7 +42,7 @@ function allowed(req) {
 }
 
 /**
- * Що видно збирачеві: те, що ще не поїхало, і те, що він щойно віддав.
+ * Що видно збирачеві: те, що ще не поїхало, і те, що вже забрали.
  * Уся історія доставок йому ні до чого — вона тільки заважає знайти
  * коробку, яка стоїть поруч і чекає водія.
  */
@@ -87,7 +88,6 @@ export default async function handler(req, res) {
       console.error('не вдалося оновити заголовки доставок:', e.message);
     }
   }
-  const list = parseDeliveries(values);
 
   /*
    * Читаємо лист заново, а не віддаємо той, що прочитали на початку: інакше
@@ -99,7 +99,6 @@ export default async function handler(req, res) {
     return {
       ok: true,
       list: visible(fresh),
-      drivers: suggestions(fresh, 'driver', DRIVERS),
       tos: suggestions(fresh, 'to', []),
     };
   };
@@ -140,38 +139,5 @@ export default async function handler(req, res) {
     return res.json(await state());
   }
 
-  if (action === 'handed') {
-    const { row, driver } = req.body;
-    if (!row) return res.status(400).json({ error: 'Не вказано посилку' });
-    if (!str(driver)) return res.status(400).json({ error: 'Вкажіть, кому передали' });
-    if (!me) return res.status(400).json({ error: 'Вкажіть свій позивний' });
-
-    const prev = values[row - 1];
-    if (!prev) return res.status(404).json({ error: 'Посилку не знайдено' });
-    const cur = parseDeliveries([DELIVERY_HEADERS, prev])[0];
-
-    // Звідси рухають лише на крок «передано»: закривати доставку має той,
-    // хто бачить точку, а не той, хто віддав коробку водієві.
-    if (cur.stage !== 'packed') {
-      return res.status(400).json({ error: 'Цю посилку вже передали' });
-    }
-
-    const now = stampKyiv();
-    const next = deliveryRow({
-      ...cur,
-      driver: str(driver),
-      giver: cur.giver || me,
-      dates: { ...cur.dates, handed: now },
-    }, prev);
-    await writeRow(DELIVERY_SHEET, row, next);
-    await logChange({
-      sheet: DELIVERY_SHEET, row, action: 'Передати на відправку', who: me,
-      field: cur.what,
-      before: STAGES[cur.at]?.label || '',
-      after: `Передали · ${str(driver)} · з пункту збору`,
-    });
-    return res.json(await state());
-  }
-
-  return res.status(400).json({ error: 'Невідома дія: ' + action });
+    return res.status(400).json({ error: 'Невідома дія: ' + action });
 }

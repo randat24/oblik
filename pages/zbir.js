@@ -50,7 +50,6 @@ export default function Zbir() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [add, setAdd] = useState(false);
-  const [hand, setHand] = useState(null);
   const [help, setHelp] = useState(false);
 
   // Ключ приходить у посиланні один раз, далі живе в цьому браузері:
@@ -172,14 +171,14 @@ export default function Zbir() {
       ) : (
         <div className="z-list">
           {waiting.map((d) => (
-            <PackCard key={d.row} d={d} onHand={() => setHand(d)} />
+            <PackCard key={d.row} d={d} />
           ))}
         </div>
       )}
 
       {gone.length > 0 && (
         <>
-          <div className="z-sec">Передано за останні дві доби</div>
+          <div className="z-sec">Поїхало за останні дві доби</div>
           <div className="z-list">
             {gone.map((d) => (
               <div className="z-card is-gone" key={d.row}>
@@ -188,7 +187,7 @@ export default function Zbir() {
                   <span className="z-name">{d.what}</span>
                 </div>
                 <div className="z-meta">
-                  Передали {d.driver} · {(d.handed || '').split(' ')[0]}
+                  Забрав {d.driver || 'відправник'} · {(d.handed || '').split(' ')[0]}
                 </div>
               </div>
             ))}
@@ -205,17 +204,6 @@ export default function Zbir() {
       )}
 
       {help && <HelpSheet onClose={() => setHelp(false)} />}
-
-      {hand && (
-        <HandForm
-          d={hand}
-          drivers={data.drivers}
-          onCancel={() => setHand(null)}
-          onSave={async (driver) => {
-            if (await send({ action: 'handed', row: hand.row, driver })) setHand(null);
-          }}
-        />
-      )}
     </Shell>
   );
 }
@@ -261,18 +249,12 @@ const HELP = [
   },
   {
     t: 'Збережено',
-    d: 'Посилка стала карткою: видно кому, скільки мішків, скільки кілограмів і які з них першочергові. Тепер вона чекає водія.',
+    d: 'Посилка стала карткою: видно кому, скільки мішків, скільки кілограмів і які з них першочергові. На цьому ваша частина роботи закінчується.',
     img: '06-card',
   },
   {
-    t: 'Приїхав водій',
-    d: 'На картці — «Передати на відправку». Оберіть, кому саме віддали, і натисніть «Передав». Дата й час проставляться самі.',
-    warn: 'Тисніть у момент передачі, а не заздалегідь: повернути позначку звідси не можна.',
-    img: '08-hand-picked',
-  },
-  {
     t: 'Далі веде черговий',
-    d: 'Посилка перейде в «Передано за останні дві доби» — щоб було видно, що все відмічено. Доставку до пілотів і прибуття на позицію відмічає черговий. Помилка в картці, коробка не поїхала, мішок розбили — теж до нього: правити й видаляти звідси не можна.',
+    d: 'Усе після збирання відмічає черговий: кому віддали на відправку — НРК чи комусь із пілотів, — хто прийняв на точці вильоту й коли посилка дійшла до позиції. Він це й так знає, тож у вас цих полів немає. Коли посилку заберуть, вона перейде у «Поїхало за останні дві доби» — щоб було видно, що вона рушила. Помилка в картці, коробка не поїхала, мішок розбили — теж до чергового: правити й видаляти звідси не можна.',
     img: '09-done',
   },
 ];
@@ -331,7 +313,7 @@ function WhoAsk({ onSet }) {
   );
 }
 
-function PackCard({ d, onHand }) {
+function PackCard({ d }) {
   const kg = d.parts?.kg || d.weight;
   const hot = d.parts?.names.filter((x) => x.hot) || [];
   return (
@@ -356,7 +338,6 @@ function PackCard({ d, onHand }) {
         </div>
       )}
       {d.note && <div className="z-note">{d.note}</div>}
-      <button className="z-btn z-btn-main z-wide" onClick={onHand}>Передати на відправку</button>
     </div>
   );
 }
@@ -451,41 +432,6 @@ function AddForm({ tos, onCancel, onSave }) {
       <label className="z-lab">Примітка</label>
       <input className="z-inp" value={f.note} onChange={(e) => up('note', e.target.value)}
         placeholder="крихке, тримати сухим…" />
-    </Sheet>
-  );
-}
-
-function HandForm({ d, drivers, onCancel, onSave }) {
-  const [driver, setDriver] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  return (
-    <Sheet title="Кому передали" onCancel={onCancel} busy={busy} error={err}
-      saveLabel="Передав"
-      onSave={async () => {
-        if (!driver.trim()) return setErr('Вкажіть, кому передали');
-        setBusy(true); setErr('');
-        try { await onSave(driver.trim()); }
-        catch (e) { setErr(e.message); }
-        finally { setBusy(false); }
-      }}
-    >
-      <div className="z-card-top" style={{ marginBottom: 12 }}>
-        {d.to && <span className="z-to">{d.to}</span>}
-        <span className="z-name">{d.what}</span>
-      </div>
-      <div className="z-chips">
-        {(drivers || []).map((v) => (
-          <button key={v} type="button"
-            className={'z-chip' + (driver === v ? ' on' : '')}
-            onClick={() => setDriver(v)}>{v}</button>
-        ))}
-      </div>
-      <input className="z-inp" value={driver} onChange={(e) => setDriver(e.target.value)}
-        placeholder="або впишіть свого" style={{ marginTop: 10 }} />
-      <div className="z-tip">
-        Дата й час проставляться самі. Далі посилку веде черговий.
-      </div>
     </Sheet>
   );
 }
