@@ -1,7 +1,7 @@
 import { withAuth, currentActor, isChief } from '../../lib/auth';
 import { readSheet, writeRow, appendRow, deleteRow, ensureSheet } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
-import { readPoints, activeNames } from '../../lib/points';
+import { readAllLists, activeNames } from '../../lib/points';
 import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS, LOST_WHY, PRIO_FIRST,
   parseDeliveries, deliveryRow, stampKyiv, suggestions, stageOf,
@@ -83,7 +83,11 @@ function syncDelivered(d, stamp) {
 }
 
 async function state(extra = {}) {
-  const values = await readSheet(DELIVERY_SHEET);
+  const [values, lists] = await Promise.all([
+    readSheet(DELIVERY_SHEET),
+    readAllLists(),
+  ]);
+  extra = { ...extra, lists };
   if ((values[0] || []).length < DELIVERY_HEADERS.length && !headersFixed) {
     headersFixed = true;
     try { await writeRow(DELIVERY_SHEET, 1, DELIVERY_HEADERS); } catch (e) {
@@ -94,13 +98,22 @@ async function state(extra = {}) {
   return {
     list,
     stages: STAGES.map(({ key, label, short, action, hint, needs }) => ({ key, label, short, action, hint, needs: needs || [] })),
-    drivers: suggestions(list, 'driver', DRIVERS),
     points: suggestions(list, 'point', POINTS),
-    // Куди возять — не з того, що вже вписали, а з переліку, який веде
-    // адміністратор: інакше кожна описка ставала новим напрямком.
-    tos: activeNames(await readPoints()),
+    // Не з того, що вже вписали, а з переліків, які веде адміністратор:
+    // інакше кожна описка ставала новим напрямком.
+    ...(() => {
+      const l = extra.lists || {};
+      return {
+        tos: activeNames(l.sp),
+        // «Чим відправляють» — це транспорт: НРК, машина. Не позивний.
+        transport: activeNames(l.transport),
+        // Хто забирає посилку на точці вильоту
+        takers: activeNames(l.takers),
+      };
+    })(),
     whys: LOST_WHY,
     ...extra,
+    lists: undefined,
   };
 }
 
