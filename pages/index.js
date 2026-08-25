@@ -2447,7 +2447,7 @@ function urlFor(view) {
 
 export default function Home({ startView }) {
   const [authed, setAuthed] = useState(null);
-  const [me, setMe] = useState({ callsign: '', role: 'admin', callsigns: [], expires: 0 });
+  const [me, setMe] = useState({ callsign: '', role: 'admin', chief: false, callsigns: [], expires: 0 });
   const [expired, setExpired] = useState(false);
   const [sheets, setSheets] = useState([]);
   const [view, setView] = useState(startView || { kind: 'home', name: null });
@@ -2495,6 +2495,8 @@ export default function Home({ startView }) {
       .then((d) => {
         setMe({
           callsign: d.callsign || '', role: d.role || 'admin',
+          // головний — не роль із таблиці, а позивний зі змінної оточення
+          chief: !!d.chief,
           callsigns: d.callsigns || [], expires: d.expires || 0,
         });
         setAuthed(d.authed || !d.required);
@@ -2669,7 +2671,7 @@ export default function Home({ startView }) {
         {view.kind === 'items' && (
           <ItemsView key={view.name + ':' + (view.row || '')} name={view.name} setState={setState} focusRow={view.row} onOpen={setView} />
         )}
-        {view.kind === 'delivery' && <DeliveryView setState={setState} me={me.callsign} />}
+        {view.kind === 'delivery' && <DeliveryView setState={setState} me={me.callsign} chief={!!me.chief} />}
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
         {view.kind === 'stock' && (
           <StockView
@@ -5903,7 +5905,15 @@ function dayWord(n) {
  * наступний крок завжди відомий, і вибирати з чотирьох там, де правильний
  * один, — робота, яку не варто перекладати на того, хто стоїть із коробкою.
  */
-function DeliveryView({ setState, me = '' }) {
+/** Етапи для правки дат — підписи ті самі, що на картці */
+const DLV_STAGE_KEYS = [
+  ['packed', 'Зібрано'],
+  ['handed', 'Передали'],
+  ['atbase', 'На точці вильоту'],
+  ['delivered', 'Доставлено'],
+];
+
+function DeliveryView({ setState, me = '', chief = false }) {
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
   const [only, setOnly] = useState('');
@@ -6190,6 +6200,7 @@ function DeliveryView({ setState, me = '' }) {
           item={edit}
           tos={data.tos}
           drivers={data.drivers}
+          chief={chief}
           onCancel={() => setEdit(null)}
           onSave={async (body) => {
             if (await send({ ...body, action: 'update', row: edit.row })) setEdit(null);
@@ -6366,7 +6377,7 @@ function DeliveryCard({ item, stages, onMove, onPart, onLose, onEdit, onDelete }
   );
 }
 
-function DeliveryAdd({ item, tos, drivers, onCancel, onSave }) {
+function DeliveryAdd({ item, tos, drivers, chief, onCancel, onSave }) {
   const [f, setF] = useState(() => ({
     to: item?.to || '',
     what: item?.what || '',
@@ -6379,6 +6390,8 @@ function DeliveryAdd({ item, tos, drivers, onCancel, onSave }) {
     giver: item?.giver || '',
     taker: item?.taker || '',
   }));
+  // Дати етапів править лише головний — і тільки в наявній посилці
+  const [dates, setDates] = useState(() => ({ ...(item?.dates || {}) }));
   // Місця вводяться рядками, а зберігаються через «;»: набирати список
   // з Enter простіше, ніж пам'ятати розділювач, а в самих назвах повно ком
   // («7,7 л»), тож кома розділювачем бути не може.
@@ -6431,6 +6444,7 @@ function DeliveryAdd({ item, tos, drivers, onCancel, onSave }) {
           // у новій посилці цих полів у формі не було — не надсилаємо
           // порожнечу, щоб не затерти те, що проставляє сам маршрут
           if (!item) { delete body.driver; delete body.giver; delete body.taker; }
+          if (item && chief) body.dates = dates;
           await onSave(body);
         }
         catch (e) { setErr(e.message); }
@@ -6562,7 +6576,7 @@ function DeliveryAdd({ item, tos, drivers, onCancel, onSave }) {
             <span className="dlv-who-l">Хто здав</span>
             <input type="text" value={f.giver}
               onChange={(e) => up('giver', e.target.value)}
-              placeholder="хто зібрав і віддав" />
+              placeholder="хто зібрав посилку" />
           </div>
 
           <div className="dlv-who-f">
@@ -6581,6 +6595,30 @@ function DeliveryAdd({ item, tos, drivers, onCancel, onSave }) {
           <div className="dlv-tip" style={{ marginTop: 6 }}>
             Порожнє поле так і лишиться порожнім — це спосіб прибрати
             вписане помилково.
+          </div>
+        </div>
+      )}
+
+      {/* Дати етапів. Не звичайна правка описки: прибрана дата відкочує
+          посилку на етап назад, дописана каже, що подія була тоді, коли
+          її не було. Тому вони лише в головного, і сказано про це прямо. */}
+      {item && chief && (
+        <div style={{ marginTop: 16 }}>
+          <label>Дати етапів</label>
+          {DLV_STAGE_KEYS.map(([key, label]) => (
+            <div className="dlv-who-f" key={key}>
+              <span className="dlv-who-l">{label}</span>
+              <input
+                type="text"
+                value={dates[key] || ''}
+                onChange={(e) => setDates((p) => ({ ...p, [key]: e.target.value }))}
+                placeholder="дд.мм.рррр гг:хх"
+              />
+            </div>
+          ))}
+          <div className="dlv-tip" style={{ marginTop: 6 }}>
+            Порожня дата означає, що етапу не було — посилка повернеться на
+            попередній. Написане не як дата просто не збережеться.
           </div>
         </div>
       )}
@@ -6628,7 +6666,23 @@ function DeliveryMove({ item, stage, drivers, points, me = '', onCancel, onSave 
           }
         }
         setBusy(true); setErr('');
-        try { await onSave(f); }
+        try {
+          /*
+           * Надсилаємо тільки те, про що етап справді питав.
+           *
+           * Раніше йшло все поле форми цілком, і «хто прийняв»
+           * підставлений з «Кому» записувався вже на «Передали» — на
+           * картці стояло «прийняв Тигр» тоді, коли посилка ще їхала.
+           *
+           * На точці вильоту не питаємо нікого: там її приймають ті самі,
+           * хто відправлятиме далі, і вони вже стоять у «хто відправляє».
+           * Від етапу лишається дата й час — саме те, що ми як чергові й
+           * відстежуємо.
+           */
+          const body = { driver: f.driver, point: f.point };
+          if (stage.key === 'delivered') body.taker = f.taker;
+          await onSave(body);
+        }
         catch (e) { setErr(e.message); }
         finally { setBusy(false); }
       }}

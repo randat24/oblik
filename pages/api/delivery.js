@@ -1,4 +1,4 @@
-import { withAuth, currentActor } from '../../lib/auth';
+import { withAuth, currentActor, isChief } from '../../lib/auth';
 import { readSheet, writeRow, appendRow, deleteRow, ensureSheet } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
 import { readPoints, activeNames } from '../../lib/points';
@@ -9,6 +9,23 @@ import {
 } from '../../lib/delivery';
 
 const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
+
+/**
+ * Дати етапів із форми. Порожній рядок дозволений — це і є спосіб
+ * відкотити етап. Усе, що не схоже на дату, лишається як було: краще
+ * проігнорувати описку, ніж записати в картку «пʼятниця».
+ */
+const DATE_RE = /^\d{2}\.\d{2}\.\d{4}( \d{2}:\d{2})?$/;
+
+function cleanDates(was, got) {
+  const out = { ...was };
+  STAGES.forEach((st) => {
+    if (!(st.key in got)) return;
+    const v = str(got[st.key]);
+    if (v === '' || DATE_RE.test(v)) out[st.key] = v;
+  });
+  return out;
+}
 
 /*
  * Лист міг бути створений до появи колонки «Кому»: нові колонки дописані
@@ -340,7 +357,22 @@ export default withAuth(async (req, res) => {
         ? joinHot(parseHot(req.body.partsHot))
         : (edited ? remapHot(cur, str(req.body.parts)) : cur.partsHot);
 
-      const next = deliveryRow({ ...cur, ...req.body, partsDone, partsHot, dates: cur.dates }, prev);
+      /*
+       * Дати етапів переписує лише головний.
+       *
+       * Це не звичайна правка описки: прибрана дата відкочує посилку на
+       * етап назад, а дописана каже, що подія була тоді, коли її не було.
+       * Решті лишається рухати посилку кнопками — так у картці лишається
+       * те, що справді сталося.
+       */
+      const mayDates = isChief(who) && req.body.dates && typeof req.body.dates === 'object';
+      const dates = mayDates ? cleanDates(cur.dates, req.body.dates) : cur.dates;
+      const movedDates = mayDates
+        ? STAGES.filter((st) => str(dates[st.key]) !== str(cur.dates[st.key]))
+          .map((st) => `${st.label}: ${str(cur.dates[st.key]) || '—'} → ${str(dates[st.key]) || '—'}`)
+        : [];
+
+      const next = deliveryRow({ ...cur, ...req.body, partsDone, partsHot, dates }, prev);
       await writeRow(DELIVERY_SHEET, row, next);
 
       // зміну черговості видно окремо: це рішення, а не описка в назві
@@ -354,13 +386,17 @@ export default withAuth(async (req, res) => {
        * описки в назві.
        */
       const PEOPLE = [['driver', 'відправляє'], ['giver', 'здав'], ['taker', 'прийняв']];
-      const moved = PEOPLE
-        .filter(([k]) => k in req.body && str(req.body[k]) !== str(cur[k]))
-        .map(([k, label]) => `${label}: ${str(cur[k]) || '—'} → ${str(req.body[k]) || '—'}`);
+      const moved = [
+        ...PEOPLE
+          .filter(([k]) => k in req.body && str(req.body[k]) !== str(cur[k]))
+          .map(([k, label]) => `${label}: ${str(cur[k]) || '—'} → ${str(req.body[k]) || '—'}`),
+        ...movedDates,
+      ];
 
       await logChange({
         sheet: DELIVERY_SHEET, row,
-        action: moved.length ? 'Правка людей'
+        action: movedDates.length ? 'Правка дат'
+          : moved.length ? 'Правка людей'
           : hotNow !== hotWas
             ? (hotNow > hotWas ? 'Перша черга' : 'Звичайна черга')
             : 'Правка',
