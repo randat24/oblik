@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  SP_HEADERS, SPC, SP_DEFAULT,
+  SP_HEADERS, SPC, SP_DEFAULT, LISTS, listByKey,
   parsePoints, activeNames, hasPoint,
 } from '../lib/points.js';
 
@@ -81,6 +81,35 @@ test('hasPoint: не зважає на регістр і пробіли', () => 
 test('SP_DEFAULT: те, з чого починається порожній лист', () => {
   assert.deepEqual(SP_DEFAULT, ['Тигр', 'Рись', 'Білий']);
   assert.equal(new Set(SP_DEFAULT).size, SP_DEFAULT.length);
+});
+
+test('три довідники, у кожного свій лист і свої початкові значення', () => {
+  assert.deepEqual(LISTS.map((l) => l.key), ['sp', 'transport', 'takers']);
+  assert.equal(new Set(LISTS.map((l) => l.sheet)).size, LISTS.length);
+  LISTS.forEach((l) => {
+    assert.ok(l.title && l.hint, `${l.key}: неповний опис`);
+    assert.ok(l.def.length > 0, `${l.key}: немає з чого почати`);
+  });
+});
+
+test('лише СП обирають без права вписати', () => {
+  // СП — це адреса: вписана від руки, вона перестає сходитись із тією
+  // самою в інших картках. Транспорт і той, хто взяв на точці, бувають
+  // разові — там потрібна свобода.
+  assert.equal(listByKey('sp').strict, true);
+  assert.equal(listByKey('transport').strict, false);
+  assert.equal(listByKey('takers').strict, false);
+  assert.equal(listByKey('нема такого'), null);
+});
+
+test('транспорт — це не позивні', () => {
+  // «Чим відправляють» плутали з тим, хто приймає на точці: у списку
+  // стояли Лотар і БПС, хоч посилку везе НРК або машина
+  const transport = listByKey('transport').def;
+  const takers = listByKey('takers').def;
+  assert.equal(transport.some((v) => takers.includes(v)), false);
+  assert.ok(transport.includes('НРК'));
+  assert.ok(takers.includes('БПС'));
 });
 
 test('колонки збігаються із заголовками', () => {
