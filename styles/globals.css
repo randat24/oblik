@@ -3134,11 +3134,6 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   font-size: 1.05rem; font-weight: 700;
   letter-spacing: .12em; text-transform: uppercase;
 }
-.z-who {
-  margin-top: 4px; padding: 0; border: 0; background: none;
-  color: var(--amber); font: inherit; font-size: .82rem; cursor: pointer;
-}
-.z-who i { font-style: normal; color: var(--muted); margin-left: 6px; font-size: .74rem; }
 
 .z-sum {
   display: flex; align-items: baseline; gap: 10px;
