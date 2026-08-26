@@ -5968,7 +5968,7 @@ function DeliveryView({ setState, me = '', chief = false }) {
   else if (only) list = list.filter((d) => d.stage === only && !d.isLost);
   if (q.trim()) {
     const t = q.trim().toLowerCase();
-    list = list.filter((d) => [d.to, d.what, d.driver, d.point, d.giver, d.taker, d.note, d.parts]
+    list = list.filter((d) => [d.to, d.what, d.driver, d.point, d.giver, d.taker, d.pilot, d.note, d.parts]
       .join(' ').toLowerCase().includes(t));
   }
 
@@ -6240,6 +6240,9 @@ function DeliveryCard({ item, stages, onMove, onPart, onLose, onEdit, onDelete }
     ['Чим відправляють', item.driver],
     [pts.length > 1 ? 'Точки' : 'Точка', item.point],
     ['Здав', item.giver],
+    // намір збирача й факт чергового стоять поруч: коли коробку віддали
+    // не тому, кому збирали, це видно з одного погляду
+    ['Кому на точці', item.pilot],
     ['Прийняв', item.taker],
     ['Примітка', item.note],
   ].filter(([, v]) => v);
@@ -6387,6 +6390,7 @@ function DeliveryCard({ item, stages, onMove, onPart, onLose, onEdit, onDelete }
 function DeliveryAdd({ item, tos, transport, takers, chief, onCancel, onSave }) {
   const [f, setF] = useState(() => ({
     to: item?.to || '',
+    pilot: item?.pilot || '',
     what: item?.what || '',
     weight: item?.weight ?? '',
     note: item?.note || '',
@@ -6479,6 +6483,26 @@ function DeliveryAdd({ item, tos, transport, takers, chief, onCancel, onSave }) 
           </div>
         )}
       </div>
+      {/* Кому везуть на точку вильоту — намір, відомий ще до відправки.
+          Той, хто справді забрав, пишеться окремо на самому етапі: збіглося
+          не завжди, і перезаписувати одне одним означало б втратити те, що
+          варте погляду. */}
+      <div style={{ marginTop: 10 }}>
+        <label>Кому на точці</label>
+        <div className="chips">
+          {(takers || []).map((v) => (
+            <div key={v} className={'chip' + (f.pilot === v ? ' on' : '')}
+              onClick={() => up('pilot', f.pilot === v ? '' : v)}>{v}</div>
+          ))}
+        </div>
+        <input type="text" value={f.pilot} style={{ marginTop: 8 }}
+          onChange={(e) => up('pilot', e.target.value)}
+          placeholder="або впишіть свій варіант" />
+        <div className="dlv-tip" style={{ marginTop: 6 }}>
+          Приймуть на точці вильоту й переправлять далі дронами.
+        </div>
+      </div>
+
       <div style={{ marginTop: 10 }}>
         <label>Назва</label>
         <input type="text" value={f.what} onChange={(e) => up('what', e.target.value)}
@@ -6646,12 +6670,16 @@ function DeliveryMove({ item, stage, transport, takers, points, me = '', onCance
     /*
      * «Хто прийняв» — двічі різні люди, і поле одне.
      *
-     * На точці вильоту посилку забирає той, хто повезе її далі: Лотар,
-     * БПС. На самому СП її отримує адресат — той, кому й везли. Тому на
-     * точці поле порожнє (вписують, хто взяв), а при доставці підставлено
-     * СП. Хто брав на точці, лишається в журналі.
+     * На точці вильоту посилку забирає той, хто повезе її далі дронами:
+     * Лотар, БПС. На самому СП її отримує адресат — той, кому й везли.
+     * Тому на точці підставлено те, що написав збирач (найчастіше забирає
+     * саме той, кому й домовлялись), а при доставці — СП. Підставлене
+     * лишається змінюваним: збіглося не завжди, і виправити це — один
+     * дотик. Хто брав на точці, лишається в журналі.
      */
-    taker: stage.key === 'delivered' ? (item.to || item.taker || '') : '',
+    taker: stage.key === 'delivered'
+      ? (item.to || item.taker || '')
+      : (stage.key === 'atbase' ? (item.taker || item.pilot || '') : ''),
   }));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
