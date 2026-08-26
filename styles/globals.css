@@ -3157,7 +3157,6 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   background: var(--panel); padding: 12px;
   display: flex; flex-direction: column; gap: 8px;
 }
-.z-card.is-gone { opacity: .6; }
 .z-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .z-to {
   padding: 2px 8px; border-radius: 4px;
