@@ -109,12 +109,12 @@ export default withAuth(async (req, res) => {
     // Нова посилка одразу на першому етапі: складена — значить зібрана,
     // окремої кнопки «підтвердити збирання» тут не треба.
     if (action === 'add') {
-      const { what, weight, note, to, parts, prio, partsHot } = req.body;
+      const { what, weight, note, to, parts, prio, partsHot, pilot } = req.body;
       if (!str(what)) return res.status(400).json({ error: 'Не вказано назву' });
       const now = stampKyiv();
       const hot = joinHot(parseHot(partsHot));
       const row = deliveryRow({
-        created: now, what, weight, note, to, parts, prio, partsHot: hot,
+        created: now, what, weight, note, to, parts, prio, partsHot: hot, pilot,
         giver: who, dates: { packed: now },
       });
       await appendRow(DELIVERY_SHEET, row, { raw: true });
@@ -126,6 +126,7 @@ export default withAuth(async (req, res) => {
           `${str(weight) || '?'} кг`,
           n > 1 && `${n} місць`,
           str(to) && `для ${str(to)}`,
+          str(pilot) && `дроном: ${str(pilot)}`,
           hotN > 0 ? `${PRIO_FIRST}: ${hotN} з ${n}` : (str(prio) && PRIO_FIRST),
         ].filter(Boolean).join(' · '),
       });
@@ -376,7 +377,10 @@ export default withAuth(async (req, res) => {
        * саме стояло раніше, інакше правка нічим не відрізняється від
        * описки в назві.
        */
-      const PEOPLE = [['driver', 'відправляє'], ['giver', 'здав'], ['taker', 'прийняв']];
+      const PEOPLE = [
+        ['driver', 'відправляє'], ['giver', 'здав'],
+        ['pilot', 'кому на точці'], ['taker', 'прийняв'],
+      ];
       const moved = [
         ...PEOPLE
           .filter(([k]) => k in req.body && str(req.body[k]) !== str(cur[k]))

@@ -207,6 +207,7 @@ export default function Zbir() {
       {add && (
         <AddForm
           tos={data.tos}
+          pilots={data.pilots}
           onCancel={() => setAdd(false)}
           onSave={async (body) => { if (await send({ ...body, action: 'add' })) setAdd(false); }}
         />
@@ -215,6 +216,7 @@ export default function Zbir() {
       {edit && (
         <AddForm
           tos={data.tos}
+          pilots={data.pilots}
           from={edit}
           onCancel={() => setEdit(null)}
           onSave={async (body) => {
@@ -266,6 +268,11 @@ const HELP = [
     d: 'Під переліком зʼявляться кнопки з назвами мішків. Натисніть ті, що мають полетіти найближчим бортом — борт бере не посилку цілком, а скільки підніме. На знімку відмічені два з чотирьох, а вага 31.5 кг порахувалась сама.',
     warn: 'Нічого термінового немає — не тисніть нічого. Коли першочергове все, черга перестає щось означати.',
     img: '05-form-hot',
+  },
+  {
+    t: 'Кому на точці',
+    d: 'Внизу форми оберіть, кому везете коробку: Лотар, БПС або хто там сьогодні. Це ті, хто прийме її на точці вильоту й переправить далі дронами — тому без цього посилку не зберегти.',
+    warn: 'Немає потрібного позивного — скажіть черговому: перелік веде він, і новий зʼявиться в формі того ж дня.',
   },
   {
     t: 'Збережено',
@@ -346,6 +353,7 @@ function PackCard({ d, onEdit }) {
       <div className="z-meta">
         {kg ? `${kgOf(kg)} кг` : 'вага не вказана'}
         {d.parts ? ` · ${d.parts.total} місць` : ''}
+        {d.pilot ? ` · дроном: ${d.pilot}` : ''}
         {d.giver ? ` · зібрав ${d.giver}` : ''}
       </div>
       {moving && (
@@ -380,9 +388,10 @@ function PackCard({ d, onEdit }) {
  * інакше за створення саме тоді, коли людина поспішає щось виправити.
  * `from` — посилка, яку відкрили правити; без неї форма порожня.
  */
-function AddForm({ tos, from, onCancel, onSave }) {
+function AddForm({ tos, pilots, from, onCancel, onSave }) {
   const [f, setF] = useState(() => ({
     to: from?.to || '',
+    pilot: from?.pilot || '',
     what: from?.what || '',
     // вага з поля потрібна лише для незважених посилок: у зважених вона
     // складається з мішків, і два числа рано чи пізно розійшлися б
@@ -419,6 +428,11 @@ function AddForm({ tos, from, onCancel, onSave }) {
       saveLabel={from ? 'Зберегти' : 'Зібрано'}
       onSave={async () => {
         if (!f.what.trim()) return setErr('Вкажіть назву');
+        // питаємо лише тоді, коли є з чого обирати: порожній перелік —
+        // це недогляд адміністратора, а не привід не дати зберегти
+        if (!f.pilot && (pilots || []).length > 0) {
+          return setErr('Оберіть, кому на точці везете посилку');
+        }
         setBusy(true); setErr('');
         try {
           await onSave({
@@ -493,6 +507,27 @@ function AddForm({ tos, from, onCancel, onSave }) {
         value={partsKg !== null ? partsKg : f.weight}
         disabled={partsKg !== null}
         onChange={(e) => up('weight', e.target.value)} placeholder="—" />
+
+      {/* Кому везуть на точку. Збирач це знає — він і домовляється про
+          передачу; черговий потім лише підтвердить, хто справді забрав.
+          Підпис пояснює, хто ці люди: без нього «Лотар» і «БПС» для
+          новенького — просто два слова. */}
+      <label className="z-lab">
+        Кому на точці
+        {!f.pilot && (pilots || []).length > 0 && <span className="z-cnt">оберіть</span>}
+      </label>
+      <div className="z-chips">
+        {(pilots || []).map((v) => (
+          <button key={v} type="button"
+            className={'z-chip' + (f.pilot === v ? ' on' : '')}
+            onClick={() => up('pilot', f.pilot === v ? '' : v)}>{v}</button>
+        ))}
+      </div>
+      <div className="z-tip">
+        {(pilots || []).length > 0
+          ? 'Це ті, хто прийме коробку на точці вильоту й переправить її далі дронами. Оберіть того, кому везете.'
+          : 'Перелік порожній — скажіть черговому.'}
+      </div>
 
       <label className="z-lab">Примітка</label>
       <input className="z-inp" value={f.note} onChange={(e) => up('note', e.target.value)}

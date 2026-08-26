@@ -1,7 +1,7 @@
 import { session, sameSecret, keyFrom } from '../../lib/auth';
 import { readSheet, writeRow, appendRow, ensureSheet } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
-import { readPoints, activeNames } from '../../lib/points';
+import { readList, activeNames } from '../../lib/points';
 import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, PRIO_FIRST,
   parseDeliveries, deliveryRow, stampKyiv, partsOf,
@@ -17,9 +17,10 @@ import {
  * заходить за ключем у посиланні.
  *
  * Ключ відкриває дві дії: створити посилку й виправити її, доки вона не
- * доїхала. Чим її відправили, хто прийняв на точці вильоту й коли вона
- * дійшла — відмічає черговий: збирач цього однаково не вирішує, а зайве
- * поле у формі означає зайву можливість помилитись. Видаляти, губити й
+ * доїхала. Збирач пише те, що знає сам: що в коробці, на яке СП вона й
+ * кому на точці її везуть. Чим її відправили, хто справді прийняв і коли
+ * вона дійшла — відмічає черговий: цього збирач не вирішує, а зайве поле
+ * у формі означає зайву можливість помилитись. Видаляти, губити й
  * закривати доставку звідси теж не можна.
  *
  * Без PACK_TOKEN маршрут не існує: поки змінної немає, посилання просто
@@ -70,6 +71,7 @@ function visible(list, now = Date.now()) {
         giver: d.giver,
         driver: d.driver,
         taker: d.taker,
+        pilot: d.pilot,
         stage: d.stage,
         done: d.done,
         created: d.created,
@@ -106,11 +108,18 @@ export default async function handler(req, res) {
    * «зберегти» вдруге, вирішивши, що не спрацювало.
    */
   const state = async () => {
-    const fresh = parseDeliveries(await readSheet(DELIVERY_SHEET));
+    const [fresh, sp, pilots] = await Promise.all([
+      readSheet(DELIVERY_SHEET).then(parseDeliveries),
+      readList('sp'),
+      readList('takers'),
+    ]);
     return {
       ok: true,
       list: visible(fresh),
-      tos: activeNames(await readPoints()),
+      // Обидва переліки веде адміністратор: додав нового — і він того ж
+      // дня стоїть у формі збирача, без жодної правки коду.
+      tos: activeNames(sp),
+      pilots: activeNames(pilots),
     };
   };
 
@@ -123,13 +132,13 @@ export default async function handler(req, res) {
   const me = str(req.body.me) || gate.who;
 
   if (action === 'add') {
-    const { what, weight, note, to, parts, partsHot, prio } = req.body;
+    const { what, weight, note, to, parts, partsHot, prio, pilot } = req.body;
     if (!str(what)) return res.status(400).json({ error: 'Не вказано назву' });
 
     const now = stampKyiv();
     const hot = joinHot(parseHot(partsHot));
     const row = deliveryRow({
-      created: now, what, weight, note, to, parts, prio, partsHot: hot,
+      created: now, what, weight, note, to, parts, prio, partsHot: hot, pilot,
       giver: me, dates: { packed: now },
     });
     await appendRow(DELIVERY_SHEET, row, { raw: true });
@@ -142,6 +151,7 @@ export default async function handler(req, res) {
         `${str(weight) || '?'} кг`,
         n > 1 && `${n} місць`,
         str(to) && `для ${str(to)}`,
+        str(pilot) && `дроном: ${str(pilot)}`,
         hotN > 0 ? `${PRIO_FIRST}: ${hotN} з ${n}` : (str(prio) && PRIO_FIRST),
         'з пункту збору',
       ].filter(Boolean).join(' · '),
@@ -167,7 +177,7 @@ export default async function handler(req, res) {
    * правка — це виправлення запису, а не нова посилка.
    */
   if (action === 'edit') {
-    const { row, what, weight, note, to, parts, partsHot, prio } = req.body;
+    const { row, what, weight, note, to, parts, partsHot, prio, pilot } = req.body;
     if (!row) return res.status(400).json({ error: 'Не вказано посилку' });
     if (!str(what)) return res.status(400).json({ error: 'Не вказано назву' });
 
@@ -187,7 +197,7 @@ export default async function handler(req, res) {
     const nextParts = str(parts);
     const next = deliveryRow({
       ...cur,
-      what, weight, note, to, prio,
+      what, weight, note, to, prio, pilot,
       parts: nextParts,
       partsHot: joinHot(parseHot(partsHot)),
       partsDone: remapDone(cur, nextParts),
@@ -198,8 +208,16 @@ export default async function handler(req, res) {
     await logChange({
       sheet: DELIVERY_SHEET, row, action: 'Виправлено', who: me,
       field: str(what),
-      before: [cur.what, cur.parts && `місця: ${cur.parts}`].filter(Boolean).join(' · '),
-      after: [nextParts && `місця: ${nextParts}`, 'з пункту збору'].filter(Boolean).join(' · '),
+      before: [
+        cur.what,
+        cur.parts && `місця: ${cur.parts}`,
+        cur.pilot && `дроном: ${cur.pilot}`,
+      ].filter(Boolean).join(' · '),
+      after: [
+        nextParts && `місця: ${nextParts}`,
+        str(pilot) && `дроном: ${str(pilot)}`,
+        'з пункту збору',
+      ].filter(Boolean).join(' · '),
     });
     return res.json(await state());
   }

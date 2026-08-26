@@ -493,6 +493,39 @@ test('DL вказує на ті самі колонки, що й заголов�
   assert.equal(DELIVERY_HEADERS.length, Object.keys(DL).length);
 });
 
+test('«кому на точці» й «хто прийняв» — різні колонки', () => {
+  // намір збирача й факт чергового; зливши їх в одну клітинку, ми б
+  // мовчки затирали те, що коробку віддали не тому, кому збирали
+  assert.notEqual(DL.pilot, DL.taker);
+  assert.equal(DELIVERY_HEADERS[DL.pilot], 'Кому на точці');
+  assert.equal(DELIVERY_HEADERS[DL.taker], 'Хто прийняв');
+});
+
+test('deliveryRow і parseDeliveries знають про «кому на точці»', () => {
+  const r = deliveryRow({ what: 'Вода', pilot: 'Лотар', taker: 'БПС' });
+  assert.equal(r[DL.pilot], 'Лотар');
+  const d = parseDeliveries([DELIVERY_HEADERS, r])[0];
+  assert.equal(d.pilot, 'Лотар');
+  assert.equal(d.taker, 'БПС');
+});
+
+test('старий рядок без нової колонки читається без падіння', () => {
+  // колонка дописана в кінець уже після того, як лист жив своїм життям:
+  // рядки, записані до неї, просто коротші
+  const short = deliveryRow({ what: 'Вода' }).slice(0, DL.pilot);
+  const d = parseDeliveries([DELIVERY_HEADERS, short])[0];
+  assert.equal(d.pilot, '');
+  assert.equal(d.what, 'Вода');
+});
+
+test('нова колонка дописана в кінець, старі індекси не зсунулись', () => {
+  // зсув на одну позицію перечитав би весь лист навскіс: дати стали б
+  // примітками, а ваги — датами
+  assert.equal(DL.pilot, DELIVERY_HEADERS.length - 1);
+  assert.equal(DELIVERY_HEADERS[DL.created], 'Створено');
+  assert.equal(DELIVERY_HEADERS[DL.partsHot], 'Першочергові місця');
+});
+
 test('колонки етапів не перетинаються між собою', () => {
   const cols = STAGES.map((s) => s.col);
   assert.equal(new Set(cols).size, cols.length);
