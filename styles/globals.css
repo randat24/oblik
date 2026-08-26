@@ -3173,6 +3173,12 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .z-name { font-size: 1rem; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .z-meta { font-size: .78rem; color: var(--muted); font-family: var(--mono); }
 .z-note { font-size: .8rem; color: var(--text-dim); }
+/* Куди посилка вже доїхала. Смужка збоку, а не ще один сірий рядок:
+   у дорозі посилка чи ні — це перше, що шукають на картці. */
+.z-move {
+  border-left: 2px solid var(--amber-dim); padding-left: 8px;
+  font-size: .78rem; color: var(--text-dim); font-family: var(--mono);
+}
 
 .z-bags { display: flex; flex-wrap: wrap; gap: 5px; }
 .z-bag {

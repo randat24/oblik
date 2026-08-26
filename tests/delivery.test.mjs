@@ -9,6 +9,7 @@ import {
   stampOf, daysAt, stuck, orderForRoad,
   byDriver, byPoint, deliveredWithin, byStage,
   parseDeliveries, deliveryRow, stageOf, suggestions,
+  remapMarks, remapDone, remapLost, remapHot,
   DELIVERY_HEADERS, DL, STAGES, PRIO_FIRST, DRIVERS,
 } from '../lib/delivery.js';
 import { row, sheet, NOW } from './helpers.mjs';
@@ -423,6 +424,64 @@ test('deliveryRow: рядок читається назад тим самим pa
   assert.equal(d.stage, 'packed');
   assert.equal(d.urgent, true);
   assert.equal(weightOf(d), 5);
+});
+
+/* ── правка переліку місць ─────────────────────────────────────────────── */
+
+/*
+ * Збирач править свою посилку й тоді, коли вона вже поїхала: забутий
+ * мішок згадують не одразу. Позначки чергового стоять на номерах, а
+ * номери після правки зсуваються — тож вони переносяться за назвами.
+ */
+
+test('remapDone: дописаний на початку мішок не зсуває чужу відмітку', () => {
+  const cur = { parts: 'А; Б', partsDone: '2=18.08.2026' };
+  assert.equal(remapDone(cur, 'Новий; А; Б'), '3=18.08.2026');
+});
+
+test('remapDone: прибране місце забирає свою відмітку із собою', () => {
+  const cur = { parts: 'А; Б; В', partsDone: '1=17.08.2026; 3=18.08.2026' };
+  assert.equal(remapDone(cur, 'А; В'), '1=17.08.2026; 2=18.08.2026');
+});
+
+test('remapDone: перейменоване місце вважається новим', () => {
+  // назва — це все, за чим тут можна впізнати мішок; перепишеш її —
+  // і це вже інший мішок, який ще ніхто не приймав
+  const cur = { parts: 'А; Б', partsDone: '1=17.08.2026' };
+  assert.equal(remapDone({ ...cur }, 'Аа; Б'), '');
+});
+
+test('remapDone: без відміток лишається порожньо', () => {
+  assert.equal(remapDone({ parts: 'А; Б', partsDone: '' }, 'А; Б; В'), '');
+});
+
+test('remapLost: списане місце теж їде за назвою', () => {
+  const cur = { parts: 'А; Б', partsLost: '2=18.08.2026' };
+  assert.equal(remapLost(cur, 'Новий; А; Б'), '3=18.08.2026');
+});
+
+test('remapHot: першочерговість переїжджає без дати', () => {
+  const cur = { parts: 'А; Б; В', partsHot: '1; 3' };
+  assert.equal(remapHot(cur, 'Новий; А; Б; В'), '2; 4');
+});
+
+test('remapHot: зникле першочергове місце просто зникає', () => {
+  const cur = { parts: 'А; Б', partsHot: '1; 2' };
+  assert.equal(remapHot(cur, 'Б'), '1');
+});
+
+test('перелік без змін лишає позначки на місці', () => {
+  const cur = { parts: 'А; Б; В', partsDone: '2=18.08.2026', partsHot: '1; 3' };
+  assert.equal(remapDone(cur, 'А; Б; В'), '2=18.08.2026');
+  assert.equal(remapHot(cur, 'А; Б; В'), '1; 3');
+});
+
+test('remapMarks: однакові назви не задвоюють позначку', () => {
+  // два «Мішок» у переліку — позначка сяде на перший; це краще, ніж
+  // втратити її зовсім
+  const marks = new Map([[2, '18.08.2026']]);
+  assert.deepEqual([...remapMarks(['Мішок', 'Мішок'], marks, 'Мішок; Мішок')],
+    [[1, '18.08.2026'], [2, '18.08.2026']]);
 });
 
 /* ── схема листа ───────────────────────────────────────────────────────── */

@@ -6,6 +6,7 @@ import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS, LOST_WHY, PRIO_FIRST,
   parseDeliveries, deliveryRow, stampKyiv, suggestions, stageOf,
   splitParts, parseDone, joinDone, partsOf, parseHot, joinHot,
+  remapDone, remapHot,
 } from '../../lib/delivery';
 
 const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
@@ -34,29 +35,6 @@ function cleanDates(was, got) {
  * сторінки людина лишається геть.
  */
 let headersFixed = false;
-
-/**
- * Позначки місць після правки переліку — за назвами, не за номерами.
- * Дописана на початку каністра зсуває всі номери, і галочка з третього
- * місця опинилась би на четвертому.
- */
-function remapMarks(wasLabels, marks, parts) {
-  const kept = new Map();
-  wasLabels.forEach((label, i) => { if (marks.has(i + 1)) kept.set(label, marks.get(i + 1)); });
-  const next = new Map();
-  splitParts(parts).forEach((label, i) => { if (kept.has(label)) next.set(i + 1, kept.get(label)); });
-  return next;
-}
-
-function remapDone(cur, parts) {
-  return joinDone(remapMarks(splitParts(cur.parts), parseDone(cur.partsDone), parts));
-}
-
-/** Те саме для першочергових: у них замість дати просто позначка */
-function remapHot(cur, parts) {
-  const asMap = new Map([...parseHot(cur.partsHot)].map((n) => [n, '1']));
-  return joinHot(new Set(remapMarks(splitParts(cur.parts), asMap, parts).keys()));
-}
 
 /**
  * Останній етап іде слідом за місцями.
