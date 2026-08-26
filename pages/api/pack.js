@@ -31,9 +31,6 @@ const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
 
 let headersFixed = false;
 
-/** Скільки діб доставлені посилки ще лишаються на очах у збирача */
-const SEEN_DAYS = 2;
-
 function allowed(req) {
   const secret = process.env.PACK_TOKEN;
   if (!secret || secret.length < 16) return { ok: false, missing: true };
@@ -45,21 +42,19 @@ function allowed(req) {
 }
 
 /**
- * Що видно збирачеві: усе, що ще в дорозі, і те, що дійшло за останні дві
- * доби. Перше — щоб було де виправити забутий мішок, друге — щоб було
- * видно, що посилка таки доїхала.
+ * Що видно збирачеві: рівно те, що ще в дорозі.
  *
- * Уся решта історії йому ні до чого: вона тільки заважає знайти коробку,
- * яка стоїть поруч і чекає водія.
+ * Доставлені звідси прибрані навмисно. Вони не додавали роботи — правити
+ * їх однаково не можна, — зате додавали карток, і в списку починало
+ * рябіти: доставлене плуталося з тим, що ще чекає. Тут має лишатись
+ * тільки те, за що збирач ще відповідає.
+ *
+ * Куди посилка врешті дійшла, видно черговому — у нього для цього є вся
+ * історія.
  */
-function visible(list, now = Date.now()) {
-  const from = now - SEEN_DAYS * 86400000;
+function visible(list) {
   return list
-    .filter((d) => !d.isLost && (
-      // усе, що ще в дорозі, лишається на очах: забутий мішок згадують
-      // і тоді, коли коробка вже поїхала
-      !d.done || stampOf(d.dates.delivered) >= from
-    ))
+    .filter((d) => !d.isLost && !d.done)
     .map((d) => {
       const p = partsOf(d);
       return {
@@ -73,11 +68,9 @@ function visible(list, now = Date.now()) {
         taker: d.taker,
         pilot: d.pilot,
         stage: d.stage,
-        done: d.done,
         created: d.created,
         handed: d.dates.handed,
         atbase: d.dates.atbase,
-        delivered: d.dates.delivered,
         parts: p && {
           total: p.total, hot: p.hot, kg: p.kg,
           names: p.items.map((x) => ({ name: x.name, kg: x.kg, hot: x.hot })),
