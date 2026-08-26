@@ -5,7 +5,7 @@ import { readPoints, activeNames } from '../../lib/points';
 import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, PRIO_FIRST,
   parseDeliveries, deliveryRow, stampKyiv, partsOf,
-  splitParts, parseHot, joinHot, stampOf,
+  splitParts, parseHot, joinHot, stampOf, remapDone, remapLost, remapHot,
 } from '../../lib/delivery';
 
 /**
@@ -16,10 +16,11 @@ import {
  * Заводити йому позивний з PIN заради однієї дії — зайве, тож він
  * заходить за ключем у посиланні.
  *
- * Ключ відкриває рівно одну дію: створити посилку. Кому її віддали — НРК
- * чи комусь із пілотів — відмічає черговий: збирач цього однаково не
- * вирішує, а зайве поле у формі означає зайву можливість помилитись.
- * Правити чуже, видаляти й закривати доставку звідси теж не можна.
+ * Ключ відкриває дві дії: створити посилку й виправити її, доки вона не
+ * доїхала. Чим її відправили, хто прийняв на точці вильоту й коли вона
+ * дійшла — відмічає черговий: збирач цього однаково не вирішує, а зайве
+ * поле у формі означає зайву можливість помилитись. Видаляти, губити й
+ * закривати доставку звідси теж не можна.
  *
  * Без PACK_TOKEN маршрут не існує: поки змінної немає, посилання просто
  * нікуди не веде.
@@ -29,7 +30,7 @@ const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
 
 let headersFixed = false;
 
-/** Скільки діб передані посилки лишаються на очах у збирача */
+/** Скільки діб доставлені посилки ще лишаються на очах у збирача */
 const SEEN_DAYS = 2;
 
 function allowed(req) {
@@ -43,15 +44,20 @@ function allowed(req) {
 }
 
 /**
- * Що видно збирачеві: те, що ще не поїхало, і те, що вже забрали.
- * Уся історія доставок йому ні до чого — вона тільки заважає знайти
- * коробку, яка стоїть поруч і чекає водія.
+ * Що видно збирачеві: усе, що ще в дорозі, і те, що дійшло за останні дві
+ * доби. Перше — щоб було де виправити забутий мішок, друге — щоб було
+ * видно, що посилка таки доїхала.
+ *
+ * Уся решта історії йому ні до чого: вона тільки заважає знайти коробку,
+ * яка стоїть поруч і чекає водія.
  */
 function visible(list, now = Date.now()) {
   const from = now - SEEN_DAYS * 86400000;
   return list
     .filter((d) => !d.isLost && (
-      d.stage === 'packed' || (d.stage === 'handed' && stampOf(d.dates.handed) >= from)
+      // усе, що ще в дорозі, лишається на очах: забутий мішок згадують
+      // і тоді, коли коробка вже поїхала
+      !d.done || stampOf(d.dates.delivered) >= from
     ))
     .map((d) => {
       const p = partsOf(d);
@@ -63,9 +69,13 @@ function visible(list, now = Date.now()) {
         note: d.note,
         giver: d.giver,
         driver: d.driver,
+        taker: d.taker,
         stage: d.stage,
+        done: d.done,
         created: d.created,
         handed: d.dates.handed,
+        atbase: d.dates.atbase,
+        delivered: d.dates.delivered,
         parts: p && {
           total: p.total, hot: p.hot, kg: p.kg,
           names: p.items.map((x) => ({ name: x.name, kg: x.kg, hot: x.hot })),
@@ -140,13 +150,18 @@ export default async function handler(req, res) {
   }
 
   /*
-   * Правка щойно зібраної посилки.
+   * Правка своєї збірки.
    *
-   * Помилку в назві чи в переліку мішків знаходять за хвилину після
-   * збереження, і просити заради цього чергового — довше, ніж набрати
-   * заново. Тому правити можна, але лише доки посилка ще тут: щойно її
-   * забрали, картку бачили інші люди й діяли за нею, і мовчки міняти під
-   * ними написане не можна.
+   * Забутий мішок згадують не за хвилину після збереження, а тоді, коли
+   * коробка вже поїхала. Тому правити можна доти, доки посилка не
+   * доїхала: етап значення не має.
+   *
+   * Позначки місць при цьому не губляться — вони переносяться за
+   * назвами. Дописаний на початку мішок не зсуває галочку з того, що вже
+   * приїхало, а зникле місце просто втрачає свою позначку.
+   *
+   * Доставлену вже не чіпаємо: її бачили на тому кінці, і переписувати
+   * заднім числом те, що вже отримали, — не виправлення, а підміна.
    *
    * Дата збирання, дата створення й той, хто зібрав, лишаються старі:
    * правка — це виправлення запису, а не нова посилка.
@@ -160,20 +175,23 @@ export default async function handler(req, res) {
     if (!prev) return res.status(404).json({ error: 'Посилку не знайдено' });
     const cur = parseDeliveries([DELIVERY_HEADERS, prev])[0];
 
-    if (cur.stage !== 'packed') {
+    if (cur.done) {
       return res.status(400).json({
-        error: 'Посилку вже забрали — виправити може лише черговий',
+        error: 'Посилку вже доставили — виправити може лише черговий',
       });
     }
 
-    const hot = joinHot(parseHot(partsHot));
+    // Перелік мішків міг змінитись, а позначки стоять на номерах. Тому
+    // переносимо їх за назвами: те, що вже приїхало, лишається
+    // відміченим, дописане стає новим місцем.
+    const nextParts = str(parts);
     const next = deliveryRow({
       ...cur,
-      what, weight, note, to, parts, prio, partsHot: hot,
-      // перелік мішків міг змінитись, а позначки доставленого й
-      // списаного стоять на номерах — на цьому етапі їх ще немає, тож
-      // чистимо, щоб вони не з'їхали на чужі мішки
-      partsDone: '', partsLost: '',
+      what, weight, note, to, prio,
+      parts: nextParts,
+      partsHot: joinHot(parseHot(partsHot)),
+      partsDone: remapDone(cur, nextParts),
+      partsLost: remapLost(cur, nextParts),
     }, prev);
     await writeRow(DELIVERY_SHEET, row, next);
 
@@ -181,7 +199,7 @@ export default async function handler(req, res) {
       sheet: DELIVERY_SHEET, row, action: 'Виправлено', who: me,
       field: str(what),
       before: [cur.what, cur.parts && `місця: ${cur.parts}`].filter(Boolean).join(' · '),
-      after: [str(parts) && `місця: ${str(parts)}`, 'з пункту збору'].filter(Boolean).join(' · '),
+      after: [nextParts && `місця: ${nextParts}`, 'з пункту збору'].filter(Boolean).join(' · '),
     });
     return res.json(await state());
   }
