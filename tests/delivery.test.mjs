@@ -9,7 +9,7 @@ import {
   stampOf, daysAt, stuck, orderForRoad,
   byDriver, byPoint, deliveredWithin, byStage,
   parseDeliveries, deliveryRow, stageOf, suggestions,
-  remapMarks, remapDone, remapLost, remapHot,
+  remapMarks, remapDone, remapLost, remapHot, byPilot, headersStale,
   DELIVERY_HEADERS, DL, STAGES, PRIO_FIRST, DRIVERS,
 } from '../lib/delivery.js';
 import { row, sheet, NOW } from './helpers.mjs';
@@ -426,6 +426,83 @@ test('deliveryRow: рядок читається назад тим самим pa
   assert.equal(weightOf(d), 5);
 });
 
+/* ── у кого з пілотів що лежить ────────────────────────────────────────── */
+
+test('byPilot: рахує посилки, місця й вагу по пілотах', () => {
+  const list = parseDeliveries(sheet(
+    { what: 'Вода', pilot: 'Лотар', weight: 10, packed: '20.08.2026' },
+    { what: 'Їжа', pilot: 'Лотар', weight: 5, packed: '20.08.2026' },
+    { what: 'Батареї', pilot: 'БПС', weight: 7, packed: '20.08.2026' },
+  ));
+  assert.deepEqual(byPilot(list).map((x) => [x.name, x.n, x.kg]), [
+    ['Лотар', 2, 15], ['БПС', 1, 7],
+  ]);
+});
+
+test('byPilot: транспорт у підсумок не потрапляє', () => {
+  // сюди колись ішли НРК і машина — вони довозять до пілота й на цьому
+  // їхня робота закінчується
+  const list = parseDeliveries(sheet(
+    { what: 'Вода', driver: 'НРК', pilot: 'Лотар', packed: '20.08.2026' },
+    { what: 'Їжа', driver: 'Машина', packed: '20.08.2026' },
+  ));
+  assert.deepEqual(byPilot(list).map((x) => x.name), ['Лотар']);
+});
+
+test('byPilot: без пілота бере того, хто справді забрав', () => {
+  // картки, заведені до появи колонки, інакше просто зникли б з підсумку
+  const list = parseDeliveries(sheet(
+    { what: 'Вода', taker: 'БПС', packed: '20.08.2026' },
+  ));
+  assert.deepEqual(byPilot(list).map((x) => x.name), ['БПС']);
+});
+
+test('byPilot: намір важливіший за факт, коли є обидва', () => {
+  const list = parseDeliveries(sheet(
+    { what: 'Вода', pilot: 'Лотар', taker: 'Джин', packed: '20.08.2026' },
+  ));
+  assert.deepEqual(byPilot(list).map((x) => x.name), ['Лотар']);
+});
+
+test('byPilot: доставлене й втрачене не рахуються', () => {
+  const list = parseDeliveries(sheet(
+    { what: 'Вода', pilot: 'Лотар', packed: '20.08.2026', delivered: '21.08.2026' },
+    { what: 'Їжа', pilot: 'Лотар', packed: '20.08.2026', lost: 'Розбили' },
+    { what: 'Батареї', pilot: 'Лотар', packed: '20.08.2026' },
+  ));
+  assert.deepEqual(byPilot(list).map((x) => [x.name, x.n]), [['Лотар', 1]]);
+});
+
+test('byPilot: без пілотів — порожньо, а не рядок «—»', () => {
+  const list = parseDeliveries(sheet({ what: 'Вода', packed: '20.08.2026' }));
+  assert.deepEqual(byPilot(list), []);
+});
+
+/* ── заголовок листа ───────────────────────────────────────────────────── */
+
+test('headersStale: свій заголовок не переписуємо', () => {
+  assert.equal(headersStale([DELIVERY_HEADERS]), false);
+});
+
+test('headersStale: короткий заголовок треба полагодити', () => {
+  assert.equal(headersStale([DELIVERY_HEADERS.slice(0, -1)]), true);
+  assert.equal(headersStale([]), true);
+  assert.equal(headersStale([[]]), true);
+});
+
+test('headersStale: перейменована колонка теж лічиться', () => {
+  // раніше дивились лише на довжину, і в таблиці лишалось старе слово:
+  // код каже «Пілот», а людина в листі читає «Кому на точці»
+  const old = [...DELIVERY_HEADERS];
+  old[DL.pilot] = 'Кому на точці';
+  assert.equal(headersStale([old]), true);
+});
+
+test('headersStale: зайві пробіли в клітинці — не привід переписувати', () => {
+  const padded = DELIVERY_HEADERS.map((h) => ` ${h} `);
+  assert.equal(headersStale([padded]), false);
+});
+
 /* ── правка переліку місць ─────────────────────────────────────────────── */
 
 /*
@@ -493,11 +570,11 @@ test('DL вказує на ті самі колонки, що й заголов�
   assert.equal(DELIVERY_HEADERS.length, Object.keys(DL).length);
 });
 
-test('«кому на точці» й «хто прийняв» — різні колонки', () => {
+test('«пілот» і «хто прийняв» — різні колонки', () => {
   // намір збирача й факт чергового; зливши їх в одну клітинку, ми б
-  // мовчки затирали те, що коробку віддали не тому, кому збирали
+  // мовчки затирали те, що коробку віддали не тому пілоту, кому збирали
   assert.notEqual(DL.pilot, DL.taker);
-  assert.equal(DELIVERY_HEADERS[DL.pilot], 'Кому на точці');
+  assert.equal(DELIVERY_HEADERS[DL.pilot], 'Пілот');
   assert.equal(DELIVERY_HEADERS[DL.taker], 'Хто прийняв');
 });
 
