@@ -4,7 +4,7 @@ import { logChange } from '../../lib/log';
 import { readList, activeNames } from '../../lib/points';
 import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, PRIO_FIRST,
-  parseDeliveries, deliveryRow, stampKyiv, partsOf,
+  parseDeliveries, deliveryRow, stampKyiv, partsOf, headersStale,
   splitParts, parseHot, joinHot, stampOf, remapDone, remapLost, remapHot,
 } from '../../lib/delivery';
 
@@ -88,7 +88,7 @@ export default async function handler(req, res) {
   await ensureSheet(DELIVERY_SHEET, DELIVERY_HEADERS);
 
   const values = await readSheet(DELIVERY_SHEET);
-  if ((values[0] || []).length < DELIVERY_HEADERS.length && !headersFixed) {
+  if (headersStale(values) && !headersFixed) {
     headersFixed = true;
     try { await writeRow(DELIVERY_SHEET, 1, DELIVERY_HEADERS); } catch (e) {
       console.error('не вдалося оновити заголовки доставок:', e.message);

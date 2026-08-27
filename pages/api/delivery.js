@@ -6,7 +6,7 @@ import {
   DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS, LOST_WHY, PRIO_FIRST,
   parseDeliveries, deliveryRow, stampKyiv, suggestions, stageOf,
   splitParts, parseDone, joinDone, partsOf, parseHot, joinHot,
-  remapDone, remapHot,
+  remapDone, remapHot, headersStale,
 } from '../../lib/delivery';
 
 const str = (v) => (v === null || v === undefined ? '' : String(v).trim());
@@ -66,7 +66,7 @@ async function state(extra = {}) {
     readAllLists(),
   ]);
   extra = { ...extra, lists };
-  if ((values[0] || []).length < DELIVERY_HEADERS.length && !headersFixed) {
+  if (headersStale(values) && !headersFixed) {
     headersFixed = true;
     try { await writeRow(DELIVERY_SHEET, 1, DELIVERY_HEADERS); } catch (e) {
       console.error('не вдалося оновити заголовки доставок:', e.message);
@@ -379,7 +379,7 @@ export default withAuth(async (req, res) => {
        */
       const PEOPLE = [
         ['driver', 'відправляє'], ['giver', 'здав'],
-        ['pilot', 'кому на точці'], ['taker', 'прийняв'],
+        ['pilot', 'пілот'], ['taker', 'прийняв'],
       ];
       const moved = [
         ...PEOPLE

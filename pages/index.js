@@ -6,7 +6,7 @@ import {
 } from '../lib/offline';
 // Розрахунки доставок — чисті функції без звернень до таблиць
 import {
-  stuck, byDriver, byPoint, deliveredWithin, splitPoints, joinPoints,
+  stuck, byDriver, byPilot, byPoint, deliveredWithin, splitPoints, joinPoints,
   splitParts, joinParts, partsOf, partsLeft, weightOf, weightLeft, parsePart,
   placesOf, lostOf, orderForRoad, hotOf, PRIO_FIRST,
 } from '../lib/delivery';
@@ -2951,7 +2951,7 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
                     + (r.parts.left.length ? `, лишилось: ${r.parts.left.join(', ')}` : '')
                     + (r.parts.kgLeft > 0 ? ` (${r.parts.kgLeft} кг)` : '')],
                   r.weight !== null && ['Вага', `${r.weight} кг`],
-                  r.driver && ['Хто відправляє', r.driver],
+                  r.driver && ['Чим везли', r.driver],
                   r.point && ['Точка', r.point],
                 ].filter(Boolean).map(([k, v], i, a) => (
                   <span key={k}>
@@ -5990,7 +5990,7 @@ function DeliveryView({ setState, me = '', chief = false }) {
   const waitKg = weightLeft(waiting);
   const late = stuck(all);
   const week = deliveredWithin(all, 7);
-  const drivers = byDriver(all);
+  const pilots = byPilot(all);
   const points = byPoint(all);
   const left = partsLeft(all);
   const atbaseLeft = partsLeft(atbase);
@@ -6104,11 +6104,15 @@ function DeliveryView({ setState, me = '', chief = false }) {
         </div>
       )}
 
-      {(drivers.length > 0 || points.length > 1) && (
+      {/* У кого з пілотів що лежить і куди воно летить. Транспорт до точки
+          вильоту тут колись стояв замість пілотів — і відповідав не на те
+          питання: «Машина 1» нічого не каже про те, скільки чекає вильоту
+          на Лотарі. */}
+      {(pilots.length > 0 || points.length > 1) && (
         <div className="section">
-          <h3 className="sec">Хто відправляє й куди</h3>
+          <h3 className="sec">Пілоти й куди</h3>
           <div className="chips">
-            {drivers.map((x) => (
+            {pilots.map((x) => (
               <div className="chip" key={'d' + x.name} onClick={() => setQ(x.name)}>
                 {x.name} <b style={{ marginLeft: 4 }}>{x.n}</b>
                 {x.kg > 0 && <span className="count" style={{ marginLeft: 6 }}>{kg(x.kg)} кг</span>}
@@ -6237,12 +6241,12 @@ function DeliveryCard({ item, stages, onMove, onPart, onLose, onEdit, onDelete }
   // рано чи пізно розійшлись би
   const kg = weightOf(item);
   const rows = [
-    ['Чим відправляють', item.driver],
+    ['Чим везли до пілота', item.driver],
     [pts.length > 1 ? 'Точки' : 'Точка', item.point],
     ['Здав', item.giver],
     // намір збирача й факт чергового стоять поруч: коли коробку віддали
     // не тому, кому збирали, це видно з одного погляду
-    ['Кому на точці', item.pilot],
+    ['Пілот', item.pilot],
     ['Прийняв', item.taker],
     ['Примітка', item.note],
   ].filter(([, v]) => v);
@@ -6488,7 +6492,7 @@ function DeliveryAdd({ item, tos, transport, takers, chief, onCancel, onSave }) 
           не завжди, і перезаписувати одне одним означало б втратити те, що
           варте погляду. */}
       <div style={{ marginTop: 10 }}>
-        <label>Кому на точці</label>
+        <label>Пілот</label>
         <div className="chips">
           {(takers || []).map((v) => (
             <div key={v} className={'chip' + (f.pilot === v ? ' on' : '')}
@@ -6499,7 +6503,7 @@ function DeliveryAdd({ item, tos, transport, takers, chief, onCancel, onSave }) 
           onChange={(e) => up('pilot', e.target.value)}
           placeholder="або впишіть свій варіант" />
         <div className="dlv-tip" style={{ marginTop: 6 }}>
-          Приймуть на точці вильоту й переправлять далі дронами.
+          Прийме на точці вильоту й доставить дроном.
         </div>
       </div>
 
@@ -6596,7 +6600,7 @@ function DeliveryAdd({ item, tos, transport, takers, chief, onCancel, onSave }) 
           <label>Люди</label>
 
           <div className="dlv-who-f">
-            <span className="dlv-who-l">Чим відправляють</span>
+            <span className="dlv-who-l">Чим веземо до пілота</span>
             <input type="text" list="dlvTransport" value={f.driver}
               onChange={(e) => up('driver', e.target.value)}
               placeholder="НРК, машина…" />
@@ -6769,7 +6773,7 @@ function DeliveryMove({ item, stage, transport, takers, points, me = '', onCance
           {/* Не позивний, а транспорт: чим саме посилка їде на точку
               вильоту. Позивний того, хто її там забере, питаємо на
               наступному етапі. */}
-          <label>Чим відправляють</label>
+          <label>Чим веземо до пілота</label>
           <div className="chips">
             {(transport || []).map((v) => (
               <div key={v} className={'chip' + (f.driver === v ? ' on' : '')}
