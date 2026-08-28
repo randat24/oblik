@@ -249,3 +249,52 @@ test('codeRows і parseCode переживають одне одного', () =>
   assert.equal(after.w1.tries, 2);
   assert.equal(after.w1.code, 'let a = 1;');
 });
+
+/* ── приклад і ціль ────────────────────────────────────────────────────── */
+
+/*
+ * Урок обривався саме там, де ставало важко: пояснення словами, далі
+ * одразу «пишіть самі», а як воно має виглядати — видно лише з тексту
+ * помилки, тобто вже після невдачі. Приклад і ціль закривають обидві
+ * діри, тож порожніх тут бути не може.
+ */
+
+test('у кожного уроку є робочий приклад і ціль', () => {
+  CODE_LESSONS.forEach((l) => {
+    assert.ok(l.example?.code?.trim(), `${l.id}: немає прикладу`);
+    assert.ok(l.example?.out?.trim(), `${l.id}: приклад без результату`);
+    assert.ok(l.want?.trim(), `${l.id}: не сказано, що має вийти`);
+  });
+});
+
+test('приклад не переказує стартовий код', () => {
+  // інакше це не приклад, а той самий текст удруге: показувати треба
+  // нову думку в дії, а не те, що вже лежить у редакторі
+  const same = CODE_LESSONS.filter((l) => {
+    const a = l.example.code.replace(/\s+/g, '');
+    const b = l.start.replace(/\s+/g, '');
+    return a === b;
+  });
+  assert.deepEqual(same.map((l) => l.id), []);
+});
+
+test('приклад не видає розвʼязок завдання', () => {
+  const same = CODE_LESSONS.filter((l) => {
+    const a = l.example.code.replace(/\s+/g, '');
+    const b = l.solution.replace(/\s+/g, '');
+    return a === b;
+  });
+  assert.deepEqual(same.map((l) => l.id), []);
+});
+
+test('приклад короткий: його читають, а не вивчають', () => {
+  const dovhi = CODE_LESSONS.filter((l) => l.example.code.split('\n').length > 20);
+  assert.deepEqual(dovhi.map((l) => l.id), []);
+});
+
+test('ціль — один рядок, а не абзац', () => {
+  CODE_LESSONS.forEach((l) => {
+    assert.equal(l.want.includes('\n'), false, `${l.id}: ціль у кілька рядків`);
+    assert.ok(l.want.length <= 90, `${l.id}: ціль задовга (${l.want.length})`);
+  });
+});
