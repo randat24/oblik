@@ -298,3 +298,39 @@ test('ціль — один рядок, а не абзац', () => {
     assert.ok(l.want.length <= 90, `${l.id}: ціль задовга (${l.want.length})`);
   });
 });
+
+test('пояснення невдачі є в кожного уроку', () => {
+  CODE_LESSONS.forEach((l) => {
+    const ok = typeof l.why === 'string' ? l.why.trim() : typeof l.why === 'function';
+    assert.ok(ok, `${l.id}: немає why`);
+  });
+});
+
+test('«Умова»: різні зупинки — різні пояснення', () => {
+  /*
+   * Тут застрягали найдовше: гілку написано правильно, а у виводі
+   * «Важка», бо kg лишилось 25. Один текст на обидва випадки лише
+   * повторював завдання, і людина шукала помилку в правильному коді.
+   */
+  const l = CODE_LESSONS.find((x) => x.id === 'b3');
+  const zabuv = l.why('Важка', 'if (kg > 20) {} else {}');
+  const napysav = l.why('Важка', 'if (kg > 20) {} else if (kg === 20) {} else {}');
+  assert.notEqual(zabuv, napysav);
+  assert.match(napysav, /kg.*25|25.*kg/i);
+  assert.match(zabuv, /else if/);
+});
+
+test('«Умова»: завдання не мовчить про друге виправлення', () => {
+  // сама гілка нічого не покаже, поки kg дорівнює 25 — і завдання, і
+  // підказка мають про це сказати, інакше урок стає загадкою
+  const l = CODE_LESSONS.find((x) => x.id === 'b3');
+  assert.match(l.task, /kg\s*=\s*20|20/);
+  assert.match(l.hint, /20/);
+});
+
+test('«Умова»: розвʼязок проходить власну перевірку', () => {
+  const l = CODE_LESSONS.find((x) => x.id === 'b3');
+  assert.equal(l.check('Норма', l.solution), true);
+  // а сам стартовий код — ні, інакше урок нічому не вчить
+  assert.equal(l.check('Важка', l.start), false);
+});

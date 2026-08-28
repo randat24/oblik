@@ -5986,6 +5986,20 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
     );
   }
 
+  /*
+   * Чому не зарахувалось.
+   *
+   * Один текст на всі випадки повторює завдання й нічого не пояснює. У
+   * «Умові» через це можна було застрягти надовго: гілку написано
+   * правильно, а у виводі все одно «Важка» — бо `kg` лишилось 25, і до
+   * нової гілки виконання просто не доходить. Тому `why` буває функцією
+   * й дивиться, що саме людина написала.
+   */
+  const whyOf = (a, b) => {
+    const w = typeof lesson.why === 'function' ? lesson.why(a, b) : lesson.why;
+    return w || 'Поки що не те. Спробуйте ще.';
+  };
+
   const run = async () => {
     setBusy(true); setErr(''); onTry?.();
     try {
@@ -5996,7 +6010,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
           setOut({ text: r.output });
           const ok = lesson.check(r.output, code);
           if (ok) { setPassed(true); await onDone(code); }
-          else { setFails((n) => n + 1); setErr(lesson.why || 'Поки що не те. Спробуйте ще.'); }
+          else { setFails((n) => n + 1); setErr(whyOf(r.output, code)); }
         }
       } else if (lesson.kind === 'react') {
         const { promise, srcdoc } = runReact(code, lesson.clicks);
@@ -6006,7 +6020,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
         else {
           const ok = lesson.check(code, r.text);
           if (ok) { setPassed(true); await onDone(code); }
-          else { setFails((n) => n + 1); setErr(lesson.why || 'Поки що не те. Спробуйте ще.'); }
+          else { setFails((n) => n + 1); setErr(whyOf(code, r.text)); }
         }
       } else {
         const { promise, srcdoc } = runPage(code);
@@ -6015,7 +6029,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
         const text = await promise;
         const ok = lesson.check(code, text);
         if (ok) { setPassed(true); await onDone(code); }
-        else { setFails((n) => n + 1); setErr(lesson.why || 'Поки що не те. Спробуйте ще.'); }
+        else { setFails((n) => n + 1); setErr(whyOf(code, text)); }
       }
     } finally {
       setBusy(false);
