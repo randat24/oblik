@@ -14,6 +14,9 @@ import { pace, forecast, verdicts } from '../lib/weight';
 import { CODE_LESSONS, TRACKS, openUpTo, courseStats, nextLink } from '../lib/code';
 import { tokenize, modeOf, lineCount } from '../lib/highlight';
 import { PLAN, COURSE, nextSteps, planProgress, lessonOf, tourOf } from '../lib/plan';
+import {
+  ABC, ABC_GROUPS, STATES, byGroup, abcProgress, suggestNext, cycleState, stateOf,
+} from '../lib/abc';
 import { FIELDS as PRACTICE_FIELDS, statsOf, freshIdeas } from '../lib/practice';
 import { REF_GROUPS, REF_CARDS, findCards } from '../lib/ref';
 import { TOURS, tourById } from '../lib/tour';
@@ -6306,6 +6309,122 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
 }
 
 /**
+ * Абетка: перелік того, що треба знати.
+ *
+ * Не урок і не довідник. Урок учить писати вперше, довідник нагадує, як
+ * робиться конкретна дія, — а тут просто перелічено, що взагалі існує.
+ * Незнання, про яке не підозрюєш, не заважає доти, доки не з'ясується,
+ * що пів року писав без уявлення про якусь звичну річ.
+ *
+ * Позначки ставить сама людина, і чесність тут важливіша за цифру:
+ * список потрібен, щоб бачити поле, а не щоб красиво заповнити його
+ * галочками.
+ */
+function AbcTab({ data, reload, toast, canEdit }) {
+  const marks = data?.abc || {};
+  const [busy, setBusy] = useState('');
+  const [only, setOnly] = useState('');       // група; порожнє — усі
+  const [mustOnly, setMustOnly] = useState(false);
+
+  const p = abcProgress(marks);
+  const next = suggestNext(marks);
+
+  const mark = async (id) => {
+    if (!canEdit || busy) return;
+    setBusy(id);
+    const nextMarks = {
+      ...marks,
+      [id]: { id, state: cycleState(marks[id]?.state), date: today() },
+    };
+    try {
+      await api('/api/health', { method: 'POST', body: { action: 'abc', abc: nextMarks } });
+      await reload();
+    } catch (e) {
+      toast?.(e.message);
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const groups = only ? ABC_GROUPS.filter((g) => g.key === only) : ABC_GROUPS;
+
+  return (
+    <div className="cd-room">
+      <div className="cd-intro-box">
+        <Prose text={'Перелік того, що треба знати веброзробнику. Не підручник і не довідник: тут не вчать і не нагадують синтаксис — тут видно поле цілком і місце, де ви на ньому стоїте.'} />
+        <Prose text={'Тицяйте рядок, щоб перемикати: ще ні → вчу → знаю. Позначайте чесно — список потрібен, щоб бачити, куди йти, а не щоб виглядати добре.'} />
+      </div>
+
+      <div className="ab-sum">
+        <div className="ab-stat">
+          <b>{p.all.known}</b><span>знаю з {p.all.total}</span>
+        </div>
+        {p.all.learning > 0 && (
+          <div className="ab-stat"><b>{p.all.learning}</b><span>вчу</span></div>
+        )}
+        <div className="ab-stat ab-must">
+          <b>{p.must.known}</b><span>з {p.must.total} обовʼязкових</span>
+        </div>
+      </div>
+
+      {next.length > 0 && (
+        <div className="ab-next">
+          <div className="ab-next-h">Узятись найближче</div>
+          {next.map((x) => <span key={x.id}>{x.t}</span>)}
+        </div>
+      )}
+
+      <div className="ab-filt">
+        <button className={'z-chip' + (!only && !mustOnly ? ' on' : '')}
+          onClick={() => { setOnly(''); setMustOnly(false); }}>Усе</button>
+        <button className={'z-chip' + (mustOnly ? ' on' : '')}
+          onClick={() => { setMustOnly((v) => !v); setOnly(''); }}>Обовʼязкове</button>
+        {ABC_GROUPS.map((g) => (
+          <button key={g.key} className={'z-chip' + (only === g.key ? ' on' : '')}
+            onClick={() => { setOnly(only === g.key ? '' : g.key); setMustOnly(false); }}>
+            {g.label}
+          </button>
+        ))}
+      </div>
+
+      {groups.map((g) => {
+        const items = byGroup(g.key).filter((x) => !mustOnly || x.must);
+        if (!items.length) return null;
+        return (
+          <div className="ab-group" key={g.key}>
+            <div className="ab-group-h">
+              <b>{g.label}</b>
+              <span>{g.hint}</span>
+            </div>
+            {items.map((x) => {
+              const st = stateOf(marks[x.id]);
+              return (
+                <button
+                  key={x.id}
+                  className={'ab-row is-' + (st || 'none') + (busy === x.id ? ' is-busy' : '')}
+                  onClick={() => mark(x.id)}
+                  disabled={!canEdit}
+                >
+                  <span className="ab-mark">{STATES.find((s) => s.key === st)?.short}</span>
+                  <span className="ab-body">
+                    <span className="ab-t">
+                      {x.t}
+                      {x.must && <span className="ab-must-tag">треба</span>}
+                    </span>
+                    <span className="ab-what"><Prose text={x.what} /></span>
+                    <span className="ab-why">{x.why}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
  * План навчання.
  *
  * Уроки в цьому застосунку — не підручник, і це чесно сказано просто на
@@ -6664,6 +6783,7 @@ const TABS = [
   { key: 'goals', label: 'Цілі', world: 'telo' },
   { key: 'code', label: 'Код', world: 'navch' },
   { key: 'plan', label: 'План', world: 'navch' },
+  { key: 'abc', label: 'Абетка', world: 'navch' },
   { key: 'mult', label: 'Множення', world: 'navch' },
 ];
 
@@ -6691,6 +6811,7 @@ const IcoMore = <Ico d={<><path d="M4 7h16M4 12h16M4 17h16" /></>} />;
 const IcoCode = <Ico d={<><path d="M9 7l-5 5 5 5M15 7l5 5-5 5" /></>} />;
 const IcoMult = <Ico d={<><path d="M6 6l12 12M18 6L6 18" /><rect x="3" y="3" width="18" height="18" rx="3" /></>} />;
 const IcoPlan = <Ico d={<><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" /></>} />;
+const IcoAbc = <Ico d={<><path d="M4 19V6a2 2 0 012-2h12v16H6a2 2 0 00-2 2z" /><path d="M9 8h6M9 12h4" /></>} />;
 
 /*
  * Унизу — тільки те, куди заходять щодня, і в кожного світу воно своє.
@@ -6707,6 +6828,7 @@ const BNAV = {
   navch: [
     { key: 'code', label: 'Код', icon: IcoCode },
     { key: 'plan', label: 'План', icon: IcoPlan },
+    { key: 'abc', label: 'Абетка', icon: IcoAbc },
     { key: 'mult', label: 'Множення', icon: IcoMult },
   ],
 };
@@ -6929,6 +7051,7 @@ export default function Osobyste() {
         {tab === 'mult' && <MultTab data={data} reload={load} toast={toast} />}
         {tab === 'code' && <CodeTab data={data} reload={load} toast={toast} />}
         {tab === 'plan' && <PlanTab data={data} />}
+        {tab === 'abc' && <AbcTab data={data} reload={load} toast={toast} canEdit={data?.canEdit} />}
         {tab === 'stats' && <StatsTab data={data} />}
         {tab === 'goals' && <GoalsTab data={data} reload={load} setBusy={setBusy} />}
       </div>
