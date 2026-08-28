@@ -3871,3 +3871,69 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   .pl-row { flex-direction: column; gap: 2px; }
   .pl-lab { width: auto; }
 }
+
+/* ── Абетка ────────────────────────────────────────────────────────────── */
+
+.ab-sum { display: flex; flex-wrap: wrap; gap: 10px; }
+.ab-stat {
+  flex: 1 1 120px; padding: 10px 12px; border-radius: var(--r);
+  background: var(--panel); border: 1px solid var(--line-soft);
+  display: flex; align-items: baseline; gap: 8px;
+}
+.ab-stat b { font-size: 1.35rem; color: var(--amber); font-family: var(--mono); }
+.ab-stat span { font-size: .78rem; color: var(--muted); }
+.ab-stat.ab-must b { color: var(--green); }
+
+/* Порада коротка навмисно: «вчіть усе» — не порада */
+.ab-next {
+  padding: 10px 12px; border-radius: var(--r);
+  background: var(--amber-dim); border: 1px solid rgba(217,173,37,.3);
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline;
+}
+.ab-next-h {
+  width: 100%; font-size: .7rem; color: var(--amber);
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.ab-next span { font-size: .84rem; color: var(--text-dim); }
+.ab-next span + span::before { content: '· '; color: var(--muted); }
+
+.ab-filt { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.ab-group { display: flex; flex-direction: column; gap: 6px; }
+.ab-group-h { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
+.ab-group-h b { font-size: .95rem; }
+.ab-group-h span { font-size: .76rem; color: var(--muted); }
+
+/* Рядок — кнопка: тицьнув і перемкнув стан. Окремий перемикач збоку на
+   телефоні означав би цілитись пальцем у щось дрібне. */
+.ab-row {
+  width: 100%; display: flex; gap: 10px; align-items: flex-start; text-align: left;
+  padding: 10px 12px; border-radius: var(--r);
+  background: var(--panel); border: 1px solid var(--line-soft);
+  color: inherit; font-family: inherit; cursor: pointer;
+}
+.ab-row:disabled { cursor: default; }
+.ab-row.is-busy { opacity: .5; }
+.ab-row.is-learning { border-color: rgba(217,173,37,.45); }
+.ab-row.is-known { border-color: rgba(122,163,90,.45); }
+.ab-row.is-known .ab-t { color: var(--green); }
+
+.ab-mark {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); color: var(--muted);
+  font-size: .7rem; font-family: var(--mono);
+}
+.ab-row.is-learning .ab-mark { border-color: var(--amber); color: var(--amber); }
+.ab-row.is-known .ab-mark { border-color: var(--green); color: var(--green); }
+
+.ab-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ab-t { font-size: .92rem; font-weight: 600; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.ab-must-tag {
+  padding: 1px 6px; border-radius: 4px;
+  background: var(--amber-dim); color: var(--amber);
+  font-size: .62rem; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.ab-what p { margin: 0; font-size: .84rem; color: var(--text-dim); line-height: 1.5; }
+.ab-why { font-size: .8rem; color: var(--muted); line-height: 1.5; }
