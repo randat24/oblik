@@ -3423,20 +3423,84 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 
 .cd-work { display: flex; flex-direction: column; gap: 10px; }
-.cd-editor {
-  width: 100%; resize: vertical;
-  padding: 12px 14px; border-radius: var(--r);
-  border: 1px solid var(--line); background: var(--panel);
-  color: var(--text); font-family: var(--mono); font-size: .86rem; line-height: 1.6;
+
+/*
+ * Поле для коду.
+ *
+ * Три шари, які мусять збігатися символ у символ: номери рядків зліва,
+ * кольоровий текст під сподом і прозорий textarea зверху, у якому
+ * насправді набирають. Тримається це на однакових шрифті, розмірі,
+ * інтервалі й відступах — тож змінювати їх можна лише в обох шарах
+ * одразу, інакше літери роз'їдуться з кольором.
+ */
+.cd-ed {
+  --cd-fs: .86rem;
+  --cd-lh: 1.6;
+  --cd-pad: 10px;
+  display: flex; align-items: stretch;
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel); overflow: hidden;
 }
-.cd-editor:focus { outline: none; border-color: var(--amber); }
+.cd-ed:focus-within { border-color: var(--amber); }
+
+.cd-ed-gut {
+  flex: none; display: flex; flex-direction: column;
+  padding: var(--cd-pad) 8px var(--cd-pad) 10px;
+  background: var(--panel-2); border-right: 1px solid var(--line-soft);
+  color: var(--muted); font-family: var(--mono); font-size: var(--cd-fs);
+  line-height: var(--cd-lh); text-align: right;
+  overflow: hidden; user-select: none;
+}
+.cd-ed-gut span { display: block; }
+
+.cd-ed-box { position: relative; flex: 1 1 auto; min-width: 0; }
+.cd-ed-back,
+.cd-ed-in {
+  margin: 0; padding: var(--cd-pad) 12px;
+  font-family: var(--mono); font-size: var(--cd-fs); line-height: var(--cd-lh);
+  /* перенесення вимкнене: з ним номер зліва перестав би відповідати рядку */
+  white-space: pre; tab-size: 2;
+  border: 0; letter-spacing: normal;
+}
+.cd-ed-back {
+  position: absolute; inset: 0;
+  overflow: hidden; pointer-events: none;
+  color: var(--text-dim);
+}
+.cd-ed-in {
+  position: relative; display: block; width: 100%;
+  height: calc(var(--cd-rows, 8) * var(--cd-fs) * var(--cd-lh) + var(--cd-pad) * 2);
+  resize: vertical; overflow: auto;
+  background: transparent; color: transparent; caret-color: var(--amber);
+}
+/*
+ * Прозорість поля треба повторити для :focus — і це не перестраховка.
+ *
+ * Спільне правило `textarea:focus` вище ставить непрозоре тло, і воно
+ * важче за клас. Без цього рядка кольоровий шар видно рівно доти, доки в
+ * поле не клацнули: варто поставити курсор — і текст зникає. Селектор
+ * тут навмисно такої самої ваги й нижче за спільний, щоб виграти.
+ */
+.cd-ed-in:focus {
+  outline: none; background: transparent; border-color: transparent;
+}
+.cd-ed-in::selection { background: rgba(217,173,37,.28); color: transparent; }
+
+/* Кольори. Рядок і коментар мають різнитись найсильніше: саме їх
+   плутають, коли забувають лапку. */
+.hl-kw { color: var(--amber); }
+.hl-str { color: var(--green); }
+.hl-com { color: var(--muted); font-style: italic; }
+.hl-num { color: var(--blue); }
+.hl-tag { color: var(--amber); }
+.hl-attr { color: var(--blue); }
 .cd-frame {
   width: 100%; height: 220px; border: 1px solid var(--line);
   border-radius: var(--r); background: #fff;
 }
 @media (min-width: 760px) {
   .cd-work.is-page { flex-direction: row; align-items: stretch; }
-  .cd-work.is-page .cd-editor { flex: 1 1 50%; }
+  .cd-work.is-page .cd-ed { flex: 1 1 50%; min-width: 0; }
   .cd-work.is-page .cd-frame { flex: 1 1 50%; height: auto; }
 }
 

@@ -12,6 +12,7 @@ import {
 } from '../lib/mult';
 import { pace, forecast, verdicts } from '../lib/weight';
 import { CODE_LESSONS, TRACKS, openUpTo, courseStats, nextLink } from '../lib/code';
+import { tokenize, modeOf, lineCount } from '../lib/highlight';
 import { FIELDS as PRACTICE_FIELDS, statsOf, freshIdeas } from '../lib/practice';
 import { REF_GROUPS, REF_CARDS, findCards } from '../lib/ref';
 import { TOURS, tourById } from '../lib/tour';
@@ -5558,8 +5559,168 @@ function runReact(code, clicks = [], timeoutMs = 6000) {
 }
 
 /** Підсвітка синтаксису для читання, не для редагування — просто фарбує рядки */
-function CodeBlock({ code }) {
-  return <pre className="cd-block"><code>{code}</code></pre>;
+/** Розфарбовані шматки коду — спільні для редактора й показаних блоків */
+function Painted({ code, mode }) {
+  return tokenize(code, mode).map((x, i) => (
+    x.t === 'txt' ? x.s : <span className={'hl-' + x.t} key={i}>{x.s}</span>
+  ));
+}
+
+function CodeBlock({ code, mode = 'js' }) {
+  return <pre className="cd-block"><code><Painted code={code} mode={mode} /></code></pre>;
+}
+
+/**
+ * Поле, у якому пишуть код.
+ *
+ * Довго це був звичайний блокнот: сірий текст без номерів рядків, Tab
+ * викидав із поля, а Enter не тримав відступ. Писати так можна, але
+ * помилку в цьому не видно — а редактор для того й потрібен, щоб її було
+ * видно раніше, ніж натиснули «Запустити».
+ *
+ * Розфарбування зроблене шаром: під прозорим текстом лежить точно такий
+ * самий, але кольоровий. Тримається воно на тому, що обидва шари мають
+ * однакові шрифт, розмір, міжрядковий інтервал і відступи, — тож CSS тут
+ * не косметика, і будь-яка правка одного шару має повторитись в іншому.
+ * Перенесення рядків вимкнене навмисно: із ним номер зліва перестав би
+ * відповідати рядку справа.
+ */
+function CodeEditor({ value, onChange, mode, rows, onRun }) {
+  const taRef = useRef(null);
+  const backRef = useRef(null);
+  const gutRef = useRef(null);
+
+  // прокрутка трьох шарів разом: інакше кольори від'їжджають від тексту
+  const sync = () => {
+    const ta = taRef.current;
+    if (!ta) return;
+    if (backRef.current) {
+      backRef.current.scrollTop = ta.scrollTop;
+      backRef.current.scrollLeft = ta.scrollLeft;
+    }
+    if (gutRef.current) gutRef.current.scrollTop = ta.scrollTop;
+  };
+
+  useEffect(sync, [value]);
+
+  /*
+   * Правка через сам браузер, а не через перемальовування поля.
+   *
+   * Спершу тут рахувався новий текст, а курсор ставився вже після
+   * перемальовування — і на швидкому наборі це розсипалось: наступна
+   * літера встигала прийти раніше, ніж курсор повертався на місце, і
+   * «console.log(1);» перетворювалось на «console.log(1;)». Тепер вставку
+   * робить сам браузер: курсор стає на місце тієї ж миті, а заразом
+   * працює звичайне скасування останньої дії.
+   */
+  const edit = (ta, from, to, text, caret) => {
+    ta.focus();
+    ta.setSelectionRange(from, to);
+    let done = false;
+    try { done = document.execCommand('insertText', false, text); } catch { done = false; }
+    if (!done) ta.setRangeText(text, from, to, 'end');
+    if (caret !== undefined) ta.setSelectionRange(caret, caret);
+    onChange(ta.value);
+  };
+
+  /** Просто переставити курсор: текст не змінюється, тож і стан не чіпаємо */
+  const moveTo = (ta, at) => ta.setSelectionRange(at, at);
+
+  const onKey = (e) => {
+    const ta = e.target;
+    const { selectionStart: a, selectionEnd: b } = ta;
+    const val = ta.value;
+
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      onRun?.();
+      return;
+    }
+
+    // Tab у полі для коду має ставити відступ, а не викидати з поля.
+    // Вийти з поля можна Escape — фокус не замикається назовсім.
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (a !== b) {
+        const from = val.lastIndexOf('\n', a - 1) + 1;
+        const block = val.slice(from, b);
+        const moved = e.shiftKey
+          ? block.replace(/^ {1,2}/gm, '')
+          : block.replace(/^/gm, '  ');
+        edit(ta, from, b, moved, undefined);
+        ta.setSelectionRange(from, from + moved.length);
+        return;
+      }
+      if (e.shiftKey) {
+        const from = val.lastIndexOf('\n', a - 1) + 1;
+        const cut = /^ {1,2}/.exec(val.slice(from));
+        if (cut) edit(ta, from, from + cut[0].length, '', a - cut[0].length);
+        return;
+      }
+      edit(ta, a, b, '  ');
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      const from = val.lastIndexOf('\n', a - 1) + 1;
+      const line = val.slice(from, a);
+      const pad = (/^[ \t]*/.exec(line) || [''])[0];
+      // після відкритої дужки рівень глибше, а закривальну зсуваємо назад
+      const deeper = /[{([]\s*$/.test(line) ? '  ' : '';
+      const closing = /^[)\]}]/.test(val.slice(b));
+      e.preventDefault();
+      if (deeper && closing) {
+        // курсор лишається в порожньому рядку між дужками
+        const text = '\n' + pad + deeper + '\n' + pad;
+        edit(ta, a, b, text, a + 1 + pad.length + deeper.length);
+        return;
+      }
+      edit(ta, a, b, '\n' + pad + deeper);
+      return;
+    }
+
+    // Закривальну дужку набирають самі — і одразу поверх дописаної.
+    // Пропускаємо її, замість того щоб класти другу.
+    if (')]}\'"`'.includes(e.key) && a === b && val[a] === e.key) {
+      e.preventDefault();
+      moveTo(ta, a + 1);
+      return;
+    }
+
+    const pair = { '(': ')', '[': ']', '{': '}', '\'': '\'', '"': '"', '`': '`' }[e.key];
+    if (pair && a === b && /^$|[\s)\]},;]/.test(val[a] ?? '')) {
+      e.preventDefault();
+      edit(ta, a, b, e.key + pair, a + 1);
+    }
+  };
+
+  return (
+    <div className="cd-ed" style={{ '--cd-rows': rows }}>
+      <div className="cd-ed-gut" ref={gutRef} aria-hidden="true">
+        {Array.from({ length: lineCount(value) }, (_, i) => <span key={i}>{i + 1}</span>)}
+      </div>
+      <div className="cd-ed-box">
+        <pre className="cd-ed-back" ref={backRef} aria-hidden="true">
+          <code><Painted code={value} mode={mode} /></code>
+          {/* останній рядок без переносу інакше не має куди прокрутитись */}
+          {'\n'}
+        </pre>
+        <textarea
+          ref={taRef}
+          className="cd-ed-in"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onScroll={sync}
+          onKeyDown={onKey}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="off"
+          wrap="off"
+        />
+      </div>
+    </div>
+  );
 }
 
 /** Текст пояснення з `код` у зворотних лапках — підсвічений моноширинним */
@@ -6059,7 +6220,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
           </button>
           {showExample && (
             <div className="cd-ex-b">
-              <CodeBlock code={lesson.example.code} />
+              <CodeBlock code={lesson.example.code} mode={modeOf(lesson.kind)} />
               <div className="cd-ex-out">
                 <span className="cd-ex-lab">Виходить</span>
                 <pre>{lesson.example.out}</pre>
@@ -6079,12 +6240,12 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
       </div>
 
       <div className={'cd-work' + (lesson.kind === 'js' ? '' : ' is-page')}>
-        <textarea
-          className="cd-editor"
+        <CodeEditor
           value={code}
-          onChange={(e) => { setCode(e.target.value); setErr(''); }}
-          spellCheck={false}
+          onChange={(v) => { setCode(v); setErr(''); }}
+          mode={modeOf(lesson.kind)}
           rows={lesson.kind === 'js' ? 8 : 12}
+          onRun={run}
         />
         {lesson.kind !== 'js' && (
           <iframe
@@ -6134,7 +6295,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
               копіюйте. Урок зарахується, коли запуститься ваш код.
             </div>
           )}
-          <CodeBlock code={lesson.solution} />
+          <CodeBlock code={lesson.solution} mode={modeOf(lesson.kind)} />
         </>
       )}
 
