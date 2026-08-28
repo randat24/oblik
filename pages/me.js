@@ -13,6 +13,7 @@ import {
 import { pace, forecast, verdicts } from '../lib/weight';
 import { CODE_LESSONS, TRACKS, openUpTo, courseStats, nextLink } from '../lib/code';
 import { tokenize, modeOf, lineCount } from '../lib/highlight';
+import { PLAN, COURSE, nextSteps, planProgress, lessonOf, tourOf } from '../lib/plan';
 import { FIELDS as PRACTICE_FIELDS, statsOf, freshIdeas } from '../lib/practice';
 import { REF_GROUPS, REF_CARDS, findCards } from '../lib/ref';
 import { TOURS, tourById } from '../lib/tour';
@@ -6305,6 +6306,92 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
 }
 
 /**
+ * План навчання.
+ *
+ * Уроки в цьому застосунку — не підручник, і це чесно сказано просто на
+ * сторінці. Пояснення беруть там, де його роблять як слід, а сюди
+ * приходять по те, чого немає в жодному курсі: справжній код, яким
+ * щодня возять посилки.
+ *
+ * Показані три кроки, а не всі чотирнадцять. Список на пів року
+ * попереду не допомагає — він лише каже, скільки ще не зроблено.
+ */
+function PlanTab({ data }) {
+  const [all, setAll] = useState(false);
+  const done = data?.code || {};
+  const { ready, total } = planProgress(done);
+  const next = nextSteps(done);
+  const show = all ? PLAN : next;
+
+  return (
+    <div className="cd-room">
+      <div className="cd-intro-box">
+        <Prose text={'Уроки тут — не підручник: його пишуть роками й вичищають на тисячах людей. Тому пояснення беріть там, де його роблять як слід, а сюди приходьте закріплювати — на своєму коді, а не на вигаданих задачах.'} />
+        <Prose text={'Кожен крок однаковий: прочитати — знайти те саме у своєму застосунку — змінити щось маленьке й подивитись, що зламається. Останнє важливіше за перші два.'} />
+      </div>
+
+      <div className="pl-src">
+        <div className="pl-src-h">Звідки вчити</div>
+        <b>{COURSE.name}</b>
+        <p>{COURSE.what}</p>
+        <p className="pl-note">{COURSE.note}</p>
+      </div>
+
+      <div className="cd-sec-h">
+        <span>{all ? 'Усі кроки' : 'Найближче'}</span>
+        <span className="cd-cnt">{ready} з {total}</span>
+      </div>
+
+      {show.length === 0 ? (
+        <div className="h-empty">Кроки закінчились. Далі — свої зміни в застосунку й щоденник практики.</div>
+      ) : show.map((s) => {
+        const lesson = lessonOf(s);
+        const tour = tourOf(s);
+        const passed = done[s.lesson]?.state === 'done';
+        return (
+          <div className={'pl-step' + (passed ? ' is-done' : '')} key={s.n}>
+            <div className="pl-top">
+              <span className="pl-n">{s.n}</span>
+              <b>{s.topic}</b>
+              {passed && <span className="pl-ok">✓</span>}
+            </div>
+            <div className="pl-why">{s.why}</div>
+
+            <div className="pl-row">
+              <span className="pl-lab">Прочитати</span>
+              <span>{s.read}</span>
+            </div>
+            <div className="pl-row">
+              <span className="pl-lab">Відкрити</span>
+              <span><code className="cd-inline">{s.file}</code></span>
+            </div>
+            <div className="pl-row">
+              <span className="pl-lab">Знайти</span>
+              <span><Prose text={s.find} /></span>
+            </div>
+            <div className="pl-row">
+              <span className="pl-lab">Зробити</span>
+              <span><Prose text={s.task} /></span>
+            </div>
+            {(lesson || tour) && (
+              <div className="pl-lesson">
+                {lesson && <>Урок: «{lesson.title}»</>}
+                {lesson && tour && ' · '}
+                {tour && <>Розбір: «{tour.title}»</>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <button className="act-btn z-wide" style={{ marginTop: 12 }} onClick={() => setAll((v) => !v)}>
+        {all ? 'Показати тільки найближче' : `Показати всі ${total} кроків`}
+      </button>
+    </div>
+  );
+}
+
+/**
  * Щоденник практики.
  *
  * Уроки закінчуються, і саме там зупиняється більшість. Вміння
@@ -6576,6 +6663,7 @@ const TABS = [
   { key: 'stats', label: 'Підсумки', world: 'telo' },
   { key: 'goals', label: 'Цілі', world: 'telo' },
   { key: 'code', label: 'Код', world: 'navch' },
+  { key: 'plan', label: 'План', world: 'navch' },
   { key: 'mult', label: 'Множення', world: 'navch' },
 ];
 
@@ -6602,6 +6690,7 @@ const IcoMore = <Ico d={<><path d="M4 7h16M4 12h16M4 17h16" /></>} />;
 
 const IcoCode = <Ico d={<><path d="M9 7l-5 5 5 5M15 7l5 5-5 5" /></>} />;
 const IcoMult = <Ico d={<><path d="M6 6l12 12M18 6L6 18" /><rect x="3" y="3" width="18" height="18" rx="3" /></>} />;
+const IcoPlan = <Ico d={<><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" /></>} />;
 
 /*
  * Унизу — тільки те, куди заходять щодня, і в кожного світу воно своє.
@@ -6617,6 +6706,7 @@ const BNAV = {
   ],
   navch: [
     { key: 'code', label: 'Код', icon: IcoCode },
+    { key: 'plan', label: 'План', icon: IcoPlan },
     { key: 'mult', label: 'Множення', icon: IcoMult },
   ],
 };
@@ -6838,6 +6928,7 @@ export default function Osobyste() {
         {tab === 'meds' && <MedsTab data={data} reload={load} setBusy={setBusy} toast={toast} />}
         {tab === 'mult' && <MultTab data={data} reload={load} toast={toast} />}
         {tab === 'code' && <CodeTab data={data} reload={load} toast={toast} />}
+        {tab === 'plan' && <PlanTab data={data} />}
         {tab === 'stats' && <StatsTab data={data} />}
         {tab === 'goals' && <GoalsTab data={data} reload={load} setBusy={setBusy} />}
       </div>

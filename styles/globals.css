@@ -3816,3 +3816,58 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   text-transform: uppercase; color: var(--green);
 }
 .cd-ttry p { margin: 0; font-size: .89rem; color: var(--text-dim); line-height: 1.6; }
+
+/* ── План навчання ─────────────────────────────────────────────────────── */
+
+.pl-src {
+  padding: 12px 14px; border-radius: var(--r);
+  background: var(--panel); border: 1px solid var(--line-soft);
+}
+.pl-src-h {
+  font-size: .7rem; color: var(--muted); margin-bottom: 6px;
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.pl-src b { color: var(--amber); font-size: 1rem; }
+.pl-src p { margin: 6px 0 0; color: var(--text-dim); font-size: .86rem; line-height: 1.55; }
+.pl-src .pl-note { color: var(--muted); font-size: .8rem; }
+
+.cd-sec-h {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-top: 4px; font-size: .72rem; color: var(--muted);
+  letter-spacing: .1em; text-transform: uppercase;
+}
+.cd-cnt { font-family: var(--mono); letter-spacing: normal; }
+
+.pl-step {
+  padding: 12px 14px; border-radius: var(--r);
+  background: var(--panel); border: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.pl-step.is-done { opacity: .65; }
+.pl-top { display: flex; align-items: center; gap: 8px; }
+.pl-top b { font-size: 1rem; }
+.pl-n {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--amber-dim); color: var(--amber);
+  font-family: var(--mono); font-size: .74rem; font-weight: 700;
+}
+.pl-ok { color: var(--green); margin-left: auto; }
+.pl-why { color: var(--text-dim); font-size: .86rem; line-height: 1.55; }
+
+/* Підпис зліва, суть справа: очима шукають «Зробити», а не абзац */
+.pl-row { display: flex; gap: 10px; align-items: baseline; font-size: .86rem; }
+.pl-lab {
+  flex: none; width: 74px;
+  font-size: .68rem; color: var(--muted);
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.pl-row p { margin: 0; color: var(--text-dim); line-height: 1.55; }
+.pl-lesson {
+  padding-top: 8px; border-top: 1px solid var(--line-soft);
+  font-size: .78rem; color: var(--muted);
+}
+@media (max-width: 520px) {
+  .pl-row { flex-direction: column; gap: 2px; }
+  .pl-lab { width: auto; }
+}
