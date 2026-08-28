@@ -5956,12 +5956,25 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
   const [passed, setPassed] = useState(saved?.state === 'done');
   const [showHint, setShowHint] = useState(false);
   const [showSolution, setShowSolution] = useState(false);
+  const [showExample, setShowExample] = useState(false);
+  /*
+   * Скільки разів не вийшло.
+   *
+   * Розвʼязок раніше відкривався тільки після успіху — тобто рівно тоді,
+   * коли він уже не потрібен. Хто застряг, лишався сам на сам із
+   * підказкою в один рядок, і саме там уроки й кидають. Тепер після двох
+   * невдалих спроб можна подивитись, як це мало виглядати: підглянути
+   * відповідь і розібрати її корисніше, ніж закрити вкладку.
+   */
+  const [fails, setFails] = useState(0);
   const iframeRef = useRef(null);
+  const STUCK = 2;
 
   useEffect(() => {
     setCode(saved?.code || lesson.start);
     setPassed(saved?.state === 'done');
     setOut(null); setErr(''); setShowHint(false); setShowSolution(false);
+    setShowExample(false); setFails(0);
   }, [lesson.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (locked) {
@@ -5983,7 +5996,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
           setOut({ text: r.output });
           const ok = lesson.check(r.output, code);
           if (ok) { setPassed(true); await onDone(code); }
-          else setErr(lesson.why || 'Поки що не те. Спробуйте ще.');
+          else { setFails((n) => n + 1); setErr(lesson.why || 'Поки що не те. Спробуйте ще.'); }
         }
       } else if (lesson.kind === 'react') {
         const { promise, srcdoc } = runReact(code, lesson.clicks);
@@ -5993,7 +6006,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
         else {
           const ok = lesson.check(code, r.text);
           if (ok) { setPassed(true); await onDone(code); }
-          else setErr(lesson.why || 'Поки що не те. Спробуйте ще.');
+          else { setFails((n) => n + 1); setErr(lesson.why || 'Поки що не те. Спробуйте ще.'); }
         }
       } else {
         const { promise, srcdoc } = runPage(code);
@@ -6002,7 +6015,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
         const text = await promise;
         const ok = lesson.check(code, text);
         if (ok) { setPassed(true); await onDone(code); }
-        else setErr(lesson.why || 'Поки що не те. Спробуйте ще.');
+        else { setFails((n) => n + 1); setErr(lesson.why || 'Поки що не те. Спробуйте ще.'); }
       }
     } finally {
       setBusy(false);
@@ -6020,8 +6033,35 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
         {lesson.intro.map((t, i) => <Prose key={i} text={t} />)}
       </div>
 
+      {/* Та сама думка, показана працюючою. Пояснення словами каже, що
+          робить `filter`; приклад показує, що з нього виходить — і саме
+          цього бракувало між «прочитав» і «пиши сам». Згорнутий, щоб не
+          заступати завдання тому, кому вже зрозуміло. */}
+      {lesson.example && (
+        <div className="cd-ex">
+          <button className="cd-ex-h" onClick={() => setShowExample((v) => !v)}>
+            <span className={'cd-ex-arr' + (showExample ? ' on' : '')}>▸</span>
+            Ось як це працює
+          </button>
+          {showExample && (
+            <div className="cd-ex-b">
+              <CodeBlock code={lesson.example.code} />
+              <div className="cd-ex-out">
+                <span className="cd-ex-lab">Виходить</span>
+                <pre>{lesson.example.out}</pre>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="cd-task">
         <b>Завдання.</b> {lesson.task}
+        {/* Ціль була відома лише з тексту помилки, тобто вже після
+            невдачі. Тепер її видно до того, як почали писати. */}
+        {lesson.want && (
+          <div className="cd-want"><b>Має вийти:</b> {lesson.want}</div>
+        )}
       </div>
 
       <div className={'cd-work' + (lesson.kind === 'js' ? '' : ' is-page')}>
@@ -6064,7 +6104,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
         <button className="act-btn" onClick={() => setShowHint((v) => !v)}>
           {showHint ? 'Сховати підказку' : 'Підказка'}
         </button>
-        {passed && (
+        {(passed || fails >= STUCK) && (
           <button className="act-btn" onClick={() => setShowSolution((v) => !v)}>
             {showSolution ? 'Сховати розвʼязок' : 'Показати розвʼязок'}
           </button>
@@ -6072,7 +6112,17 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
       </div>
 
       {showHint && <div className="cd-hint">{lesson.hint}</div>}
-      {showSolution && <CodeBlock code={lesson.solution} />}
+      {showSolution && (
+        <>
+          {!passed && (
+            <div className="cd-hint">
+              Подивіться, розберіть по рядку — і напишіть у себе руками, а не
+              копіюйте. Урок зарахується, коли запуститься ваш код.
+            </div>
+          )}
+          <CodeBlock code={lesson.solution} />
+        </>
+      )}
 
       <NextRead lesson={lesson} done={passed} />
     </div>
