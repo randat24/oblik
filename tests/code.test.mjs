@@ -334,3 +334,52 @@ test('«Умова»: розвʼязок проходить власну пер�
   // а сам стартовий код — ні, інакше урок нічому не вчить
   assert.equal(l.check('Важка', l.start), false);
 });
+
+/* ── порядок уроків ────────────────────────────────────────────────────── */
+
+/*
+ * Урок не має вимагати того, чого курс ще не показав.
+ *
+ * «Правда і неправда» стояла сьомою, а просила написати функцію — тоді
+ * як функції пояснювались аж одинадцятим уроком. Людина сідала за
+ * завдання, якого не могла зробити, і вирішувала, що річ у ній.
+ */
+
+const POSITION = Object.fromEntries(CODE_LESSONS.map((l, i) => [l.id, i]));
+
+/** Що вважається поясненим лише з певного уроку */
+const TEACHES = [
+  { id: 'b4', what: 'функції', re: /function\s|=>/ },
+  { id: 's1', what: 'масиви', re: /\[\s*\d|\.length/ },
+  { id: 's2', what: 'цикл', re: /\bfor\s*\(/ },
+  { id: 'b5', what: 'обʼєкти', re: /\{\s*name:/ },
+  { id: 's4', what: 'filter', re: /\.filter\(/ },
+  { id: 's5', what: 'map', re: /\.map\(/ },
+  { id: 's6', what: 'reduce', re: /\.reduce\(/ },
+  { id: 's9', what: 'async/await', re: /\basync\b|\bawait\b/ },
+  { id: 'b15', what: 'класи', re: /\bclass\s/ },
+];
+
+test('розвʼязок не потребує того, чого ще не пояснили', () => {
+  const rano = [];
+  CODE_LESSONS.forEach((l, i) => {
+    TEACHES.forEach(({ id, what, re }) => {
+      if (i < POSITION[id] && re.test(l.solution)) {
+        rano.push(`${l.id} (${i + 1}) вимагає «${what}», а їх показують на ${POSITION[id] + 1}`);
+      }
+    });
+  });
+  assert.deepEqual(rano, []);
+});
+
+test('функції пояснені до того, як їх просять писати', () => {
+  // окремо й наголошено: саме на цьому курс і зупинявся
+  const first = CODE_LESSONS.findIndex((l) => /function\s/.test(l.solution));
+  assert.ok(first >= POSITION.b4, `функцію просять на ${first + 1}, а вчать на ${POSITION.b4 + 1}`);
+});
+
+test('кожен урок відкривається після того, як пройдено попередні', () => {
+  // порядок у масиві — це і є порядок проходження; дірок бути не має
+  const ids = CODE_LESSONS.map((l) => l.id);
+  assert.equal(new Set(ids).size, ids.length, 'є повторені номери уроків');
+});
