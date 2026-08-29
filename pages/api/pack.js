@@ -71,9 +71,20 @@ function visible(list) {
         created: d.created,
         handed: d.dates.handed,
         atbase: d.dates.atbase,
+        /*
+         * Стан кожного мішка окремо, а не лише перелік назв.
+         *
+         * Збирач бачив свою посилку такою, якою її склав, — і не бачив,
+         * що з нею сталося далі. Тим часом половина могла вже долетіти,
+         * а один мішок — розбитись при завантаженні. Питання «то що
+         * зрештою поїхало» доводилось нести черговому.
+         */
         parts: p && {
           total: p.total, hot: p.hot, kg: p.kg,
-          names: p.items.map((x) => ({ name: x.name, kg: x.kg, hot: x.hot })),
+          done: p.done, lost: p.lost, left: p.left.length,
+          names: p.items.map((x) => ({
+            name: x.name, kg: x.kg, hot: x.hot, done: x.done, lost: x.lost,
+          })),
         },
       };
     })
