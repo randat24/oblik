@@ -17,6 +17,7 @@ import { PLAN, COURSE, nextSteps, planProgress, lessonOf, tourOf } from '../lib/
 import {
   ABC, ABC_GROUPS, STATES, byGroup, abcProgress, suggestNext, cycleState, stateOf,
 } from '../lib/abc';
+import { changedOnly } from '../lib/patch';
 import { FIELDS as PRACTICE_FIELDS, statsOf, freshIdeas } from '../lib/practice';
 import { REF_GROUPS, REF_CARDS, findCards } from '../lib/ref';
 import { TOURS, tourById } from '../lib/tour';
@@ -4044,10 +4045,11 @@ function MultTab({ data, reload, toast }) {
    */
   const save = async (results, extra) => {
     const next = applyResults(prog, results, today());
+    const patch = changedOnly(data.mult || {}, next);
     setProg(next);
     setSaving(true);
     try {
-      await api('/api/health', { method: 'POST', body: { action: 'mult', mult: next } });
+      await api('/api/health', { method: 'POST', body: { action: 'mult', mult: patch } });
       if (extra) await api('/api/health', { method: 'POST', body: { action: 'goals', goals: extra } });
       await reload();
     } catch (e) {
@@ -5754,10 +5756,13 @@ function CodeTab({ data, reload, toast }) {
   const diary = statsOf(data.practice || [], today());
 
   const save = async (next) => {
+    // у посилку йде лише те, що змінилось відносно завантаженого:
+    // інакше застарілий екран перезаписав би чужий прогрес
+    const patch = changedOnly(data.code || {}, next);
     setProg(next);
     setSaving(true);
     try {
-      await api('/api/health', { method: 'POST', body: { action: 'code', code: next } });
+      await api('/api/health', { method: 'POST', body: { action: 'code', code: patch } });
       await reload();
     } catch (e) {
       toast?.(e.message);
@@ -6332,12 +6337,11 @@ function AbcTab({ data, reload, toast, canEdit }) {
   const mark = async (id) => {
     if (!canEdit || busy) return;
     setBusy(id);
-    const nextMarks = {
-      ...marks,
-      [id]: { id, state: cycleState(marks[id]?.state), date: today() },
-    };
+    // тільки те, що змінилось: увесь стан перезаписав би відмітки,
+    // поставлені тим часом з іншого пристрою
+    const patch = { [id]: { id, state: cycleState(marks[id]?.state), date: today() } };
     try {
-      await api('/api/health', { method: 'POST', body: { action: 'abc', abc: nextMarks } });
+      await api('/api/health', { method: 'POST', body: { action: 'abc', abc: patch } });
       await reload();
     } catch (e) {
       toast?.(e.message);
