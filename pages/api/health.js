@@ -1,4 +1,4 @@
-import { withAuth, currentActor, isGuest } from '../../lib/auth';
+import { withAuth, currentActor } from '../../lib/auth';
 import {
   readAll, saveDay, addFood, delFood, recalcDay, saveBody, saveGoals,
   saveProduct, lookupBarcode, saveDish, delDish, copyDay,
@@ -11,16 +11,24 @@ import {
  * в пошуку чи на дашборді — ці дані живуть тільки тут.
  */
 export default withAuth(async (req, res) => {
-  // Читання відкрите: хто має посилання, той дивиться. Запис лишається за
-  // господарем розділу — гість нічого не змінює й не видаляє.
-  const mine = !isGuest() && isOwner(currentActor());
-
-  if (req.method === 'GET') {
-    return res.json({ ...(await readAll()), canEdit: mine });
-  }
+  /*
+   * Розділ закритий цілком, а не лише на запис.
+   *
+   * Раніше читання було відкрите: маршрут стояв із `openGet`, і будь-хто
+   * без входу бачив вагу, заміри, ліки та їжу. Задум був інший — про це
+   * прямо написано в `.env.example`: «Особистий розділ /me — доступний
+   * лише цьому позивному». Код обіцянки не тримав.
+   *
+   * Тепер вимога одна для читання й запису: увійшов і саме той позивний.
+   */
+  const mine = isOwner(currentActor());
 
   if (!mine) {
-    return res.status(403).json({ error: 'Змінювати може лише ' + healthOwner() });
+    return res.status(403).json({ error: 'Цей розділ доступний лише для ' + healthOwner() });
+  }
+
+  if (req.method === 'GET') {
+    return res.json({ ...(await readAll()), canEdit: true });
   }
 
   if (req.method === 'POST') {
@@ -136,4 +144,4 @@ export default withAuth(async (req, res) => {
   }
 
   res.status(405).json({ error: 'Method not allowed' });
-}, { openGet: true });
+});
