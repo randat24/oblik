@@ -3171,7 +3171,19 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .z-name { font-size: 1rem; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .z-meta { font-size: .78rem; color: var(--muted); font-family: var(--mono); }
-.z-note { font-size: .8rem; color: var(--text-dim); }
+/* Примітка. Її пишуть заради «крихке» й «тримати сухим» — тобто заради
+   того, через що мішок і псують. Сірим дрібним текстом її не читав ніхто,
+   тож тепер це смужка з підписом, а не хвіст картки. */
+.z-note {
+  display: flex; gap: 8px; align-items: baseline;
+  padding: 7px 10px; border-radius: var(--r-sm);
+  background: var(--amber-dim); border-left: 3px solid var(--amber);
+  font-size: .84rem; color: var(--text); line-height: 1.45;
+}
+.z-note-l {
+  flex: none; font-size: .64rem; color: var(--amber);
+  letter-spacing: .08em; text-transform: uppercase;
+}
 /* Куди посилка вже доїхала. Смужка збоку, а не ще один сірий рядок:
    у дорозі посилка чи ні — це перше, що шукають на картці. */
 .z-move {
@@ -3186,6 +3198,22 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   color: var(--text-dim); font-size: .74rem;
 }
 .z-bag.hot { border-color: var(--amber); color: var(--amber); }
+/* Доїхале приглушене, а не закреслене: воно вже не потребує уваги, але
+   лишається в переліку — інакше не видно, з чого посилка складалась. */
+.z-bag.done { border-color: var(--green-dim); color: var(--green); opacity: .75; }
+.z-bag.lost {
+  border-color: var(--red); color: var(--red);
+  background: var(--red-dim); text-decoration: line-through;
+}
+
+/* Підсумок по мішках. З'являється лише коли є що сказати — саме тому
+   рядок і помітний: у звичайній картці його немає взагалі. */
+.z-bsum {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  font-size: .78rem; color: var(--muted); font-family: var(--mono);
+}
+.z-bsum .is-done { color: var(--green); }
+.z-bsum .is-lost { color: var(--red); font-weight: 700; }
 
 /* Кнопки. 46px — не з макета, а з пальця в рукавичці. */
 .z-btn {

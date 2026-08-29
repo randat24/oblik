@@ -345,15 +345,48 @@ function PackCard({ d, onEdit }) {
         </div>
       )}
       {d.parts && (
-        <div className="z-bags">
-          {d.parts.names.map((x, i) => (
-            <span className={'z-bag' + (x.hot ? ' hot' : '')} key={i}>
-              {x.name}{x.kg !== null ? ` · ${x.kg}` : ''}
-            </span>
-          ))}
+        <>
+          {/* Підсумок з'являється лише тоді, коли з мішками щось сталося:
+              «4 місця» і так стоїть у рядку вище, а другий такий самий
+              рядок над кожною карткою — це шум, у якому губиться рідкісне
+              «втрачено». */}
+          {(d.parts.done > 0 || d.parts.lost > 0) && (
+            <div className="z-bsum">
+              {d.parts.done > 0 && (
+                <span className="is-done">{d.parts.done} доїхало</span>
+              )}
+              {d.parts.left > 0 && <span>{d.parts.left} у дорозі</span>}
+              {d.parts.lost > 0 && (
+                <span className="is-lost">{d.parts.lost} втрачено</span>
+              )}
+            </div>
+          )}
+          <div className="z-bags">
+            {d.parts.names.map((x, i) => (
+              <span
+                className={'z-bag'
+                  + (x.lost ? ' lost' : x.done ? ' done' : '')
+                  + (x.hot && !x.done && !x.lost ? ' hot' : '')}
+                key={i}
+              >
+                {/* Позначка попереду назви, а не кольором самої назви:
+                    у полі екран часто бачать під сонцем, і колір там
+                    розрізняється гірше за значок. */}
+                {x.lost ? '✕ ' : x.done ? '✓ ' : ''}
+                {x.name}{x.kg !== null ? ` · ${x.kg}` : ''}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+      {/* Примітка — те, заради чого її писали: «крихке», «тримати сухим».
+          Сірим дрібним текстом її не читав ніхто. */}
+      {d.note && (
+        <div className="z-note">
+          <span className="z-note-l">Примітка</span>
+          {d.note}
         </div>
       )}
-      {d.note && <div className="z-note">{d.note}</div>}
       <button className="z-btn z-wide" onClick={onEdit}>Виправити</button>
     </div>
   );
