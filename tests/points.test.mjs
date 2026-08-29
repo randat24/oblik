@@ -126,3 +126,31 @@ test('колонки збігаються із заголовками', () => {
   assert.equal(SP_HEADERS[SPC.name], 'Назва');
   assert.equal(SP_HEADERS[SPC.active], 'Активний');
 });
+
+/* ── доступ ────────────────────────────────────────────────────────────── */
+
+test('гість не стає адміністратором через openGet', async () => {
+  /*
+   * Перевірка на адміністратора починалась із `!guest` — тобто саме
+   * гість її й оминав. Жоден маршрут не поєднував ці два прапорці, тож
+   * на практиці це не спрацьовувало, але пастка чекала: досить було
+   * додати `openGet` до адмінського маршруту, і той відкрився б мовчки.
+   */
+  process.env.APP_PASSWORD = 'таємниця';
+  process.env.SESSION_SECRET = 'x'.repeat(32);
+  const { withAuth } = await import('../lib/auth.js');
+
+  const call = (opts) => new Promise((done) => {
+    const req = { method: 'GET', headers: {}, query: {}, body: {} };
+    const res = {
+      statusCode: 200,
+      status(c) { this.statusCode = c; return this; },
+      json(b) { done({ code: this.statusCode, body: b }); return this; },
+    };
+    withAuth(async (rq, rs) => rs.json({ ok: true }), opts)(req, res);
+  });
+
+  assert.equal((await call({ adminOnly: true, openGet: true })).code, 403);
+  assert.equal((await call({ openGet: true })).code, 200, 'звичайне читання має лишитись');
+  assert.equal((await call({})).code, 401, 'без openGet вхід обовʼязковий');
+});
