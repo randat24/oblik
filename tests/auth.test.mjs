@@ -117,6 +117,36 @@ test('роль «user» зберігається — черговий не ст�
   });
 });
 
+test('невідома роль — не адміністратор', async () => {
+  // правило має падати в безпечний бік: адміністратором стає лише те, що
+  // записане адміністратором, а не «все, що не user»
+  await withEnv({ SESSION_SECRET: SECRET }, () => {
+    for (const role of ['guest', '', 'адмін', 'Admin', null]) {
+      const payload = Buffer.from(JSON.stringify({
+        t: Date.now(), c: 'Хтось', r: role, e: Date.now() + 3600000,
+      }), 'utf8').toString('base64url');
+      const sig = crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
+      assert.equal(readToken(`${payload}.${sig}`).role, 'user', `роль ${JSON.stringify(role)}`);
+    }
+  });
+});
+
+test('роль задана явно — вона й лишається', async () => {
+  // так її задають обидва місця, де видають токен: спільний пароль дає
+  // адміністратора, вхід за позивним — роль із листа «Люди»
+  await withEnv({ SESSION_SECRET: SECRET }, () => {
+    assert.equal(readToken(makeToken({ callsign: '', role: 'admin' })).role, 'admin');
+    assert.equal(readToken(makeToken({ callsign: 'Fantomas', role: 'admin' })).role, 'admin');
+  });
+});
+
+test('роль забули передати — найменша, а не найбільша', async () => {
+  await withEnv({ SESSION_SECRET: SECRET }, () => {
+    assert.equal(readToken(makeToken({ callsign: 'Хтось' })).role, 'user');
+    assert.equal(readToken(makeToken()).role, 'user');
+  });
+});
+
 /* ── порівняння ключів ─────────────────────────────────────────────────── */
 
 test('sameSecret: однакові — так, різні — ні', async () => {
