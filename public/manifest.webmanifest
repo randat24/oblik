@@ -1,0 +1,11 @@
+{
+  "name": "Облік майна",
+  "short_name": "Облік",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#12140f",
+  "theme_color": "#12140f",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

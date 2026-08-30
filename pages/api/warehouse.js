@@ -2,16 +2,30 @@ import { withAuth } from '../../lib/auth';
 import {
   readSheet,
   writeCell,
+  writeCells,
+  writeRow,
   appendRow,
   deleteRow,
+  insertRowAt,
   todayStr,
+  fromSerial,
   WAREHOUSE_PRIORITIES,
   WAREHOUSE_STATUS_OPTIONS,
 } from '../../lib/sheets';
+import { logChange } from '../../lib/log';
+import { readAudits, STATUS as AUDIT_STATUS } from '../../lib/audit';
+import { readLines } from '../../lib/boxes';
+
+const FIELD_LABELS = {
+  code: 'Код', priority: 'Пріоритет', name: 'Назва', contents: 'Вміст',
+  location: 'Розташування', photoUrl: 'Фото', status: 'Статус',
+  checkedDate: 'Перевірено', notes: 'Примітки',
+};
 
 const SHEET = 'Склад';
 
-// 0-based індекси колонок листа "Склад"
+// 0-based індекси колонок листа "Склад".
+// «Додано» і «Оновлено» дописані в кінець, щоб не зсувати наявні дані
 const COLS = {
   code: 0,
   priority: 1,
@@ -22,8 +36,42 @@ const COLS = {
   status: 6,
   checkedDate: 7,
   notes: 8,
+  created: 9,
+  updated: 10,
 };
-const FIELD_ORDER = ['code', 'priority', 'name', 'contents', 'location', 'photoUrl', 'status', 'checkedDate', 'notes'];
+
+const HEADERS = [
+  'Код', 'Пріоритет', 'Назва', 'Вміст', 'Розташування', 'Фото',
+  'Статус', 'Перевірено', 'Примітки', 'Додано', 'Оновлено',
+];
+
+/** Лист міг бути створений до появи нових колонок — дописуємо заголовки */
+async function withHeaders(values) {
+  if ((values[0] || []).length >= HEADERS.length) return values;
+  await writeRow(SHEET, 1, HEADERS);
+  const copy = [...values];
+  copy[0] = [...HEADERS];
+  return copy;
+}
+
+/**
+ * У ящиків, доданих до появи колонки «Додано», дата створення порожня.
+ * «Перевірено» застосунок ставив саме в момент створення, тож переносимо її.
+ */
+async function backfillCreated(values) {
+  const ups = [];
+  values.slice(1).forEach((row, i) => {
+    const created = (row?.[COLS.created] || '').toString().trim();
+    const checked = (row?.[COLS.checkedDate] || '').toString().trim();
+    const code = (row?.[COLS.code] || '').toString().trim();
+    if (!created && checked && code) {
+      ups.push({ row: i + 2, col: COLS.created + 1, value: checked });
+      if (row) row[COLS.created] = checked;
+    }
+  });
+  if (ups.length) await writeCells(SHEET, ups, { raw: true });
+  return values;
+}
 
 function parseItems(values) {
   if (!values || values.length < 2) return [];
@@ -31,7 +79,7 @@ function parseItems(values) {
   const items = [];
   rows.forEach((rawRow, i) => {
     const row = [...rawRow];
-    while (row.length < 9) row.push('');
+    while (row.length < HEADERS.length) row.push('');
     if (row.join('').trim() === '') return;
     items.push({
       row: i + 2,
@@ -44,6 +92,8 @@ function parseItems(values) {
       status: (row[COLS.status] || '').toString(),
       checkedDate: (row[COLS.checkedDate] || '').toString(),
       notes: (row[COLS.notes] || '').toString(),
+      created: fromSerial(row[COLS.created]),
+      updated: fromSerial(row[COLS.updated]),
     });
   });
   return items;
@@ -65,25 +115,53 @@ function nextCode(items) {
   return candidate;
 }
 
+/** Коли склад звіряли востаннє */
+async function auditInfo() {
+  try {
+    const audits = await readAudits();
+    const mine = audits.filter((a) => a.scope === SHEET);
+    return {
+      open: mine.find((a) => a.status === AUDIT_STATUS.open) || null,
+      last: mine.filter((a) => a.status === AUDIT_STATUS.done).slice(-1)[0] || null,
+    };
+  } catch {
+    return { open: null, last: null };
+  }
+}
+
 export default withAuth(async (req, res) => {
   if (req.method === 'GET') {
-    const values = await readSheet(SHEET);
+    const [values, audit, moves] = await Promise.all([
+      backfillCreated(await withHeaders(await readSheet(SHEET))),
+      auditInfo(),
+      readLines().then((d) => d.moves).catch(() => []),
+    ]);
     return res.json({
       items: parseItems(values),
       priorities: WAREHOUSE_PRIORITIES,
       statusOptions: WAREHOUSE_STATUS_OPTIONS,
+      audit,
+      moves: moves.slice(-8).reverse(),
     });
   }
 
   if (req.method === 'POST') {
+    if (req.body.action === 'restore') {
+      const { row, values: rowValues } = req.body;
+      await insertRowAt(SHEET, row, rowValues);
+      await logChange({ sheet: SHEET, row, action: 'Відновлення', after: (rowValues || []).join(' | ') });
+      const restored = await readSheet(SHEET);
+      return res.json({ items: parseItems(restored) });
+    }
+
     const { priority, name, contents, location, notes, photoUrl } = req.body;
     if (!name) return res.status(400).json({ error: 'Не вказано назву' });
 
-    const values = await readSheet(SHEET);
+    const values = await withHeaders(await readSheet(SHEET));
     const items = parseItems(values);
     const code = nextCode(items);
 
-    const row = new Array(9).fill('');
+    const row = new Array(HEADERS.length).fill('');
     row[COLS.code] = code;
     row[COLS.priority] = priority || '3';
     row[COLS.name] = name;
@@ -93,25 +171,47 @@ export default withAuth(async (req, res) => {
     row[COLS.status] = 'На складі';
     row[COLS.checkedDate] = todayStr();
     row[COLS.notes] = notes || '';
+    row[COLS.created] = todayStr();
+    row[COLS.updated] = todayStr();
 
-    await appendRow(SHEET, row);
+    await appendRow(SHEET, row, { raw: true });
+    await logChange({ sheet: SHEET, action: 'Додано ящик', field: code, after: `${code} — ${name}` });
     const updated = await readSheet(SHEET);
     return res.json({ items: parseItems(updated), code });
   }
 
   if (req.method === 'PATCH') {
-    const { row, field, value } = req.body;
+    const { row, field, value, prev, code } = req.body;
     const idx = COLS[field];
-    if (idx === undefined) return res.status(400).json({ error: `Невідоме поле: ${field}` });
+    if (idx === undefined || !FIELD_LABELS[field]) {
+      return res.status(400).json({ error: `Невідоме поле: ${field}` });
+    }
+    const today = todayStr();
     await writeCell(SHEET, row, idx + 1, value);
-    return res.json({ ok: true });
+    await writeCell(SHEET, row, COLS.updated + 1, today, { raw: true });
+    // код у записі журналу дає змогу знайти всю історію конкретного ящика
+    await logChange({
+      sheet: SHEET, row, action: 'Редагування',
+      field: code ? `${code} · ${FIELD_LABELS[field]}` : FIELD_LABELS[field],
+      before: prev, after: value,
+    });
+    return res.json({ ok: true, updated: today });
   }
 
   if (req.method === 'DELETE') {
     const { row } = req.body;
+
+    // зберігаємо рядок, щоб можна було скасувати видалення
+    const before = await readSheet(SHEET);
+    const deleted = before[row - 1] || [];
+
     await deleteRow(SHEET, row);
+    await logChange({
+      sheet: SHEET, row, action: 'Видалено ящик',
+      field: (deleted[COLS.code] || '').toString(), before: deleted.join(' | '),
+    });
     const updated = await readSheet(SHEET);
-    return res.json({ items: parseItems(updated) });
+    return res.json({ items: parseItems(updated), deleted });
   }
 
   res.status(405).json({ error: 'Method not allowed' });

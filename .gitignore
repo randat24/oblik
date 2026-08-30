@@ -3,3 +3,6 @@ node_modules
 .env.local
 .env
 .DS_Store
+
+# зібрана пісочниця React — робиться з scripts/build-sandbox.mjs при кожній збірці
+public/vendor/
