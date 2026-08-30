@@ -1,4 +1,5 @@
 import { withAuth } from '../../lib/auth';
+import { readAudits, STATUS as AUDIT_STATUS } from '../../lib/audit';
 import {
   SHEET_CONFIGS,
   DEFAULT_STATUS_OPTIONS,
@@ -8,6 +9,20 @@ import {
   distinctValues,
   mergeWithDefaults,
 } from '../../lib/sheets';
+
+/** Коли цей лист звіряли востаннє — щоб було видно на самій сторінці */
+async function auditInfo(name) {
+  try {
+    const audits = await readAudits();
+    const mine = audits.filter((a) => a.scope === name);
+    return {
+      open: mine.find((a) => a.status === AUDIT_STATUS.open) || null,
+      last: mine.filter((a) => a.status === AUDIT_STATUS.done).slice(-1)[0] || null,
+    };
+  } catch {
+    return { open: null, last: null };
+  }
+}
 
 export default withAuth(async (req, res) => {
   const { name } = req.query;
@@ -19,7 +34,9 @@ export default withAuth(async (req, res) => {
         name: c.name,
         kind: c.kind,
         noIssue: !!c.noIssue,
+        hideStatus: !!c.hideStatus,
       })),
+      // вкладку «Здоровʼя» бачить лише її власник; решті її просто немає
     });
   }
 
@@ -54,10 +71,22 @@ export default withAuth(async (req, res) => {
   const whereOptions = distinctValues(dataRows, cols.where);
   const whoOptions = distinctValues(dataRows, cols.who);
 
+  // Колонки, де значення повторюються (підрозділ, місце, тип пристрою), — це
+  // насправді довідники. Підказуємо вже вжите, щоб не вигадувати написання щоразу.
+  const masked = new Set(cfg.maskPasswords ? cols.maskCols : []);
+  const suggestions = {};
+  headers.forEach((_, i) => {
+    if (i === 0 || masked.has(i) || i === cols.status || i === cols.type || i === cols.date) return;
+    const vals = distinctValues(dataRows, i);
+    const filled = dataRows.filter((r) => (r[i] || '').toString().trim()).length;
+    if (vals.length >= 1 && vals.length <= 40 && vals.length * 2 <= filled) suggestions[i] = vals;
+  });
+
   res.json({
     name,
     kind: cfg.kind,
     noIssue: !!cfg.noIssue,
+    hideStatus: !!cfg.hideStatus,
     maskCols: cfg.maskPasswords ? cols.maskCols : [],
     headers,
     items,
@@ -66,5 +95,7 @@ export default withAuth(async (req, res) => {
     typeOptions,
     whereOptions,
     whoOptions,
+    suggestions,
+    audit: await auditInfo(name),
   });
 });
