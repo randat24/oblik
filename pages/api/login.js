@@ -1,4 +1,6 @@
-import { setSessionCookie, clearSessionCookie, session, isChief } from '../../lib/auth';
+import {
+  setSessionCookie, clearSessionCookie, session, isChief, signingReady,
+} from '../../lib/auth';
 import { readPeople, verifyPin } from '../../lib/people';
 
 export default async function handler(req, res) {
@@ -33,6 +35,20 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!required) return res.json({ ok: true });
+
+  /*
+   * Пароль просять, а підписати сесію нічим.
+   *
+   * Мовчки підписати відомим рядком означало б видати всім робочий на
+   * вигляд вхід, який підробляється з вихідників. Краще не пустити
+   * нікого й сказати, чого бракує: це помітно за хвилину, а не за пів
+   * року.
+   */
+  if (!signingReady()) {
+    return res.status(500).json({
+      error: 'SESSION_SECRET не задано — вхід вимкнено. Додайте змінну в налаштуваннях і зробіть новий деплой.',
+    });
+  }
 
   const { callsign, pin, password } = req.body || {};
 
