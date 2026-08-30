@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 
 import {
   makeToken, readToken, sameSecret, keyFrom, parseCookies,
-  session, withAuth, windowEnd, isChief, chiefName, currentActor,
+  session, withAuth, windowEnd, isChief, chiefName, currentActor, signingReady,
   WINDOW_HOURS, COOKIE_NAME,
 } from '../lib/auth.js';
 
@@ -144,6 +144,50 @@ test('роль забули передати — найменша, а не на�
   await withEnv({ SESSION_SECRET: SECRET }, () => {
     assert.equal(readToken(makeToken({ callsign: 'Хтось' })).role, 'user');
     assert.equal(readToken(makeToken()).role, 'user');
+  });
+});
+
+/* ── без ключа підпису ─────────────────────────────────────────────────── */
+
+test('без SESSION_SECRET підпису немає — жоден токен не приймається', async () => {
+  /*
+   * Раніше тут стояв запасний рядок із самого репозиторію: без змінної
+   * сесії підписувались ним, і підробити адмінський токен міг будь-хто,
+   * хто бачив вихідники. Вхід при цьому працював як завжди.
+   */
+  const token = await withEnv({ SESSION_SECRET: SECRET }, () => makeToken({ callsign: 'Fantomas', role: 'admin' }));
+  await withEnv({ SESSION_SECRET: undefined }, () => {
+    assert.equal(signingReady(), false);
+    assert.equal(readToken(token), null);
+    assert.throws(() => makeToken({ callsign: 'Хтось', role: 'admin' }), /SESSION_SECRET/);
+  });
+});
+
+test('рядок-заглушка з репозиторію ключем не вважається', async () => {
+  await withEnv({ SESSION_SECRET: 'change-me-in-env' }, () => {
+    assert.equal(signingReady(), false);
+    assert.throws(() => makeToken({ callsign: 'Хтось' }), /SESSION_SECRET/);
+  });
+});
+
+test('порожній рядок і пробіли ключем не вважаються', async () => {
+  for (const bad of ['', '   ']) {
+    await withEnv({ SESSION_SECRET: bad }, () => assert.equal(signingReady(), false));
+  }
+});
+
+test('короткий ключ усе ж працює — інакше правка замкнула б робочий вхід', async () => {
+  // попереджаємо в журналі, але не зачиняємо двері перед тим, у кого
+  // ключ уже стоїть: замкнути й загубити ключ — не безпека
+  await withEnv({ SESSION_SECRET: 'abc' }, () => {
+    const quiet = console.warn;
+    console.warn = () => {};
+    try {
+      assert.equal(signingReady(), true);
+      assert.equal(readToken(makeToken({ callsign: 'Fantomas', role: 'admin' })).role, 'admin');
+    } finally {
+      console.warn = quiet;
+    }
   });
 });
 
