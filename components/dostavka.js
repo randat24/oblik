@@ -365,7 +365,9 @@ function DeliveryCard({ item, stages, onMove, onPart, onLose, onEdit, onDelete }
     // не тому, кому збирали, це видно з одного погляду
     ['Пілот', item.pilot],
     ['Прийняв', item.taker],
-    ['Примітка', item.note],
+    // Примітки серед цих рядків більше немає: вона стоїть окремою смугою
+    // нижче. «Крихке» й «тримати сухим» не мають читатися тим самим сірим,
+    // що й позивний того, хто здав.
   ].filter(([, v]) => v);
   // списану посилку не рухають далі: наступного етапу в неї немає
   const gone = item.isLost;
@@ -486,6 +488,13 @@ function DeliveryCard({ item, stages, onMove, onPart, onLose, onEdit, onDelete }
               <div className="drow-v">{v}</div>
             </div>
           ))}
+        </div>
+      )}
+
+      {item.note && (
+        <div className="note">
+          <span className="note-l">Примітка</span>
+          {item.note}
         </div>
       )}
 
