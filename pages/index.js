@@ -15,7 +15,7 @@ import {
   api, setOnUnauthed, saveFailed, todayStr, statusColor, photoSrc,
   ToastCtx, useToast, ToastHost, useToasts, IconSearch, IconQr, parseCode, hhmm,
   QrScanner, Stat, Modal, PhotoField, useViewMode, ViewToggle, TableWrap,
-  DataTable, Totals, countBy, Combo, SearchBox, useNewRecordHotkey,
+  DataTable, Totals, countBy, Combo, SearchBox, useNewRecordHotkey, useGrow,
   bagWord, dayWord,
 } from '../components/base';
 import { AuditView } from '../components/reviziya';
@@ -1726,8 +1726,10 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
               </div>
               <div className="fields">
                 {r.boxName && <span><span className="k">{r.boxKind === 'комплект' ? 'Комплект' : 'Ящик'}:</span> {r.boxName}{'  ·  '}</span>}
-                {r.location && <span><span className="k">Де:</span> {r.location}{'  ·  '}</span>}
-                {r.note && <span><span className="k">Примітка:</span> {r.note}</span>}
+                {/* крапку перед приміткою не ставимо: у неї своя смужка,
+                    і роздільник поруч читається як загублений хвіст */}
+                {r.location && <span><span className="k">Де:</span> {r.location}{r.note ? ' ' : ''}</span>}
+                {r.note && <span className="note-in">{r.note}</span>}
               </div>
               <div className="actions">
                 <button
@@ -3064,6 +3066,7 @@ function stockGroups(items) {
 }
 
 function StockView({ setState, focusId, onClearFocus, onOpen }) {
+  const grow = useGrow();
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState(null);
@@ -3224,7 +3227,7 @@ function StockView({ setState, focusId, onClearFocus, onOpen }) {
           <div className="drow">
             <span className="drow-k">Опис</span>
             <span className="drow-v">
-              <textarea className="ghost" rows={2} defaultValue={it.description}
+              <textarea className="ghost" rows={2} defaultValue={it.description} {...grow}
                 placeholder="що це, що всередині"
                 onBlur={(e) => save(it.row, 'description', e.target.value, it.description)} />
             </span>
@@ -3251,10 +3254,12 @@ function StockView({ setState, focusId, onClearFocus, onOpen }) {
             <span className="drow-k">Списано</span>
             <span className="drow-v stock-ro">{it.writtenOff} {it.unit}</span>
           </div>
-          <div className="drow">
+          {/* Написана примітка світиться, порожня — ні: акцент, що стоїть
+              завжди, за тиждень перестають помічати. */}
+          <div className={'drow' + (it.notes ? ' has-note' : '')}>
             <span className="drow-k">Примітки</span>
             <span className="drow-v">
-              <textarea className="ghost" rows={1} defaultValue={it.notes} placeholder="—"
+              <textarea className="ghost" rows={1} defaultValue={it.notes} placeholder="—" {...grow}
                 onBlur={(e) => save(it.row, 'notes', e.target.value, it.notes)} />
             </span>
           </div>
@@ -3775,6 +3780,7 @@ function BoxContents({ box, lines, loading, title = 'Вміст', addLabel = '+ 
 
 /* ---------- Склад ---------- */
 function WarehouseView({ setState, focusCode, onOpen }) {
+  const grow = useGrow();
   const [data, setData] = useState(null);
   const [boxes, setBoxes] = useState(null); // вміст ящиків окремими позиціями
   const [q, setQ] = useState('');
@@ -4023,7 +4029,10 @@ function WarehouseView({ setState, focusCode, onOpen }) {
             { key: 'prio', title: 'Пріор.', cls: 'col-mono col-num', render: (it) => it.priority || '—' },
             { key: 'created', title: 'Додано', cls: 'col-mono', render: (it) => it.created || '—' },
             { key: 'updated', title: 'Оновлено', cls: 'col-mono', render: (it) => it.updated || '—' },
-            { key: 'notes', title: 'Примітки', render: (it) => it.notes || '—' },
+            {
+              key: 'notes', title: 'Примітки',
+              render: (it) => (it.notes ? <span className="note-in">{it.notes}</span> : '—'),
+            },
           ]}
           rows={list.map((it) => ({ key: it.row, item: it }))}
           onPick={(it) => {
@@ -4077,11 +4086,20 @@ function WarehouseView({ setState, focusCode, onOpen }) {
                 {[
                   ['Розташування', 'location'], ['Примітки', 'notes'],
                 ].map(([label, field]) => (
-                  <div className="drow" key={field}>
+                  <div className={'drow' + (field === 'notes' && it.notes ? ' has-note' : '')} key={field}>
                     <span className="drow-k">{label}</span>
                     <span className="drow-v">
-                      <input className="ghost" type="text" defaultValue={it[field]} placeholder="—"
-                        onBlur={(e) => e.target.value !== it[field] && save(it.row, field, e.target.value, it[field], it.code)} />
+                      {/* Примітка — поле, що росте: в один рядок вона
+                          обрізалась посеред слова, і підсвічений хвіст
+                          читався гірше, ніж сірий цілий. Розташування
+                          лишається рядком: воно й є коротким. */}
+                      {field === 'notes' ? (
+                        <textarea className="ghost" rows={1} defaultValue={it[field]} placeholder="—" {...grow}
+                          onBlur={(e) => e.target.value !== it[field] && save(it.row, field, e.target.value, it[field], it.code)} />
+                      ) : (
+                        <input className="ghost" type="text" defaultValue={it[field]} placeholder="—"
+                          onBlur={(e) => e.target.value !== it[field] && save(it.row, field, e.target.value, it[field], it.code)} />
+                      )}
                     </span>
                   </div>
                 ))}

@@ -682,6 +682,29 @@ export function SearchBox({ value, onChange, placeholder, autoFocus }) {
 }
 
 /** Ctrl/Cmd+N — створити запис у поточній вкладці */
+/**
+ * Поле, що росте під текст.
+ *
+ * `rows` у textarea — це висота на початку, а не «скільки видно». Примітка
+ * на два рядки лишалась обрізаною посеред слова: підсвітити її ми
+ * підсвітили, а прочитати однаково не можна.
+ *
+ * Сучасні браузери вміють це самі (`field-sizing: content` у стилях), але
+ * не всі й не скрізь, а сторінку відкривають із того телефона, який є.
+ * Тому висоту доганяємо й руками — це кілька рядків, зате однаково всюди.
+ */
+export const useGrow = () => {
+  const fit = (el) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  };
+  return {
+    ref: (el) => fit(el),
+    onInput: (e) => fit(e.target),
+  };
+};
+
 export function useNewRecordHotkey(open) {
   useEffect(() => {
     const onKey = (e) => {

@@ -386,8 +386,17 @@ input:focus, select:focus, textarea:focus {
 .audit-res-diff { border-left-color: var(--amber); }
 .audit-res-ok { border-left-color: var(--green); }
 .audit-res-skip { border-left-color: var(--line); }
-.audit-note { margin-top: 4px; font-size: .78rem; color: var(--text-dim); }
-.audit-note-empty { color: var(--muted); font-style: italic; }
+/* Чому речі немає на місці — те саме, що примітка: ця одна фраза і є
+   результат обходу. Решта рядка — назва й номер, вони й так відомі. */
+.audit-note {
+  margin-top: 4px; border-left: 2px solid var(--amber); padding-left: 6px;
+  font-size: .78rem; color: var(--amber);
+}
+/* А ось «причину не вказали» акценту не отримує: підсвічувати порожнє
+   місце означає привчити не помічати підсвітку. */
+.audit-note-empty {
+  border-left-color: var(--line); color: var(--muted); font-style: italic;
+}
 .audit-by { margin-top: 3px; font-family: var(--mono); font-size: .7rem; color: var(--muted); }
 
 @media (max-width: 560px) {
@@ -693,6 +702,44 @@ select.ghost { cursor: pointer; }
 }
 .drow-v { flex: 1; min-width: 0; }
 
+/* ---------- Примітка ----------
+   Примітку пишуть заради «крихке», «тримати сухим», «без кофра не влазить»
+   — тобто заради того, через що річ і псують. Скрізь вона була сірим
+   дрібним курсивом у хвості картки, і не читав її ніхто.
+
+   Тепер акцент однаковий у всьому застосунку: бурштин зліва. Форми три,
+   бо контексти різні, але колір і сенс одні — «тут написали те, чого не
+   видно з самих даних».
+
+   Головне правило: акцент з'являється лише тоді, коли примітку справді
+   написали. Порожня примітка кричати не повинна — інакше акцент
+   знеціниться, і його знову перестануть помічати. */
+
+/* Смуга — де примітка стоїть окремим блоком картки */
+.note {
+  display: flex; gap: 8px; align-items: baseline;
+  padding: 7px 10px; border-radius: var(--r-sm);
+  background: var(--amber-dim); border-left: 3px solid var(--amber);
+  font-size: .84rem; color: var(--text); line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.note-l {
+  flex: none; font-size: .64rem; color: var(--amber);
+  letter-spacing: .08em; text-transform: uppercase;
+}
+
+/* Рядок — де смуга розірвала б щільний список: журнал, історія, вміст
+   ящика, результати пошуку */
+.note-in {
+  border-left: 2px solid var(--amber); padding-left: 6px;
+  color: var(--amber); font-style: normal; overflow-wrap: anywhere;
+}
+
+/* Поле, яке правлять на місці: смугу тут не поставиш, не зламавши
+   введення, тож акцент бере на себе сам рядок */
+.drow.has-note { border-left: 3px solid var(--amber); padding-left: 7px; }
+.drow.has-note .drow-k { color: var(--amber); }
+
 label {
   display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .04em;
   color: var(--muted); margin-bottom: 4px;
@@ -841,7 +888,9 @@ label {
   margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline;
   font-size: 0.82rem; color: var(--text-dim);
 }
-.act-note { color: var(--muted); font-style: italic; }
+.act-note {
+  border-left: 2px solid var(--amber); padding-left: 6px; color: var(--amber);
+}
 .act-photo {
   flex: 0 0 auto; width: 62px; height: 62px; object-fit: cover;
   border-radius: var(--r-sm); cursor: zoom-in; background: var(--panel-2);
@@ -926,18 +975,25 @@ label {
 .hist-in { color: var(--green); font-weight: 700; }
 .hist-out { color: var(--red); font-weight: 700; }
 .hist-who { color: var(--text); }
-.hist-note { color: var(--muted); font-style: italic; }
+.hist-note {
+  border-left: 2px solid var(--amber); padding-left: 6px; color: var(--amber);
+}
 .hist-left { margin-left: auto; color: var(--muted); }
 .hist-photo {
   width: 34px; height: 34px; object-fit: cover; border-radius: 4px;
   border: 1px solid var(--line); cursor: zoom-in;
 }
 
-/* Багаторядкові поля на картці — довгий опис має бути видно повністю */
+/* Багаторядкові поля на картці — довгий опис має бути видно повністю.
+   `rows` задає лише початкову висоту, тож примітка на два рядки лишалась
+   обрізаною: підсвітили її, а прочитати все одно не можна. `field-sizing`
+   вирівнює висоту під вміст; там, де його ще немає, висоту доганяє
+   `useGrow` у `components/base`. */
 textarea.ghost {
   width: 100%; background: transparent; border: 1px solid transparent;
   color: var(--text); padding: 3px 6px; border-radius: var(--r-sm);
   font-family: var(--sans); font-size: 0.92rem; resize: vertical; min-height: 30px;
+  field-sizing: content;
 }
 textarea.ghost:hover { border-color: var(--line-soft); background: var(--panel-2); }
 textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); outline: none; }
@@ -1150,7 +1206,10 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   flex: 1 1 100%; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   margin: 0 0 3px 2px;
 }
-.box-line-note { font-size: .74rem; color: var(--muted); overflow-wrap: anywhere; }
+.box-line-note {
+  border-left: 2px solid var(--amber); padding-left: 6px;
+  font-size: .74rem; color: var(--amber); overflow-wrap: anywhere;
+}
 
 /* Скільки на місці — головне число позиції */
 .box-left {
@@ -3171,19 +3230,6 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .z-name { font-size: 1rem; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .z-meta { font-size: .78rem; color: var(--muted); font-family: var(--mono); }
-/* Примітка. Її пишуть заради «крихке» й «тримати сухим» — тобто заради
-   того, через що мішок і псують. Сірим дрібним текстом її не читав ніхто,
-   тож тепер це смужка з підписом, а не хвіст картки. */
-.z-note {
-  display: flex; gap: 8px; align-items: baseline;
-  padding: 7px 10px; border-radius: var(--r-sm);
-  background: var(--amber-dim); border-left: 3px solid var(--amber);
-  font-size: .84rem; color: var(--text); line-height: 1.45;
-}
-.z-note-l {
-  flex: none; font-size: .64rem; color: var(--amber);
-  letter-spacing: .08em; text-transform: uppercase;
-}
 /* Куди посилка вже доїхала. Смужка збоку, а не ще один сірий рядок:
    у дорозі посилка чи ні — це перше, що шукають на картці. */
 .z-move {

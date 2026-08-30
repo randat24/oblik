@@ -382,8 +382,8 @@ function PackCard({ d, onEdit }) {
       {/* Примітка — те, заради чого її писали: «крихке», «тримати сухим».
           Сірим дрібним текстом її не читав ніхто. */}
       {d.note && (
-        <div className="z-note">
-          <span className="z-note-l">Примітка</span>
+        <div className="note">
+          <span className="note-l">Примітка</span>
           {d.note}
         </div>
       )}
