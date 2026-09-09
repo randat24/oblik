@@ -18,6 +18,7 @@ import {
   DataTable, Totals, countBy, Combo, SearchBox, useNewRecordHotkey, useGrow,
   bagWord, dayWord,
 } from '../components/base';
+import { toCsv, csvName, BOM } from '../lib/csv';
 import { AuditView } from '../components/reviziya';
 import { DeliveryView } from '../components/dostavka';
 
@@ -1894,6 +1895,26 @@ function PhotoLightbox({ act, onClose }) {
 
 /* ---------- Звичайні листи ---------- */
 /** Колонки, що йдуть у тіло картки: без назви, номера, серійника й статусу — вони вже в шапці */
+/**
+ * Віддати людині файл.
+ *
+ * Живе тут, поруч із єдиним, хто цим користується. Переїде в спільну
+ * абетку тоді, коли зʼявиться другий, — не раніше: модуль «різне» росте
+ * саме з таких переїздів наперед.
+ */
+function download(filename, text) {
+  const blob = new Blob([BOM + text], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // посилання живе, доки браузер не забере файл; секунди вистачає
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function bodyCols(headers, cols, snIdx, idIdx, tagCols = []) {
   const skip = new Set([nameOf(cols), snIdx, idIdx, cols.status, ...tagCols].filter((i) => i >= 0));
   return headers.map((_, i) => i).filter((i) => !skip.has(i));
@@ -2232,6 +2253,23 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
           </button>
         )}
         <ViewToggle mode={mode} onChange={setMode} />
+        {/* Вивантаження — не копія бази, а перелік, який комусь віддають:
+            у штаб, у сусідній підрозділ, у папери. Тому й береться те, що
+            зараз на екрані, разом із фільтром: людина спершу відбирає
+            потрібне очима, а вже потім натискає. */}
+        <button
+          className="btn"
+          title={list.length === items.length
+            ? `Зберегти файлом усі записи (${items.length})`
+            : `Зберегти файлом те, що зараз відібрано: ${list.length} з ${items.length}`}
+          onClick={() => {
+            const csv = toCsv(headers, list.map((it) => it.values), { skip: maskCols || [] });
+            download(csvName(name, todayStr()), csv);
+            toast('Вивантажено записів: ' + list.length);
+          }}
+        >
+          Експорт
+        </button>
         <button className="btn" onClick={() => setAdding(true)}>+ Додати запис</button>
       </div>
 
