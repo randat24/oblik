@@ -22,6 +22,7 @@ import { QUESTIONS } from '../lib/recall.js';
 import { PATHS } from '../lib/paths.js';
 import { KINDS, AI_CHECK, STARTERS } from '../lib/notes.js';
 import { TOOL_LESSONS } from '../lib/tools.js';
+import { ERRORS } from '../lib/errors.js';
 
 /** Усе, що сторінка показує людині як текст, — з адресою, де шукати */
 const texts = [];
@@ -46,6 +47,11 @@ TOURS.forEach((x) => {
   (x.steps || []).forEach((s) => put(`розбір ${x.id}`, s.t, s.d));
 });
 QUESTIONS.forEach((q) => put(`повторення ${q.lesson}`, q.ask, q.why, ...q.options));
+ERRORS.forEach((e) => {
+  // `msg`, `also`, `bad` і `good` — чужий текст і код, розмітки в них немає
+  put(`помилка ${e.id}`, e.means, e.find);
+  e.causes.forEach((c) => put(`помилка ${e.id}`, c.c, c.fix));
+});
 Object.entries(PATHS).forEach(([id, p]) => put(`шлях ${id}`, p.know));
 KINDS.forEach((k) => put(`зошит ${k.key}`, k.label, k.about, k.askLab, k.askEx, k.answerLab, k.answerEx));
 put('зошит', ...AI_CHECK);

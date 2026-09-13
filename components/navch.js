@@ -36,6 +36,9 @@ import {
 } from '../lib/abc';
 import { pathOf, hasWhere, coverage } from '../lib/paths';
 import {
+  ERR_GROUPS, ERRORS, matchError, findErrors, errorStats, errorsOfTopic,
+} from '../lib/errors';
+import {
   KINDS, SOURCES, AI_CHECK, STARTERS, KIND_KEYS,
   findNotes, noteStats, byTopic, kindBy, sourceBy, topicLabel, noteError,
   isOpen as noteOpen,
@@ -1923,6 +1926,20 @@ function RecallRoom({ prog, onBack, onSave }) {
 
 const lessonTitle = (id) => CODE_LESSONS.find((l) => l.id === id)?.title || id;
 
+/*
+ * Чи настала черга цього уроку.
+ *
+ * Каталог помилок і «Абетка» ведуть в уроки, а уроки відкриваються по
+ * черзі — і новачок, який щойно спіткнувся об `undefined`, натискав
+ * «Урок · Коли ламається» й отримував «цей урок ще закритий». Дорога в
+ * нікуди гірша за її відсутність: тепер видно, що урок є, але його черга
+ * попереду, і натиснути нема на що.
+ */
+const lessonLocked = (prog, id) => {
+  const i = CODE_LESSONS.findIndex((l) => l.id === id);
+  return i < 0 || i > openUpTo(prog || {});
+};
+
 /* ---------- Інструменти ----------
    Уроки курсу перевіряються запуском коду. Ці — ні, і не можуть: те, що
    тут відбувається, відбувається в чужому терміналі, на чужому
@@ -2181,6 +2198,7 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
      */
     setTarget(jump);
     if (jump.lesson) { setMode('learn'); setOpenId(jump.lesson); }
+    else if (jump.err) setMode('errors');
     else if (jump.note) setMode('notes');
     else if (jump.tool) setMode('tools');
     else if (jump.ref) setMode('ref');
@@ -2194,6 +2212,7 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
   const rec = recallStats(prog);
   const tools = toolStats(prog);
   const notes = noteStats(data.notes || []);
+  const errs = errorStats();
 
   const save = async (next) => {
     // у посилку йде лише те, що змінилось відносно завантаженого:
@@ -2319,6 +2338,39 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
     return <TourBook start={target?.tour} onBack={() => { setTarget(null); setMode('learn'); }} />;
   }
 
+  if (mode === 'errors') {
+    return (
+      <ErrBook
+        start={target?.err}
+        locked={(id) => lessonLocked(prog, id)}
+        onBack={() => { setTarget(null); setMode('learn'); }}
+        // урок і картку відкриваємо тим самим шляхом, що й з «Абетки»
+        go={(what, id) => {
+          if (what === 'lesson') { setTarget(null); setOpenId(id); setMode('learn'); }
+          if (what === 'ref') { setTarget({ ref: id }); setMode('ref'); }
+        }}
+        /*
+         * Каталог пояснює, зошит памʼятає.
+         *
+         * Розібрана й записана своїми словами помилка вдруге не забирає
+         * вечір — але писати її з нуля ніхто не буде. Тому форма
+         * відкривається вже з текстом помилки й темою: лишається
+         * дописати, що саме було у вас.
+         */
+        onNote={(e) => {
+          setTarget({
+            note: '',
+            draft: {
+              kind: 'err', ask: e.msg, topic: e.topic || '',
+              tags: e.tags.join(', '), src: '',
+            },
+          });
+          setMode('notes');
+        }}
+      />
+    );
+  }
+
   if (mode === 'notes') {
     return (
       <Notebook
@@ -2326,6 +2378,7 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
         canEdit={data.canEdit}
         // з «Абетки» приходять по темі: зошит одразу показує лише її
         start={target?.note}
+        draft={target?.draft}
         onBack={() => { setTarget(null); setMode('learn'); }}
         onAdd={async (note) => {
           await api('/api/health', { method: 'POST', body: { action: 'note', note } });
@@ -2427,6 +2480,19 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
         <span className="cd-refb-d">
           {TOURS.length} розборів справжніх файлів «Обліку» — рядок за рядком,
           із поясненням, чому саме так
+        </span>
+      </button>
+
+      {/* Червоний рядок у консолі новачок читає як вирок. Насправді це
+          коротке речення про конкретну річ — і речень цих небагато.
+          Стоїть одразу після повторення, бо потрібен не тоді, коли
+          вчаться, а тоді, коли щось не працює. */}
+      <button className="cd-refb is-errors" onClick={() => setMode('errors')}>
+        <span className="cd-refb-t">Чому я отримую цю помилку</span>
+        <span className="cd-refb-d">
+          {errs.total} {plural(errs.total, 'розібрана', 'розібрані', 'розібраних')} {plural(errs.total, 'помилка', 'помилки', 'помилок')}:
+          що означає, звідки береться, як виглядає полагодженою.
+          Вставте червоний рядок — знайдеться за ним
         </span>
       </button>
 
@@ -3004,7 +3070,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry, why:
  * Тема без жодного шляху не мовчить, а каже про це вголос: список має
  * показувати, чого в застосунку ще немає, а не робити вигляд, що є все.
  */
-function AbcWhere({ id, notes = 0, go }) {
+function AbcWhere({ id, notes = 0, locked, go }) {
   const p = pathOf(id);
   /*
    * Власні нотатки — теж дорога, і часто найкоротша: тему, про яку ви
@@ -3017,10 +3083,23 @@ function AbcWhere({ id, notes = 0, go }) {
     </button>
   ) : null;
 
+  /*
+   * Розібрані помилки цієї теми — теж дорога, і починають нею частіше за
+   * урок: до теми приходять не тому, що вирішили її вивчити, а тому, що
+   * на ній щойно спіткнулись.
+   */
+  const broke = errorsOfTopic(id);
+  const errs = broke.length ? (
+    <button className="ab-go is-err" onClick={() => go?.('code', { err: broke[0].id })}>
+      Помилки · {broke.length}
+    </button>
+  ) : null;
+
   if (!hasWhere(id)) {
     return (
       <div className="ab-where is-gap">
         <span className="ab-gap-t">Тут цього ще не вчать — поки що лише зовнішні джерела</span>
+        {errs}
         {mine}
       </div>
     );
@@ -3033,11 +3112,17 @@ function AbcWhere({ id, notes = 0, go }) {
 
   return (
     <div className="ab-where">
-      {lessons.map((l) => (
-        <button key={l.id} className="ab-go is-lesson" onClick={() => go?.('code', { lesson: l.id })}>
-          Урок · {l.title}
-        </button>
-      ))}
+      {lessons.map((l) => (locked?.(l.id)
+        ? (
+          <span key={l.id} className="er-later">
+            Урок «{l.title}» — його черга ще попереду
+          </span>
+        )
+        : (
+          <button key={l.id} className="ab-go is-lesson" onClick={() => go?.('code', { lesson: l.id })}>
+            Урок · {l.title}
+          </button>
+        )))}
       {tools.map((l) => (
         <button key={l.id} className="ab-go is-tool" onClick={() => go?.('code', { tool: l.id })}>
           Інструменти · {l.title}
@@ -3058,6 +3143,7 @@ function AbcWhere({ id, notes = 0, go }) {
           План · крок {step.n}: {step.topic}
         </button>
       )}
+      {errs}
       {mine}
     </div>
   );
@@ -3178,7 +3264,14 @@ export function AbcTab({ data, reload, toast, canEdit, go }) {
                     </span>
                   </span>
                 </button>
-                {where && <AbcWhere id={x.id} notes={mine[x.id] || 0} go={go} />}
+                {where && (
+                  <AbcWhere
+                    id={x.id}
+                    notes={mine[x.id] || 0}
+                    locked={(lid) => lessonLocked(data?.code, lid)}
+                    go={go}
+                  />
+                )}
                 </div>
               );
             })}
@@ -3409,6 +3502,195 @@ function Diary({ list, canEdit, onBack, onAdd, toast }) {
   );
 }
 
+/* ---------- Чому я отримую цю помилку ----------
+   Новачок бачить червоний рядок і читає його як вирок. Насправді майже
+   кожна помилка — коротке речення про конкретну річ, і речень цих
+   небагато.
+
+   Головне тут — не перелік, а одне поле: вставив червоний рядок як є, зі
+   стеком і своїми іменами змінних, — і запис знайшовся. Перелік потрібен
+   тому, хто гортає; шукає ж людина рівно тим, що бачить на екрані. */
+
+function ErrCard({ e, open, onToggle, onNote, go, locked }) {
+  return (
+    <div className={'er-card' + (open ? ' is-open' : '')}>
+      <button className="er-head" onClick={onToggle}>
+        <span className={'er-kind is-' + e.kind}>
+          {e.kind === 'quiet' ? 'мовчазна' : e.kind === 'case' ? 'випадок' : 'падає'}
+        </span>
+        <span className="er-msg">{e.msg}</span>
+      </button>
+
+      {open && (
+        <div className="er-body">
+          {/* Те саме різними словами. Найчастіше людина шукає саме
+              «іншим» формулюванням — своїм браузером. */}
+          {e.also.length > 0 && (
+            <div className="er-also">
+              <span className="er-lab">Те саме інакше</span>
+              <ul>{e.also.map((a) => <li key={a}>{a}</li>)}</ul>
+            </div>
+          )}
+
+          <div className="er-means"><Prose text={e.means} /></div>
+
+          <div className="er-causes">
+            <span className="er-lab">Звідки береться</span>
+            {e.causes.map((c) => (
+              <div className="er-cause" key={c.c}>
+                <div className="er-c"><Mono text={c.c} /></div>
+                <div className="er-fix"><Mono text={c.fix} /></div>
+              </div>
+            ))}
+          </div>
+
+          <div className="er-find">
+            <span className="er-lab">Де дивитись</span>
+            <Prose text={e.find} />
+          </div>
+
+          {/* Один і той самий код зламаним і полагодженим. Опис словами
+              каже, що зробити; ці два шматки показують, як це виглядає. */}
+          <div className="er-two">
+            <div className="er-side is-bad">
+              <span className="er-lab">Так падає</span>
+              <pre>{e.bad}</pre>
+            </div>
+            <div className="er-side is-good">
+              <span className="er-lab">Так працює</span>
+              <pre>{e.good}</pre>
+            </div>
+          </div>
+
+          <div className="er-foot">
+            {e.lesson && (locked?.(e.lesson)
+              ? (
+                <span className="er-later">
+                  Урок «{lessonTitle(e.lesson)}» — його черга ще попереду
+                </span>
+              )
+              : (
+                <button className="ab-go is-lesson" onClick={() => go?.('lesson', e.lesson)}>
+                  Урок · {lessonTitle(e.lesson)}
+                </button>
+              ))}
+            {e.ref && (
+              <button className="ab-go is-ref" onClick={() => go?.('ref', e.ref)}>
+                Довідник · {REF_CARDS.find((c) => c.id === e.ref)?.t || e.ref}
+              </button>
+            )}
+            {/* Помилка, розібрана й записана своїми словами, вдруге не
+                забирає вечір. Це і є та сама «перетворити на знання». */}
+            <button className="ab-go is-note" onClick={() => onNote(e)}>
+              Записати в зошит
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ErrBook({ start, onBack, onNote, go, locked }) {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(start || null);
+
+  const s = errorStats();
+  /*
+   * Спершу пробуємо впізнати саму помилку, і лише потім шукаємо словами.
+   *
+   * Людина вставляє червоний рядок цілком — зі стеком, шляхами й своїми
+   * іменами. Звичайний пошук по тексту на такому не знайде нічого:
+   * збігатись мають ознаки, а не рядок.
+   */
+  const hit = matchError(q);
+  const searching = q.trim().length > 0;
+  const found = hit.length ? hit : (searching ? findErrors(q) : ERRORS);
+
+  return (
+    <div className="cd-ref">
+      <div className="cd-ref-top">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+      </div>
+
+      <div className="cd-intro-box">
+        <Prose text={'Вставте червоний рядок з консолі як є — разом зі стеком і своїми іменами змінних. Формулювання в браузерів різні, тож шукається не рядок, а ознаки.'} />
+      </div>
+
+      <textarea
+        className="er-q"
+        rows={2}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="TypeError: Cannot read properties of undefined (reading 'map')"
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+      />
+
+      {searching && (
+        <div className="cd-ref-n">
+          {found.length === 0
+            ? 'Такої помилки тут ще немає. Спробуйте коротший шматок — саме той, що виглядає незвичним.'
+            : hit.length
+              ? `Упізнано за текстом помилки: ${hit.length}`
+              : `Знайдено за словами: ${found.length}`}
+        </div>
+      )}
+
+      {searching ? (
+        <div className="cd-ref-list">
+          {found.map((e) => (
+            <ErrCard
+              key={e.id}
+              e={e}
+              // перший збіг розкритий одразу: по нього й приходили
+              open={open === e.id || e.id === found[0].id}
+              onToggle={() => setOpen(open === e.id ? null : e.id)}
+              onNote={onNote}
+              go={go}
+              locked={locked}
+            />
+          ))}
+        </div>
+      ) : (
+        ERR_GROUPS.map((g) => {
+          const list = found.filter((e) => e.g === g.key);
+          if (!list.length) return null;
+          return (
+            <div className="cd-ref-g" key={g.key}>
+              <div className="cd-ref-h">
+                <b>{g.label}</b>
+                <em>{g.hint}</em>
+              </div>
+              <div className="cd-ref-list">
+                {list.map((e) => (
+                  <ErrCard
+                    key={e.id}
+                    e={e}
+                    open={open === e.id}
+                    onToggle={() => setOpen(open === e.id ? null : e.id)}
+                    onNote={onNote}
+                    go={go}
+                    locked={locked}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })
+      )}
+
+      {!searching && (
+        <div className="er-note">
+          Мовчазних тут {s.quiet}: вони не падають, просто на екрані неправда.
+          Такі шукають найдовше — бо шукати нема за чим.
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- Зошит ----------
    Курс, довідник і абетка — чуже знання, розкладене кимось іншим. Тут
    своє: питання, яке довелось шукати; помилка, на яку пішов вечір;
@@ -3611,11 +3893,16 @@ const emptyNote = (topic = '') => ({
   kind: 'q', ask: '', answer: '', code: '', topic, src: '', checked: false, tags: '',
 });
 
-function Notebook({ list, canEdit, start, onBack, onAdd, onEdit, onDel, toast }) {
+function Notebook({ list, canEdit, start, draft, onBack, onAdd, onEdit, onDel, toast }) {
   const [q, setQ] = useState('');
   const [kind, setKind] = useState('');
   const [topic, setTopic] = useState(start || '');
-  const [form, setForm] = useState(null);
+  /*
+   * Прийшли з каталогу помилок — форма вже відкрита й заповнена тим, що
+   * там було. Писати текст помилки з нуля вдруге ніхто не стане, а
+   * запис, якого не зробили, нічого не варт.
+   */
+  const [form, setForm] = useState(draft ? { ...emptyNote(), ...draft } : null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(null);
 
