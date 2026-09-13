@@ -222,7 +222,11 @@ test('parseCode: читає лист і не вірить чужому «ста�
     ['w2', 'майже', '', 'дурня', ''],
     ['', 'done', '', '', ''],
   ]);
-  assert.deepEqual(prog.w1, { id: 'w1', state: 'done', date: '16.08.2026', tries: 3, code: 'let a = 1;' });
+  assert.deepEqual(prog.w1, {
+    id: 'w1', state: 'done', date: '16.08.2026', tries: 3, code: 'let a = 1;',
+    // старий лист без колонок повторення читається як «жодного разу»
+    level: 0, asked: '',
+  });
   assert.equal(prog.w2.state, '');
   assert.equal(prog.w2.tries, 0);
   assert.equal(Object.keys(prog).length, 2);      // рядок без id пропущено
@@ -238,8 +242,15 @@ test('codeRows: рядок на кожен урок, у порядку курс�
   const rows = codeRows({ w1: { state: 'done', date: '16.08.2026', tries: 2, code: 'x' } });
   assert.equal(rows.length, CODE_LESSONS.length);
   assert.equal(rows[0][CD.id], CODE_LESSONS[0].id);
-  assert.deepEqual(rows[0], ['w1', 'done', '16.08.2026', 2, 'x']);
-  assert.deepEqual(rows[1], [CODE_LESSONS[1].id, '', '', 0, '']);
+  assert.deepEqual(rows[0], ['w1', 'done', '16.08.2026', 2, 'x', 0, '']);
+  assert.deepEqual(rows[1], [CODE_LESSONS[1].id, '', '', 0, '', 0, '']);
+});
+
+test('рівень повторення переживає запис у лист', () => {
+  const before = { b1: { state: 'done', date: '16.08.2026', tries: 1, code: '', level: 3, asked: '01.09.2026' } };
+  const after = parseCode([CODE_HEADERS, ...codeRows(before)]);
+  assert.equal(after.b1.level, 3);
+  assert.equal(after.b1.asked, '01.09.2026');
 });
 
 test('codeRows і parseCode переживають одне одного', () => {

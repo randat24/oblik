@@ -23,6 +23,10 @@ import {
   buildSession, partQueue, applyResults,
 } from '../lib/mult';
 import { CODE_LESSONS, TRACKS, openUpTo, courseStats, nextLink } from '../lib/code';
+// DAY_SIZE тут своє — у множення воно теж є, і означає інше число
+import {
+  buildQueue, recallStats, nextLevel, DAY_SIZE as RECALL_SIZE,
+} from '../lib/recall';
 import { tokenize, modeOf, lineCount } from '../lib/highlight';
 import { PLAN, COURSE, nextSteps, planProgress, lessonOf, tourOf } from '../lib/plan';
 import {
@@ -1776,6 +1780,126 @@ function Prose({ text }) {
   );
 }
 
+/**
+ * Повторення.
+ *
+ * П'ять питань — це хвилини три. Стільки й має бути: повторення не
+ * сідають робити окремо, його відкривають між справами, і те, що не
+ * влазить у три хвилини, не відкривають зовсім.
+ *
+ * Питання тут не про слова, а про те місце, де новачок помиляється.
+ * Тому після відповіді завжди видно пояснення — і після правильної теж:
+ * угадати з трьох варіантів можна, зрозуміти — ні.
+ */
+function RecallRoom({ prog, onBack, onSave }) {
+  const [queue] = useState(() => buildQueue(prog));
+  const [at, setAt] = useState(0);
+  const [picked, setPicked] = useState(null);
+  const [right, setRight] = useState(0);
+  /*
+   * Відповіді складаємо тут, а в таблицю пишемо один раз — у кінці
+   * підходу або коли з нього виходять. Той самий розрахунок, що й у
+   * тренажері множення: запис після кожної відповіді з'їв би хвилинну
+   * квоту Google на третьому питанні.
+   */
+  const done = useRef({});
+
+  const flush = () => {
+    const marks = done.current;
+    done.current = {};
+    if (Object.keys(marks).length) onSave(marks);
+    onBack();
+  };
+
+  const item = queue[at];
+
+  if (!queue.length) {
+    return (
+      <div className="cd-room">
+        <button className="cd-back" onClick={onBack}>← до уроків</button>
+        <div className="h-empty">
+          Сьогодні повторювати нічого. Поняття повертаються за розкладом —
+          спершу через день, далі рідше, а те, що згадали п'ять разів, —
+          раз на місяць.
+        </div>
+      </div>
+    );
+  }
+
+  if (!item) {
+    return (
+      <div className="cd-room">
+        <button className="cd-back" onClick={flush}>← до уроків</button>
+        <div className="rc-done">
+          <div className="rc-done-n">{right} з {queue.length}</div>
+          <div className="rc-done-t">
+            {right === queue.length
+              ? 'Усе згадали. Ці поняття повернуться нескоро.'
+              : 'Те, що не згадалось, повернеться вже завтра.'}
+          </div>
+          <button className="btn" onClick={flush}>До уроків</button>
+        </div>
+      </div>
+    );
+  }
+
+  const q = item.question;
+  const answered = picked !== null;
+  const ok = picked === q.right;
+
+  return (
+    <div className="cd-room">
+      {/* вихід посеред підходу теж зберігає: три відповіді, які людина
+          встигла дати, не мають пропасти через те, що її покликали */}
+      <button className="cd-back" onClick={flush}>← до уроків</button>
+
+      <div className="rc-top">
+        <span className="rc-count">{at + 1} з {queue.length}</span>
+        <span className="rc-from">{lessonTitle(item.id)}</span>
+      </div>
+
+      <div className="rc-ask"><Prose text={q.ask} /></div>
+      {q.code && <pre className="rc-code">{q.code}</pre>}
+
+      <div className="rc-opts">
+        {q.options.map((o, i) => (
+          <button
+            key={o}
+            className={'rc-opt'
+              + (answered && i === q.right ? ' is-right' : '')
+              + (answered && i === picked && i !== q.right ? ' is-wrong' : '')}
+            disabled={answered}
+            onClick={() => {
+              setPicked(i);
+              const ok = i === q.right;
+              if (ok) setRight((n) => n + 1);
+              done.current[item.id] = nextLevel(item.level, ok);
+            }}
+          >
+            {o}
+          </button>
+        ))}
+      </div>
+
+      {answered && (
+        <>
+          {/* пояснення показуємо й після правильної відповіді: угадати з
+              трьох варіантів можна, зрозуміти — ні */}
+          <div className={'rc-why' + (ok ? ' is-right' : '')}><Prose text={q.why} /></div>
+          <button
+            className="btn z-wide"
+            onClick={() => { setAt(at + 1); setPicked(null); }}
+          >
+            {at + 1 < queue.length ? 'Далі' : 'Підсумок'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+const lessonTitle = (id) => CODE_LESSONS.find((l) => l.id === id)?.title || id;
+
 export function CodeTab({ data, reload, toast }) {
   const [prog, setProg] = useState(() => data.code || {});
   const [openId, setOpenId] = useState(null);
@@ -1789,6 +1913,7 @@ export function CodeTab({ data, reload, toast }) {
   const upIdx = openUpTo(prog);
   const stats = courseStats(prog);
   const diary = statsOf(data.practice || [], today());
+  const rec = recallStats(prog);
 
   const save = async (next) => {
     // у посилку йде лише те, що змінилось відносно завантаженого:
@@ -1823,6 +1948,9 @@ export function CodeTab({ data, reload, toast }) {
           const next = {
             ...prog,
             [lesson.id]: {
+              // рівень і день повторення переносимо: урок, який
+              // перепройшли, не має починати згадуватись наново
+              ...(prog[lesson.id] || {}),
               id: lesson.id, state: 'done',
               date: new Date().toLocaleDateString('uk-UA'),
               tries: (prog[lesson.id]?.tries || 0) + 1,
@@ -1840,6 +1968,22 @@ export function CodeTab({ data, reload, toast }) {
             },
           };
           setProg(next);   // рахунок спроб не варто чекати на мережу
+        }}
+      />
+    );
+  }
+
+  if (mode === 'recall') {
+    return (
+      <RecallRoom
+        prog={prog}
+        onBack={() => setMode('learn')}
+        onSave={(marks) => {
+          const next = { ...prog };
+          Object.entries(marks).forEach(([id, level]) => {
+            next[id] = { ...(next[id] || {}), level, asked: today() };
+          });
+          save(next);
         }}
       />
     );
@@ -1879,6 +2023,27 @@ export function CodeTab({ data, reload, toast }) {
           екрани, — і сервер, який віддає їм дані.
         </p>
       </div>
+
+      {/* Повторення стоїть першим серед розділів навмисно: решта — про
+          те, щоб дізнатись нове, а це єдине, що не дає забути старе.
+          Курс без нього доводить до кінця людину, яка пам'ятає останні
+          десять уроків із шістдесяти чотирьох. */}
+      <button
+        className={'cd-refb is-recall' + (rec.due > 0 ? ' is-now' : '')}
+        onClick={() => setMode('recall')}
+      >
+        <span className="cd-refb-t">
+          Повторення
+          {rec.due > 0 && <em className="cd-refb-n">{Math.min(rec.due, RECALL_SIZE)}</em>}
+        </span>
+        <span className="cd-refb-d">
+          {rec.total === 0
+            ? 'З\'явиться, коли пройдете перший урок з основ'
+            : rec.due > 0
+              ? `${Math.min(rec.due, RECALL_SIZE)} ${plural(Math.min(rec.due, RECALL_SIZE), 'питання', 'питання', 'питань')} на сьогодні — хвилини три`
+              : `Сьогодні нічого. Тримається ${rec.held} з ${rec.total}`}
+        </span>
+      </button>
 
       {/* Довідник — не додаток до уроків, а друга половина вкладки: уроки
           проходять один раз, а сюди повертаються щоразу, коли забули, як

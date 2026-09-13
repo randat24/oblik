@@ -4011,3 +4011,66 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .ab-what p { margin: 0; font-size: .84rem; color: var(--text-dim); line-height: 1.5; }
 .ab-why { font-size: .8rem; color: var(--muted); line-height: 1.5; }
+
+/* ---------- Повторення пройденого ----------
+   Курс проходять один раз і забувають те, що робили на третій день. Цей
+   екран повертає поняття за розкладом: три хвилини, п'ять питань.
+
+   Виглядає він навмисно інакше за урок — тут не пишуть код, тут згадують,
+   і плутати ці дві роботи не варто. */
+
+.cd-refb.is-recall:hover { border-color: var(--amber); }
+.cd-refb.is-recall .cd-refb-t { color: var(--amber); }
+/* поки є що повторювати, розділ світиться; коли нічого — мовчить, як і
+   всі інші акценти в застосунку */
+.cd-refb.is-recall.is-now { border-color: var(--amber); background: var(--amber-dim); }
+
+.rc-top {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.rc-count {
+  font-family: var(--mono); font-size: .74rem; color: var(--amber);
+  letter-spacing: .06em;
+}
+.rc-from { font-size: .78rem; color: var(--muted); }
+
+.rc-ask { font-size: 1.05rem; line-height: 1.5; margin-bottom: 12px; }
+.rc-ask p, .rc-why p { margin: 0; }
+
+.rc-code {
+  margin: 0 0 14px; padding: 12px 14px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line);
+  font-family: var(--mono); font-size: .86rem; line-height: 1.55;
+  overflow-x: auto; white-space: pre;
+}
+
+.rc-opts { display: flex; flex-direction: column; gap: 8px; }
+.rc-opt {
+  text-align: left; padding: 12px 14px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); font-size: .92rem; line-height: 1.45; cursor: pointer;
+}
+.rc-opt:hover:not(:disabled) { border-color: var(--blue); background: var(--panel-2); }
+.rc-opt:disabled { cursor: default; }
+/* правильну показуємо завжди — і коли схибили, і коли влучили: інакше
+   людина, яка вгадала, не дізнається, що саме було правильним */
+.rc-opt.is-right { border-color: var(--green); color: var(--green); }
+.rc-opt.is-wrong { border-color: var(--red); color: var(--red); }
+
+.rc-why {
+  margin: 14px 0; padding: 11px 13px; border-radius: var(--r-sm);
+  border-left: 3px solid var(--red); background: var(--panel-2);
+  font-size: .88rem; line-height: 1.55; color: var(--text);
+}
+.rc-why.is-right { border-left-color: var(--green); }
+
+.rc-done { text-align: center; padding: 40px 0; }
+.rc-done-n {
+  font-family: var(--mono); font-size: 2.4rem; font-weight: 700;
+  color: var(--amber);
+}
+.rc-done-t {
+  margin: 8px auto 20px; max-width: 34ch;
+  font-size: .9rem; color: var(--muted); line-height: 1.5;
+}
