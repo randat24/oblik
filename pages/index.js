@@ -9,15 +9,13 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  startOffline, flushQueue, onOfflineChange, getState, takeDropped,
-} from '../lib/offline';
-import {
   api, setOnUnauthed, saveFailed, todayStr, statusColor, photoSrc,
   ToastCtx, useToast, ToastHost, useToasts, IconSearch, IconQr, parseCode, hhmm,
   QrScanner, Stat, Modal, PhotoField, useViewMode, ViewToggle, TableWrap,
   DataTable, Totals, countBy, Combo, SearchBox, useNewRecordHotkey, useGrow,
   bagWord, dayWord,
 } from '../components/base';
+import { OfflineBar } from '../components/offline-bar';
 import { toCsv, csvName, BOM } from '../lib/csv';
 import { AuditView } from '../components/reviziya';
 import { DeliveryView } from '../components/dostavka';
@@ -551,59 +549,6 @@ function HomeView({ setState, onOpen, me }) {
         </div>
       </div>
     </>
-  );
-}
-
-/* ---------- Офлайн ---------- */
-function OfflineBar() {
-  const [st, setSt] = useState({ online: true, pending: 0, syncing: false });
-  const [bad, setBad] = useState([]);
-  const toast = useToast();
-
-  useEffect(() => {
-    setSt(getState());
-    const off = onOfflineChange((s) => {
-      setSt(s);
-      const d = takeDropped();
-      if (d.length) setBad((p) => [...p, ...d]);
-    });
-    const stop = startOffline();
-    return () => { off(); stop(); };
-  }, []);
-
-  // коли черга спорожніла після синхронізації — сказати про це вголос
-  const wasPending = useRef(0);
-  useEffect(() => {
-    if (wasPending.current > 0 && st.pending === 0 && st.online) {
-      toast(`Надіслано відкладені записи: ${wasPending.current}`);
-    }
-    wasPending.current = st.pending;
-  }, [st.pending, st.online, toast]);
-
-  if (st.online && !st.pending && !bad.length) return null;
-
-  return (
-    <div className={'offline-bar' + (st.online ? ' is-sync' : '')}>
-      <span className="offline-dot" />
-      <span className="offline-text">
-        {!st.online && 'Немає звʼязку — працюємо офлайн'}
-        {st.online && st.syncing && 'Надсилаємо відкладені записи…'}
-        {st.online && !st.syncing && st.pending > 0 && 'Є відкладені записи'}
-        {st.online && !st.pending && bad.length > 0 && 'Частину записів сервер не прийняв'}
-      </span>
-      {st.pending > 0 && <span className="offline-count">{st.pending}</span>}
-      {st.online && st.pending > 0 && !st.syncing && (
-        <button className="offline-act" onClick={() => flushQueue()}>Надіслати</button>
-      )}
-      {bad.length > 0 && (
-        <button className="offline-act" onClick={() => {
-          alert(bad.map((b) => `${b.method} ${b.url}\n${b.error}`).join('\n\n'));
-          setBad([]);
-        }}>
-          Показати {bad.length}
-        </button>
-      )}
-    </div>
   );
 }
 
@@ -1312,7 +1257,7 @@ export default function Home({ startView }) {
   return (
     <ToastCtx.Provider value={push}>
       <div className="wrap">
-        <OfflineBar />
+        <OfflineBar onSynced={(n) => toast(`Надіслано відкладені записи: ${n}`)} />
         <header>
           <h1>Облік майна<span className="ver">{VERSION}</span></h1>
           <div className="state">
