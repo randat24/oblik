@@ -3864,8 +3864,11 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   font-size: .89rem; color: var(--text-dim); line-height: 1.6; max-width: 62ch;
 }
 .cd-tsay b { color: var(--text); }
-.cd-tsay code, .cd-twhy code {
-  font-family: var(--mono); font-size: .84em; color: var(--amber);
+/* У розборах моноширинний трохи менший за загальний: рядків із кодом там
+   багато, і повний розмір робить абзац рябим. Правило стоїть після
+   `.cd-inline` і перекриває його саме тут. */
+.cd-tsay code, .cd-twhy code, .cd-tp code, .cd-ttry code {
+  font-size: .84em; padding: 0; background: none;
 }
 
 .cd-twhy {
