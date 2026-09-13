@@ -4011,3 +4011,479 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .ab-what p { margin: 0; font-size: .84rem; color: var(--text-dim); line-height: 1.5; }
 .ab-why { font-size: .8rem; color: var(--muted); line-height: 1.5; }
+.ab-why p { margin: 0; }
+
+/* ---------- Повторення пройденого ----------
+   Курс проходять один раз і забувають те, що робили на третій день. Цей
+   екран повертає поняття за розкладом: три хвилини, п'ять питань.
+
+   Виглядає він навмисно інакше за урок — тут не пишуть код, тут згадують,
+   і плутати ці дві роботи не варто. */
+
+.cd-refb.is-recall:hover { border-color: var(--amber); }
+.cd-refb.is-recall .cd-refb-t { color: var(--amber); }
+/* поки є що повторювати, розділ світиться; коли нічого — мовчить, як і
+   всі інші акценти в застосунку */
+.cd-refb.is-recall.is-now { border-color: var(--amber); background: var(--amber-dim); }
+
+.rc-top {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.rc-count {
+  font-family: var(--mono); font-size: .74rem; color: var(--amber);
+  letter-spacing: .06em;
+}
+.rc-from { font-size: .78rem; color: var(--muted); }
+
+.rc-ask { font-size: 1.05rem; line-height: 1.5; margin-bottom: 12px; }
+.rc-ask p, .rc-why p { margin: 0; }
+
+.rc-code {
+  margin: 0 0 14px; padding: 12px 14px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line);
+  font-family: var(--mono); font-size: .86rem; line-height: 1.55;
+  overflow-x: auto; white-space: pre;
+}
+
+.rc-opts { display: flex; flex-direction: column; gap: 8px; }
+.rc-opt {
+  text-align: left; padding: 12px 14px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); font-size: .92rem; line-height: 1.45; cursor: pointer;
+}
+.rc-opt:hover:not(:disabled) { border-color: var(--blue); background: var(--panel-2); }
+.rc-opt:disabled { cursor: default; }
+/* правильну показуємо завжди — і коли схибили, і коли влучили: інакше
+   людина, яка вгадала, не дізнається, що саме було правильним */
+.rc-opt.is-right { border-color: var(--green); color: var(--green); }
+.rc-opt.is-wrong { border-color: var(--red); color: var(--red); }
+
+.rc-why {
+  margin: 14px 0; padding: 11px 13px; border-radius: var(--r-sm);
+  border-left: 3px solid var(--red); background: var(--panel-2);
+  font-size: .88rem; line-height: 1.55; color: var(--text);
+}
+.rc-why.is-right { border-left-color: var(--green); }
+
+.rc-done { text-align: center; padding: 40px 0; }
+.rc-done-n {
+  font-family: var(--mono); font-size: 2.4rem; font-weight: 700;
+  color: var(--amber);
+}
+.rc-done-t {
+  margin: 8px auto 20px; max-width: 34ch;
+  font-size: .9rem; color: var(--muted); line-height: 1.5;
+}
+
+/* Перевірка розуміння одразу після завдання. Виглядає інакше за урок і
+   за повторення: це не вправа й не іспит, а одне питання, яке відділяє
+   «я зробив» від «я зрозумів». */
+.cd-why {
+  margin: 16px 0; padding: 14px 16px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--panel-2);
+}
+.cd-why-h {
+  margin-bottom: 10px; font-size: .68rem; color: var(--amber);
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.cd-why .rc-ask { font-size: .95rem; }
+/* `код` у зворотних лапках трапляється і в завданні, і в підказці, і в
+   посиланні «далі почитати» — скрізь, де текст писала людина. Абзац від
+   Prose там зайвий: він розриває рядок, який мав лишитись рядком. */
+.cd-task p, .cd-want p, .cd-hint p, .cd-next p { display: inline; margin: 0; }
+
+/* ---------- Абетка: куди йти від теми ----------
+   Карта була повна, а дороги від неї не вело нікуди. Смуга під темою —
+   це і є дорога: урок, картка довідника, розбір справжнього коду.
+
+   Тема без жодного шляху не мовчить: список має показувати, чого в
+   застосунку ще немає, а не робити вигляд, що є все. */
+
+.ab-item { display: block; }
+.ab-know {
+  display: block; margin-top: 6px; font-size: .78rem; color: var(--text-dim);
+  line-height: 1.45;
+}
+.ab-know b {
+  color: var(--muted); font-weight: 600; font-size: .68rem;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.ab-know p { display: inline; margin: 0; }
+
+.ab-where {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin: 0 0 10px; padding: 0 4px 0 34px;   /* під позначкою зліва */
+}
+.ab-go {
+  padding: 5px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--text-dim); font-size: .76rem; cursor: pointer;
+  text-align: left;
+}
+.ab-go:hover { border-color: var(--blue); color: var(--text); }
+.ab-go.is-lesson:hover { border-color: var(--amber); }
+.ab-go.is-tour:hover { border-color: var(--green); }
+
+/* Пробіл виглядає як пробіл, а не як помилка: це перелік роботи. */
+.ab-where.is-gap {
+  display: block; padding: 6px 4px 10px 34px;
+  font-size: .76rem; color: var(--muted); font-style: italic;
+}
+
+/* ---------- Інструменти: термінал, Git, оточення, пошук причини ----------
+   Уроки курсу перевіряються запуском коду. Ці — ні: те, що тут
+   відбувається, відбувається в чужому терміналі, і застосунок цього не
+   бачить. Тому й виглядають вони інакше — не редактор із кнопкою
+   «Запустити», а перелік кроків із позначками та кілька питань. */
+
+.cd-refb.is-tools:hover { border-color: var(--blue); }
+.cd-refb.is-tools .cd-refb-t { color: var(--blue); }
+.cd-tag.is-tools { border-color: rgba(102,144,171,.4); color: var(--blue); }
+
+.tl-steps {
+  margin: 16px 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.tl-step {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 11px 13px; border-radius: var(--r);
+  border: 1px solid var(--line-soft); background: var(--panel);
+}
+/* Відмічений крок гасне, а не зникає: до нього ще повертаються, коли
+   наступний не вийшов. */
+.tl-step.is-on { border-color: var(--green-dim); opacity: .72; }
+.tl-tick {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--muted); font-family: var(--mono); font-size: .78rem;
+  cursor: pointer; padding: 0;
+}
+.tl-tick:hover { border-color: var(--green); color: var(--green); }
+.tl-step.is-on .tl-tick { border-color: var(--green); color: var(--green); }
+.tl-step-b { min-width: 0; }
+.tl-do p { margin: 0; font-size: .9rem; line-height: 1.5; }
+.tl-see { margin-top: 5px; font-size: .82rem; color: var(--text-dim); line-height: 1.5; }
+.tl-see p { display: inline; margin: 0; }
+.tl-see b {
+  color: var(--muted); font-weight: 600; font-size: .68rem;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+
+.tl-verify {
+  margin: 18px 0; padding: 14px 16px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--panel-2);
+}
+.tl-verify-d {
+  margin-bottom: 14px; font-size: .82rem; color: var(--muted); line-height: 1.5;
+}
+.tl-verify-d p { margin: 0; }
+.tl-verify .rc-ask { font-size: .95rem; }
+.tl-verify .rc-opt { background: var(--panel); }
+/* Питання йдуть підряд, тож між ними потрібна межа: інакше варіанти
+   одного зливаються з наступним питанням. */
+.tl-ask + .tl-ask { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line-soft); }
+.tl-again {
+  display: block; margin-top: 10px; padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--text-dim); font-size: .78rem; cursor: pointer;
+}
+.tl-again:hover { border-color: var(--blue); color: var(--text); }
+
+/* Тут кнопка одна, а `.act-btn` тягнеться на всю ширину рядка: сама по
+   собі вона виглядала б як головна дія, якою не є. */
+.tl-actions .act-btn { flex: 0 0 auto; }
+
+.ab-go.is-tool:hover { border-color: var(--blue); }
+
+/* ---------- Зошит: свої питання, помилки й шматки коду ----------
+   Довідник відповідає на питання, які передбачив хтось інший. На решту —
+   а їх більшість — відповідає лише той, хто вже раз їх закрив.
+
+   Виглядає він як список, у якому шукають, а не як стрічка, яку гортають:
+   згорнуті рядки, розгортаються по одному, а під час пошуку — усі. Те
+   саме рішення, що й у довіднику, і з тієї ж причини. */
+
+.cd-refb.is-notes:hover { border-color: var(--green); }
+.cd-refb.is-notes .cd-refb-t { color: var(--green); }
+
+.dy-stat.is-open { border-color: var(--line); }
+.dy-stat.is-open b { color: var(--text-dim); }
+/* Неперевірена відповідь від AI — не помилка, але й не знання. Колір
+   тут рівно для того, щоб це число не губилось серед інших. */
+.dy-stat.is-risk { border-color: rgba(196,87,74,.4); }
+.dy-stat.is-risk b { color: var(--red); }
+
+.nb-top { margin-top: 4px; }
+.nb-filters { margin: 10px 0 4px; }
+
+.nb-list { display: flex; flex-direction: column; gap: 6px; }
+.nb-note {
+  border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  background: var(--panel); overflow: hidden;
+}
+.nb-note.is-open { border-color: var(--line); }
+.nb-note.is-unanswered { border-left: 3px solid var(--amber-dim); }
+
+.nb-head {
+  width: 100%; display: flex; flex-direction: column; gap: 5px;
+  padding: 10px 12px; background: none; border: 0;
+  text-align: left; cursor: pointer; font: inherit; color: var(--text);
+}
+.nb-head:hover { background: var(--panel-2); }
+.nb-ask { font-size: .92rem; line-height: 1.45; }
+.nb-ask code { font-size: .84rem; }
+
+.nb-kind {
+  align-self: flex-start; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--line-soft); color: var(--muted);
+  font-size: .66rem; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.nb-kind.is-q { border-color: rgba(102,144,171,.4); color: var(--blue); }
+.nb-kind.is-err { border-color: rgba(196,87,74,.4); color: var(--red); }
+.nb-kind.is-snip { border-color: rgba(122,166,83,.4); color: var(--green); }
+.nb-kind.is-rule { border-color: rgba(217,173,37,.4); color: var(--amber); }
+
+.nb-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.nb-meta i { font-style: normal; font-size: .72rem; color: var(--muted); }
+.nb-topic { color: var(--text-dim) !important; }
+.nb-open { color: var(--amber) !important; }
+.nb-risk { color: var(--red) !important; }
+.nb-date { margin-left: auto; }
+
+.nb-body {
+  padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.nb-answer { padding-top: 10px; font-size: .88rem; line-height: 1.55; color: var(--text-dim); }
+.nb-answer p { margin: 0; }
+.nb-code {
+  margin: 0; padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  font-family: var(--mono); font-size: .82rem; line-height: 1.55;
+  overflow-x: auto; white-space: pre;
+}
+.nb-still {
+  padding: 8px 10px; border-radius: var(--r-sm);
+  background: var(--panel-2); border-left: 3px solid var(--amber);
+  font-size: .82rem; color: var(--text-dim); line-height: 1.5;
+}
+
+.nb-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.nb-tag {
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  font-size: .72rem; color: var(--text-dim);
+}
+.nb-src { font-size: .72rem; color: var(--muted); }
+.nb-src.is-ok { color: var(--green); }
+.nb-acts { margin-left: auto; display: flex; gap: 6px; }
+.nb-act {
+  padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: transparent;
+  color: var(--muted); font: inherit; font-size: .74rem; cursor: pointer;
+}
+.nb-act:hover { border-color: var(--blue); color: var(--text-dim); }
+.nb-act.is-sure { border-color: var(--red); color: var(--red); }
+
+.nb-form { gap: 14px; }
+.nb-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.nb-about { font-size: .8rem; color: var(--muted); line-height: 1.5; margin-top: -6px; }
+.nb-mono { font-family: var(--mono) !important; font-size: .84rem !important; }
+.nb-two { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.nb-two select {
+  width: 100%; padding: 8px 10px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  color: var(--text); font-family: var(--sans); font-size: .9rem;
+}
+
+/* Список перевірки стоїть у формі, а не в уроці: він потрібен саме в ту
+   мить, коли чужу відповідь записують як свою. */
+.nb-ai {
+  padding: 12px 14px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid rgba(196,87,74,.35);
+}
+.nb-ai-h {
+  font-size: .68rem; color: var(--red); letter-spacing: .08em;
+  text-transform: uppercase; margin-bottom: 8px;
+}
+.nb-ai ul { margin: 0; padding-left: 18px; }
+.nb-ai li { font-size: .84rem; line-height: 1.55; color: var(--text-dim); margin-bottom: 5px; }
+.nb-check { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: .86rem; }
+.nb-check input { width: 17px; height: 17px; accent-color: var(--green); }
+
+.nb-starters {
+  padding: 12px 14px; border-radius: var(--r);
+  background: var(--panel-2); border: 1px dashed var(--line);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.nb-starter {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+  padding: 9px 11px; border-radius: var(--r-sm);
+  border: 1px solid var(--line-soft); background: var(--panel);
+  font: inherit; color: var(--text); cursor: pointer;
+}
+.nb-starter:hover:not(:disabled) { border-color: var(--green); }
+.nb-starter:disabled { cursor: default; opacity: .6; }
+.nb-starter b { font-size: .88rem; }
+.nb-starter span { font-size: .8rem; color: var(--muted); line-height: 1.45; }
+
+.nb-more { flex: 0 0 auto; align-self: flex-start; }
+
+.ab-go.is-note:hover { border-color: var(--green); }
+/* У пробілі текст і кнопка стоять одне під одним: сам пробіл — рядок, а
+   не чип, і в ряд із чипом він не стає. */
+.ab-where.is-gap .ab-gap-t { display: block; }
+.ab-where.is-gap .ab-go { display: inline-block; margin-top: 6px; }
+
+/* ---------- Чому я отримую цю помилку ----------
+   Червоний рядок у консолі новачок читає як вирок. Тут він розібраний:
+   що означає, звідки береться, як виглядає полагодженим.
+
+   Головне на екрані — не перелік, а поле вгорі: туди вставляють рядок як
+   є, зі стеком і своїми іменами. Тому воно широке й моноширинне: у нього
+   вставляють, а не набирають. */
+
+.cd-refb.is-errors:hover { border-color: var(--red); }
+.cd-refb.is-errors .cd-refb-t { color: var(--red); }
+
+.er-q {
+  width: 100%; padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line);
+  color: var(--text); font-family: var(--mono); font-size: .84rem;
+  line-height: 1.5; resize: vertical;
+}
+.er-q:focus { outline: none; border-color: var(--red); }
+.er-q::placeholder { color: var(--muted); opacity: .7; }
+
+.er-card {
+  border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  background: var(--panel); overflow: hidden;
+}
+.er-card.is-open { border-color: var(--line); }
+.er-head {
+  width: 100%; display: flex; flex-direction: column; gap: 5px;
+  padding: 10px 12px; background: none; border: 0;
+  text-align: left; cursor: pointer; font: inherit; color: var(--text);
+}
+.er-head:hover { background: var(--panel-2); }
+.er-msg { font-family: var(--mono); font-size: .84rem; line-height: 1.5; }
+
+.er-kind {
+  align-self: flex-start; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid rgba(196,87,74,.4); color: var(--red);
+  font-size: .64rem; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase;
+}
+/* Мовчазна не червона: вона нічого не каже — саме в цьому й річ. */
+.er-kind.is-quiet { border-color: rgba(217,173,37,.4); color: var(--amber); }
+
+.er-body {
+  padding: 0 12px 12px; display: flex; flex-direction: column; gap: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.er-lab {
+  display: block; font-size: .66rem; color: var(--muted);
+  letter-spacing: .08em; text-transform: uppercase; margin-bottom: 5px;
+}
+.er-also { padding-top: 10px; }
+.er-also ul { margin: 0; padding-left: 16px; }
+.er-also li {
+  font-family: var(--mono); font-size: .76rem; color: var(--text-dim);
+  line-height: 1.6;
+}
+.er-means { font-size: .9rem; line-height: 1.55; }
+.er-means p { margin: 0; }
+
+.er-cause {
+  padding: 8px 0; border-top: 1px solid var(--line-soft);
+}
+.er-cause:first-of-type { border-top: 0; padding-top: 0; }
+.er-c { font-size: .86rem; line-height: 1.5; color: var(--text); }
+/* Лік стоїть під причиною, а не поруч: спершу впізнають своє, потім
+   читають, що робити. */
+.er-fix {
+  margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--green-dim);
+  font-size: .84rem; line-height: 1.5; color: var(--text-dim);
+}
+.er-find { font-size: .86rem; line-height: 1.5; color: var(--text-dim); }
+.er-find p { margin: 0; }
+
+.er-two { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.er-side pre {
+  margin: 0; padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  font-family: var(--mono); font-size: .8rem; line-height: 1.55;
+  overflow-x: auto; white-space: pre;
+}
+.er-side.is-bad pre { border-left: 3px solid var(--red); }
+.er-side.is-good pre { border-left: 3px solid var(--green); }
+
+.er-foot { display: flex; flex-wrap: wrap; gap: 6px; }
+.ab-go.is-err:hover { border-color: var(--red); }
+
+.er-note {
+  padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px dashed var(--line);
+  font-size: .82rem; color: var(--muted); line-height: 1.55;
+}
+
+/* Урок, до якого черга ще не дійшла: видно, що він є, але натискати нема
+   на що — дорога в «цей урок ще закритий» гірша за її відсутність. */
+.er-later {
+  padding: 5px 10px; border-radius: 999px;
+  border: 1px dashed var(--line-soft); color: var(--muted);
+  font-size: .76rem; font-style: italic;
+}
+
+/* ---------- Джерела й версії ----------
+   Позначка «перевірено» стоїть лише там, де справді відкривали, і поруч
+   із датою. Тому вона зелена й помітна, а «не звірялось» — сіре й
+   спокійне: це не попередження, а чесний стан. */
+
+.cd-refb.is-src:hover { border-color: var(--gray); }
+.cd-refb.is-src .cd-refb-t { color: var(--text-dim); }
+
+.sr-card {
+  padding: 11px 13px; border-radius: var(--r-sm);
+  border: 1px solid var(--line-soft); background: var(--panel);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.sr-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.sr-name { font-size: .95rem; font-weight: 600; color: var(--blue); text-decoration: none; }
+.sr-name:hover { text-decoration: underline; }
+.sr-kind {
+  padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line-soft);
+  font-size: .66rem; color: var(--muted);
+  letter-spacing: .04em; text-transform: uppercase;
+}
+.sr-ok { font-size: .72rem; color: var(--green); }
+.sr-no { font-size: .72rem; color: var(--muted); font-style: italic; }
+.sr-host { font-family: var(--mono); font-size: .74rem; color: var(--muted); }
+.sr-good { font-size: .86rem; line-height: 1.5; color: var(--text-dim); }
+.sr-watch { font-size: .82rem; line-height: 1.5; color: var(--text-dim); }
+.sr-watch b { color: var(--amber); font-weight: 600; }
+.sr-saw { font-family: var(--mono); font-size: .74rem; color: var(--green); }
+
+.sr-ver {
+  padding: 10px 12px; border-radius: var(--r-sm);
+  border: 1px solid var(--line-soft); background: var(--panel);
+}
+.sr-ver-h { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.sr-ver-h b { font-size: .92rem; }
+.sr-ver-d { margin-top: 4px; font-size: .82rem; line-height: 1.5; color: var(--text-dim); }
+
+.sr-rules { display: flex; flex-direction: column; gap: 8px; }
+.sr-rule {
+  padding: 9px 11px; border-radius: var(--r-sm);
+  background: var(--panel-2); border-left: 3px solid var(--line);
+  display: flex; flex-direction: column; gap: 2px;
+}
+/* Останнє правило — те саме, що й для коду від AI: запустити й подивитись
+   на значення. Тому воно й виділене. */
+.sr-rule:last-child { border-left-color: var(--green); }
+.sr-rule b { font-size: .86rem; }
+.sr-rule span { font-size: .82rem; color: var(--text-dim); line-height: 1.5; }
+.ab-go.is-old:hover { border-color: var(--amber); }
