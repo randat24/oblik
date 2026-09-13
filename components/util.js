@@ -10,6 +10,8 @@
  * складати не варто — модуль «різне» росте так само непомітно, як
  * сторінка, з якої його дістали.
  */
+import { enqueue } from '../lib/offline';
+
 
 /*
  * Чи можна змінювати.
@@ -50,7 +52,32 @@ export async function api(path, opts = {}) {
       err.status = 0;
       throw err;
     }
-    throw e;
+    /*
+     * Звʼязку немає.
+     *
+     * Досі сюди долітало «Failed to fetch» — англійською й без жодної
+     * підказки, що робити. У полі це читається як «застосунок зламався»,
+     * хоч зламався якраз не він.
+     *
+     * Запис при цьому не втрачаємо: черга та сама, що й у решті
+     * застосунку, і піде вона, щойно мережа зʼявиться.
+     */
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const method = (opts.method || 'GET').toUpperCase();
+    if (method !== 'GET') {
+      enqueue({ url: path, method, body: opts.body, label: opts.label || '' });
+      const err = new Error(offline
+        ? 'Немає звʼязку. Запис збережено — надішлемо, щойно зʼявиться мережа'
+        : 'Не вдалось достукатись до сервера. Запис збережено — надішлемо пізніше');
+      err.offline = true;
+      throw err;
+    }
+    const err = new Error(offline
+      ? 'Немає звʼязку. Цей розділ читається просто з таблиці, тож без мережі він порожній.'
+      : 'Не вдалось достукатись до сервера. Перевірте звʼязок і спробуйте ще раз.');
+    err.offline = true;
+    err.status = 0;
+    throw err;
   } finally {
     if (bell) clearTimeout(bell);
   }
