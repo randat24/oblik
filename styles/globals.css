@@ -4074,3 +4074,20 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   margin: 8px auto 20px; max-width: 34ch;
   font-size: .9rem; color: var(--muted); line-height: 1.5;
 }
+
+/* Перевірка розуміння одразу після завдання. Виглядає інакше за урок і
+   за повторення: це не вправа й не іспит, а одне питання, яке відділяє
+   «я зробив» від «я зрозумів». */
+.cd-why {
+  margin: 16px 0; padding: 14px 16px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--panel-2);
+}
+.cd-why-h {
+  margin-bottom: 10px; font-size: .68rem; color: var(--amber);
+  letter-spacing: .08em; text-transform: uppercase;
+}
+.cd-why .rc-ask { font-size: .95rem; }
+/* `код` у зворотних лапках трапляється і в завданні, і в підказці, і в
+   посиланні «далі почитати» — скрізь, де текст писала людина. Абзац від
+   Prose там зайвий: він розриває рядок, який мав лишитись рядком. */
+.cd-task p, .cd-want p, .cd-hint p, .cd-next p { display: inline; margin: 0; }

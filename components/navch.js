@@ -25,7 +25,8 @@ import {
 import { CODE_LESSONS, TRACKS, openUpTo, courseStats, nextLink } from '../lib/code';
 // DAY_SIZE тут своє — у множення воно теж є, і означає інше число
 import {
-  buildQueue, recallStats, nextLevel, DAY_SIZE as RECALL_SIZE,
+  buildQueue, recallStats, nextLevel, pick as pickQuestion,
+  DAY_SIZE as RECALL_SIZE,
 } from '../lib/recall';
 import { tokenize, modeOf, lineCount } from '../lib/highlight';
 import { PLAN, COURSE, nextSteps, planProgress, lessonOf, tourOf } from '../lib/plan';
@@ -1939,6 +1940,22 @@ export function CodeTab({ data, reload, toast }) {
         lesson={lesson}
         saved={prog[lesson.id]}
         locked={idx > upIdx}
+        // питання показуємо лише тому, хто щойно здав урок уперше:
+        // тому, хто повернувся подивитись, воно вже ні про що не питає
+        why={prog[lesson.id]?.asked ? null : pickQuestion(lesson.id, 0)}
+        onWhy={(right) => {
+          const was = prog[lesson.id] || {};
+          save({
+            ...prog,
+            [lesson.id]: {
+              ...was,
+              // зрозумів одразу — поняття починає з першого щабля, а не
+              // з нульового: питати його завтра вже нема потреби
+              level: nextLevel(0, right),
+              asked: today(),
+            },
+          });
+        }}
         onBack={() => setOpenId(null)}
         onNext={() => {
           const nxt = CODE_LESSONS[idx + 1];
@@ -2318,7 +2335,49 @@ function RefCard({ c, open, onToggle }) {
  * поле вводу: поки код виконується, можна вже читати, що вийшло минулого
  * разу.
  */
-function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
+/**
+ * Питання «чому» одразу після завдання.
+ *
+ * Перевірка уроку дивиться на вивід: розвʼязок можна відкрити, вставити —
+ * і урок зарахується. Коли вчишся сам, це єдиний зворотний звʼязок, і він
+ * перевіряє не те. Одне питання перетворює «я зробив» на «я зрозумів».
+ *
+ * Питання те саме, що потім прийде в повторенні: банк один, робіт дві.
+ */
+function WhyNow({ question, onAnswer }) {
+  const [picked, setPicked] = useState(null);
+  const answered = picked !== null;
+  const ok = picked === question.right;
+
+  return (
+    <div className="cd-why">
+      <div className="cd-why-h">Перевірка розуміння</div>
+      <div className="rc-ask"><Prose text={question.ask} /></div>
+      {question.code && <pre className="rc-code">{question.code}</pre>}
+      <div className="rc-opts">
+        {question.options.map((o, i) => (
+          <button
+            key={o}
+            className={'rc-opt'
+              + (answered && i === question.right ? ' is-right' : '')
+              + (answered && i === picked && i !== question.right ? ' is-wrong' : '')}
+            disabled={answered}
+            onClick={() => { setPicked(i); onAnswer(i === question.right); }}
+          >
+            {o}
+          </button>
+        ))}
+      </div>
+      {answered && (
+        <div className={'rc-why' + (ok ? ' is-right' : '')}>
+          <Prose text={question.why} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry, why: askAtOpen, onWhy }) {
   const [code, setCode] = useState(saved?.code || lesson.start);
   const [out, setOut] = useState(null);        // { ok, text }
   const [err, setErr] = useState('');
@@ -2337,6 +2396,14 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
    * відповідь і розібрати її корисніше, ніж закрити вкладку.
    */
   const [fails, setFails] = useState(0);
+  /*
+   * Питання беремо один раз, коли урок відкрили, і далі тримаємо.
+   *
+   * Інакше воно зникає під час читання: відповідь одразу зберігається,
+   * збереження перемальовує вкладку, і питання, яке вже «поставлене»,
+   * щезає разом із поясненням — тобто саме з тим, заради чого воно й було.
+   */
+  const [why, setWhy] = useState(askAtOpen);
   const iframeRef = useRef(null);
   const STUCK = 2;
 
@@ -2345,6 +2412,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
     setPassed(saved?.state === 'done');
     setOut(null); setErr(''); setShowHint(false); setShowSolution(false);
     setShowExample(false); setFails(0);
+    setWhy(askAtOpen);
   }, [lesson.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (locked) {
@@ -2440,11 +2508,11 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
       )}
 
       <div className="cd-task">
-        <b>Завдання.</b> {lesson.task}
+        <b>Завдання.</b> <Prose text={lesson.task} />
         {/* Ціль була відома лише з тексту помилки, тобто вже після
             невдачі. Тепер її видно до того, як почали писати. */}
         {lesson.want && (
-          <div className="cd-want"><b>Має вийти:</b> {lesson.want}</div>
+          <div className="cd-want"><b>Має вийти:</b> <Prose text={lesson.want} /></div>
         )}
       </div>
 
@@ -2478,6 +2546,12 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
         <div className="cd-ok">✓ Зроблено. Можна йти далі — або лишитись і поекспериментувати.</div>
       )}
 
+      {/* Питання ставимо лише там, де воно написане: урок без питання
+          мовчить, а не показує порожню рамку. */}
+      {passed && !err && why && (
+        <WhyNow question={why} onAnswer={onWhy} />
+      )}
+
       <div className="cd-actions">
         <button className="act-btn act-accept" onClick={run} disabled={busy}>
           {busy ? 'Виконую…' : 'Запустити'}
@@ -2495,7 +2569,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
         )}
       </div>
 
-      {showHint && <div className="cd-hint">{lesson.hint}</div>}
+      {showHint && <div className="cd-hint"><Prose text={lesson.hint} /></div>}
       {showSolution && (
         <>
           {!passed && (
@@ -2865,8 +2939,8 @@ function NextRead({ lesson, done }) {
       <span className="cd-next-l">
         Далі почитати{n.foreign && ' · англійською'}
       </span>
-      <b>{n.t}</b>
-      {n.d && <span className="cd-next-d">{n.d}</span>}
+      <b><Prose text={n.t} /></b>
+      {n.d && <span className="cd-next-d"><Prose text={n.d} /></span>}
     </a>
   );
 }
