@@ -3,6 +3,7 @@ import {
   readAll, saveDay, addFood, delFood, recalcDay, saveBody, saveGoals,
   saveProduct, lookupBarcode, saveDish, delDish, copyDay,
   saveMed, takeMed, restockMed, delMed, saveMult, saveCode, saveAbc, addPractice,
+  addNote, editNote, delNote,
   isOwner, healthOwner, todayKyiv,
 } from '../../lib/health';
 
@@ -132,6 +133,28 @@ export default withAuth(async (req, res) => {
         return res.status(400).json({ error: 'Напишіть, що саме хотіли зробити' });
       }
       await addPractice({ ...e, date: String(e.date || '').trim() || todayKyiv() });
+      return res.json(await readAll());
+    }
+
+    /*
+     * Зошит. Три дії замість однієї: нотатку, на відміну від запису в
+     * щоденнику, дописують і виправляють — відповідь на питання часто
+     * знаходиться за кілька днів після самого питання.
+     */
+    if (action === 'note') {
+      const n = req.body.note || {};
+      await addNote({ ...n, date: String(n.date || '').trim() || todayKyiv() });
+      return res.json(await readAll());
+    }
+
+    if (action === 'editNote') {
+      const n = req.body.note || {};
+      await editNote({ ...n, date: String(n.date || '').trim() || todayKyiv() });
+      return res.json(await readAll());
+    }
+
+    if (action === 'delNote') {
+      await delNote(req.body.row);
       return res.json(await readAll());
     }
 

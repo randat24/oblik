@@ -222,7 +222,11 @@ test('parseCode: читає лист і не вірить чужому «ста�
     ['w2', 'майже', '', 'дурня', ''],
     ['', 'done', '', '', ''],
   ]);
-  assert.deepEqual(prog.w1, { id: 'w1', state: 'done', date: '16.08.2026', tries: 3, code: 'let a = 1;' });
+  assert.deepEqual(prog.w1, {
+    id: 'w1', state: 'done', date: '16.08.2026', tries: 3, code: 'let a = 1;',
+    // старий лист без колонок повторення читається як «жодного разу»
+    level: 0, asked: '',
+  });
   assert.equal(prog.w2.state, '');
   assert.equal(prog.w2.tries, 0);
   assert.equal(Object.keys(prog).length, 2);      // рядок без id пропущено
@@ -238,8 +242,29 @@ test('codeRows: рядок на кожен урок, у порядку курс�
   const rows = codeRows({ w1: { state: 'done', date: '16.08.2026', tries: 2, code: 'x' } });
   assert.equal(rows.length, CODE_LESSONS.length);
   assert.equal(rows[0][CD.id], CODE_LESSONS[0].id);
-  assert.deepEqual(rows[0], ['w1', 'done', '16.08.2026', 2, 'x']);
-  assert.deepEqual(rows[1], [CODE_LESSONS[1].id, '', '', 0, '']);
+  assert.deepEqual(rows[0], ['w1', 'done', '16.08.2026', 2, 'x', 0, '']);
+  assert.deepEqual(rows[1], [CODE_LESSONS[1].id, '', '', 0, '', 0, '']);
+});
+
+test('codeRows не губить записів, яких немає в курсі', () => {
+  /*
+   * Лист переписується цілком, тож усе, чого немає в переліку рядків,
+   * зникає назавжди. Уроки про інструменти живуть окремо від курсу й
+   * саме так і зникали при першому ж збереженні.
+   */
+  const rows = codeRows({ t1: { state: 'done', date: '13.09.2026', tries: 1, code: '' } });
+  assert.equal(rows.length, CODE_LESSONS.length + 1);
+  const mine = rows.find((r) => r[CD.id] === 't1');
+  assert.deepEqual(mine, ['t1', 'done', '13.09.2026', 1, '', 0, '']);
+  // і повертається звідти цілим
+  assert.equal(parseCode([CODE_HEADERS, ...rows]).t1.state, 'done');
+});
+
+test('рівень повторення переживає запис у лист', () => {
+  const before = { b1: { state: 'done', date: '16.08.2026', tries: 1, code: '', level: 3, asked: '01.09.2026' } };
+  const after = parseCode([CODE_HEADERS, ...codeRows(before)]);
+  assert.equal(after.b1.level, 3);
+  assert.equal(after.b1.asked, '01.09.2026');
 });
 
 test('codeRows і parseCode переживають одне одного', () => {

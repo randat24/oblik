@@ -23,11 +23,32 @@ import {
   buildSession, partQueue, applyResults,
 } from '../lib/mult';
 import { CODE_LESSONS, TRACKS, openUpTo, courseStats, nextLink } from '../lib/code';
+import { TOOL_LESSONS, toolById, toolStats } from '../lib/tools';
+// DAY_SIZE тут своє — у множення воно теж є, і означає інше число
+import {
+  buildQueue, recallStats, nextLevel, pick as pickQuestion,
+  DAY_SIZE as RECALL_SIZE,
+} from '../lib/recall';
 import { tokenize, modeOf, lineCount } from '../lib/highlight';
 import { PLAN, COURSE, nextSteps, planProgress, lessonOf, tourOf } from '../lib/plan';
 import {
   ABC, ABC_GROUPS, STATES, byGroup, abcProgress, suggestNext, cycleState, stateOf,
 } from '../lib/abc';
+import { pathOf, hasWhere, coverage } from '../lib/paths';
+import {
+  ERR_GROUPS, ERRORS, matchError, findErrors, errorStats, errorsOfTopic,
+} from '../lib/errors';
+import {
+  SOURCES, VERSIONS, NODE, OLD_WAYS, HOW_TO_READ, CHECK_DAY,
+  sourceById, sourceOf, sourceStats,
+} from '../lib/sources';
+import {
+  // «джерела» тут і в `lib/sources` — різні речі: там сайти, тут «звідки
+  // взялась відповідь», тож імена розводимо на вході
+  KINDS, SOURCES as NOTE_SOURCES, AI_CHECK, STARTERS, KIND_KEYS,
+  findNotes, noteStats, byTopic, kindBy, sourceBy, topicLabel, noteError,
+  isOpen as noteOpen,
+} from '../lib/notes';
 import { changedOnly } from '../lib/patch';
 import { FIELDS as PRACTICE_FIELDS, statsOf, freshIdeas } from '../lib/practice';
 import { REF_GROUPS, REF_CARDS, findCards } from '../lib/ref';
@@ -1764,20 +1785,397 @@ function CodeEditor({ value, onChange, mode, rows, onRun }) {
   );
 }
 
-/** Текст пояснення з `код` у зворотних лапках — підсвічений моноширинним */
+/**
+ * Розмітка всередині рядка: `код` у зворотних лапках і **наголос**.
+ *
+ * Без абзацу навколо — саме тому окремо від `Prose`. Той самий текст
+ * трапляється не лише в поясненні, а й у варіанті відповіді, а варіант —
+ * це кнопка, і абзац усередині кнопки ламає і верстку, і розмітку. Доти
+ * зворотні лапки в питаннях повторення показувались як лапки: двадцять
+ * шість варіантів на кшталт «\`git status\` і \`git log\`» читались саме так,
+ * із паличками.
+ *
+ * Код розбирається першим: `2 ** 3` у лапках лишається кодом, а не
+ * наголосом на пробілі.
+ */
+function Mono({ text }) {
+  const parts = String(text).split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) => {
+    if (p.startsWith('`')) return <code key={i} className="cd-inline">{p.slice(1, -1)}</code>;
+    if (p.startsWith('**')) return <b key={i}>{p.slice(2, -2)}</b>;
+    return <span key={i}>{p}</span>;
+  });
+}
+
+/** Те саме абзацом — як пишуть пояснення */
 function Prose({ text }) {
-  const parts = String(text).split(/(`[^`]+`)/g);
+  return <p><Mono text={text} /></p>;
+}
+
+/**
+ * Повторення.
+ *
+ * П'ять питань — це хвилини три. Стільки й має бути: повторення не
+ * сідають робити окремо, його відкривають між справами, і те, що не
+ * влазить у три хвилини, не відкривають зовсім.
+ *
+ * Питання тут не про слова, а про те місце, де новачок помиляється.
+ * Тому після відповіді завжди видно пояснення — і після правильної теж:
+ * угадати з трьох варіантів можна, зрозуміти — ні.
+ */
+function RecallRoom({ prog, onBack, onSave }) {
+  const [queue] = useState(() => buildQueue(prog));
+  const [at, setAt] = useState(0);
+  const [picked, setPicked] = useState(null);
+  const [right, setRight] = useState(0);
+  /*
+   * Відповіді складаємо тут, а в таблицю пишемо один раз — у кінці
+   * підходу або коли з нього виходять. Той самий розрахунок, що й у
+   * тренажері множення: запис після кожної відповіді з'їв би хвилинну
+   * квоту Google на третьому питанні.
+   */
+  const done = useRef({});
+
+  const flush = () => {
+    const marks = done.current;
+    done.current = {};
+    if (Object.keys(marks).length) onSave(marks);
+    onBack();
+  };
+
+  const item = queue[at];
+
+  if (!queue.length) {
+    return (
+      <div className="cd-room">
+        <button className="cd-back" onClick={onBack}>← до уроків</button>
+        <div className="h-empty">
+          Сьогодні повторювати нічого. Поняття повертаються за розкладом —
+          спершу через день, далі рідше, а те, що згадали п'ять разів, —
+          раз на місяць.
+        </div>
+      </div>
+    );
+  }
+
+  if (!item) {
+    return (
+      <div className="cd-room">
+        <button className="cd-back" onClick={flush}>← до уроків</button>
+        <div className="rc-done">
+          <div className="rc-done-n">{right} з {queue.length}</div>
+          <div className="rc-done-t">
+            {right === queue.length
+              ? 'Усе згадали. Ці поняття повернуться нескоро.'
+              : 'Те, що не згадалось, повернеться вже завтра.'}
+          </div>
+          <button className="btn" onClick={flush}>До уроків</button>
+        </div>
+      </div>
+    );
+  }
+
+  const q = item.question;
+  const answered = picked !== null;
+  const ok = picked === q.right;
+
   return (
-    <p>
-      {parts.map((p, i) => (p.startsWith('`')
-        ? <code key={i} className="cd-inline">{p.slice(1, -1)}</code>
-        : <span key={i}>{p}</span>))}
-    </p>
+    <div className="cd-room">
+      {/* вихід посеред підходу теж зберігає: три відповіді, які людина
+          встигла дати, не мають пропасти через те, що її покликали */}
+      <button className="cd-back" onClick={flush}>← до уроків</button>
+
+      <div className="rc-top">
+        <span className="rc-count">{at + 1} з {queue.length}</span>
+        <span className="rc-from">{lessonTitle(item.id)}</span>
+      </div>
+
+      <div className="rc-ask"><Prose text={q.ask} /></div>
+      {q.code && <pre className="rc-code">{q.code}</pre>}
+
+      <div className="rc-opts">
+        {q.options.map((o, i) => (
+          <button
+            key={o}
+            className={'rc-opt'
+              + (answered && i === q.right ? ' is-right' : '')
+              + (answered && i === picked && i !== q.right ? ' is-wrong' : '')}
+            disabled={answered}
+            onClick={() => {
+              setPicked(i);
+              const ok = i === q.right;
+              if (ok) setRight((n) => n + 1);
+              done.current[item.id] = nextLevel(item.level, ok);
+            }}
+          >
+            <Mono text={o} />
+          </button>
+        ))}
+      </div>
+
+      {answered && (
+        <>
+          {/* пояснення показуємо й після правильної відповіді: угадати з
+              трьох варіантів можна, зрозуміти — ні */}
+          <div className={'rc-why' + (ok ? ' is-right' : '')}><Prose text={q.why} /></div>
+          <button
+            className="btn z-wide"
+            onClick={() => { setAt(at + 1); setPicked(null); }}
+          >
+            {at + 1 < queue.length ? 'Далі' : 'Підсумок'}
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
-export function CodeTab({ data, reload, toast }) {
+const lessonTitle = (id) => CODE_LESSONS.find((l) => l.id === id)?.title || id;
+
+/*
+ * Чи настала черга цього уроку.
+ *
+ * Каталог помилок і «Абетка» ведуть в уроки, а уроки відкриваються по
+ * черзі — і новачок, який щойно спіткнувся об `undefined`, натискав
+ * «Урок · Коли ламається» й отримував «цей урок ще закритий». Дорога в
+ * нікуди гірша за її відсутність: тепер видно, що урок є, але його черга
+ * попереду, і натиснути нема на що.
+ */
+const lessonLocked = (prog, id) => {
+  const i = CODE_LESSONS.findIndex((l) => l.id === id);
+  return i < 0 || i > openUpTo(prog || {});
+};
+
+/* ---------- Інструменти ----------
+   Уроки курсу перевіряються запуском коду. Ці — ні, і не можуть: те, що
+   тут відбувається, відбувається в чужому терміналі, на чужому
+   компʼютері, у чужому вікні браузера. Застосунок цього не бачить і
+   вдавати, що бачить, не буде.
+
+   Тому перевірка тут інша: кроки, які людина відмічає сама, і кілька
+   питань, на які не відповісти, не подивившись на екран. «Що надрукував
+   `pwd` — шлях чи перелік файлів» питає не про пам'ять. */
+
+/** Одне питання перевірки: відповідь, пояснення й право спробувати ще */
+function ToolAsk({ q, picked, onPick, onAgain }) {
+  const answered = picked !== null && picked !== undefined;
+  const ok = picked === q.right;
+
+  return (
+    <div className="tl-ask">
+      <div className="rc-ask"><Prose text={q.ask} /></div>
+      <div className="rc-opts">
+        {q.options.map((o, i) => (
+          <button
+            key={o}
+            className={'rc-opt'
+              + (answered && i === q.right ? ' is-right' : '')
+              + (answered && i === picked && i !== q.right ? ' is-wrong' : '')}
+            disabled={answered}
+            onClick={() => onPick(i)}
+          >
+            <Mono text={o} />
+          </button>
+        ))}
+      </div>
+      {answered && (
+        <div className={'rc-why' + (ok ? ' is-right' : '')}>
+          <Prose text={q.why} />
+          {/* Схибив — може спробувати ще: це не іспит, а привід
+              придивитись. Але спершу він читає, чому не так. */}
+          {!ok && (
+            <button className="tl-again" onClick={onAgain}>Спробувати ще</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolRoom({ lesson, saved, onBack, onDone }) {
+  /*
+   * Галочки на кроках лежать у браузері, а не в таблиці.
+   *
+   * Це чернетка, а не результат: «я вже набрав `pwd`» цікаво лише доти,
+   * доки урок відкритий. Результат — відповіді на питання, і вони
+   * зберігаються як слід.
+   */
+  const key = `oblik_tool_${lesson.id}`;
+  const [ticks, setTicks] = useState([]);
+  const [picks, setPicks] = useState({});
+  const [showHint, setShowHint] = useState(false);
+  const sent = useRef(false);
+
+  useEffect(() => {
+    setPicks({});
+    setShowHint(false);
+    sent.current = false;
+    try {
+      const raw = JSON.parse(localStorage.getItem(key) || '[]');
+      setTicks(Array.isArray(raw) ? raw : []);
+    } catch { setTicks([]); }
+  }, [lesson.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggle = (i) => {
+    const next = ticks.includes(i) ? ticks.filter((x) => x !== i) : [...ticks, i];
+    setTicks(next);
+    try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* дарма */ }
+  };
+
+  const allRight = lesson.verify.every((q, i) => picks[i] === q.right);
+  const wasDone = saved?.state === 'done';
+
+  useEffect(() => {
+    // зараховуємо один раз: збереження перемальовує вкладку, і без цієї
+    // засувки урок ішов у таблицю щоразу
+    if (allRight && !sent.current) { sent.current = true; onDone(); }
+  }, [allRight]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="cd-room">
+      <div className="cd-room-h">
+        <button className="cd-back" onClick={onBack}>← До інструментів</button>
+        <b>{lesson.title}</b>
+      </div>
+
+      <div className="cd-intro-box">
+        {lesson.intro.map((t, i) => <Prose key={i} text={t} />)}
+      </div>
+
+      {/* Кроки — не інструкція до прочитання, а перелік того, що треба
+          зробити у себе. Тому в кожного написано, що має статись у
+          відповідь: інакше незрозуміло, чи вийшло. */}
+      <ol className="tl-steps">
+        {lesson.steps.map((s, i) => {
+          const on = ticks.includes(i);
+          return (
+            <li className={'tl-step' + (on ? ' is-on' : '')} key={i}>
+              <button
+                className="tl-tick"
+                onClick={() => toggle(i)}
+                aria-label={on ? 'Зроблено' : 'Позначити зробленим'}
+              >
+                {on ? '✓' : i + 1}
+              </button>
+              <div className="tl-step-b">
+                <div className="tl-do"><Prose text={s.do} /></div>
+                <div className="tl-see"><b>Має статись:</b> <Prose text={s.see} /></div>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="cd-task">
+        <b>Завдання.</b> <Prose text={lesson.task} />
+        <div className="cd-want"><b>Має вийти:</b> <Prose text={lesson.want} /></div>
+      </div>
+
+      <div className="cd-actions tl-actions">
+        <button className="act-btn" onClick={() => setShowHint((v) => !v)}>
+          {showHint ? 'Сховати підказку' : 'Підказка'}
+        </button>
+      </div>
+      {showHint && <div className="cd-hint"><Prose text={lesson.hint} /></div>}
+
+      <div className="tl-verify">
+        <div className="cd-why-h">Перевірка — коли зробили</div>
+        <div className="tl-verify-d"><Prose text={lesson.why} /></div>
+        {lesson.verify.map((q, i) => (
+          <ToolAsk
+            key={i}
+            q={q}
+            picked={picks[i]}
+            onPick={(v) => setPicks((p) => ({ ...p, [i]: v }))}
+            onAgain={() => setPicks((p) => { const n = { ...p }; delete n[i]; return n; })}
+          />
+        ))}
+      </div>
+
+      {lesson.next && (
+        <a
+          className="cd-next"
+          href={lesson.next.url}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span className="cd-next-l">Першоджерело</span>
+          <b><Prose text={lesson.next.t} /></b>
+          <span className="cd-next-d"><Prose text={lesson.next.d} /></span>
+        </a>
+      )}
+
+      {allRight && (
+        <div className="cd-ok">✓ Зроблено. Ці команди тепер ваші — далі вони просто набираються.</div>
+      )}
+      {!allRight && wasDone && (
+        <div className="cd-hint">Цей урок уже зарахований — ви відкрили його, щоб пригадати.</div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Полиця з уроками про інструменти.
+ *
+ * Без замків: термінал потрібен тоді, коли потрібен, і ставити його
+ * умовою для «Далі» означало б загородити вхід. Порядок усередині все ж
+ * є — Git після терміналу, бо інакше нема де набирати команди, — але це
+ * порада, а не замок.
+ */
+function ToolShelf({ prog, start, onBack, onDone }) {
+  const [openId, setOpenId] = useState(start || null);
+  const lesson = openId ? toolById(openId) : null;
+
+  if (lesson) {
+    return (
+      <ToolRoom
+        lesson={lesson}
+        saved={prog[lesson.id]}
+        onBack={() => setOpenId(null)}
+        onDone={() => onDone(lesson.id)}
+      />
+    );
+  }
+
+  return (
+    <div className="cd-room">
+      <div className="cd-room-h">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+        <b>Інструменти</b>
+      </div>
+
+      <div className="cd-intro-box">
+        <Prose text={'Курс учить писати код на сторінці: нічого не треба ставити, помилився — перезавантажив. Справжня робота починається інакше — із чорного вікна, у якому треба щось надрукувати, і з питання «а як тепер повернути, як було».'} />
+        <Prose text={'Ці уроки стоять окремо й відкриті всі: термінал потрібен тоді, коли потрібен. Перевіряються вони не запуском коду — те, що тут відбувається, відбувається у вас, — а кроками, які ви робите, і питаннями, на які не відповісти, не подивившись на екран.'} />
+      </div>
+
+      <div className="cd-list">
+        {TOOL_LESSONS.map((l, i) => {
+          const done = prog[l.id]?.state === 'done';
+          return (
+            <button
+              key={l.id}
+              className={'cd-item' + (done ? ' is-done' : '')}
+              onClick={() => setOpenId(l.id)}
+            >
+              <i className="cd-item-i">{done ? '✓' : i + 1}</i>
+              <span className="cd-item-b">
+                <b>{l.title}</b>
+                <em>{l.goal}</em>
+              </span>
+              <span className="cd-tag is-tools">Ремесло</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function CodeTab({ data, reload, toast, jump, onJumped }) {
   const [prog, setProg] = useState(() => data.code || {});
+  const [target, setTarget] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [saving, setSaving] = useState(false);
   // Курс проходять один раз, а довідник відкривають щотижня — тож це не
@@ -1786,9 +2184,42 @@ export function CodeTab({ data, reload, toast }) {
 
   useEffect(() => { setProg(data.code || {}); }, [data.code]);
 
+  /*
+   * Прийшли сюди з «Абетки» — одразу відкриваємо те, по що прийшли.
+   *
+   * Ціль знімаємо з полиці відразу: інакше вона спрацює вдруге, коли
+   * людина повернеться на вкладку своїми ногами, і замість переліку
+   * уроків знову відкриється той самий урок.
+   */
+  useEffect(() => {
+    if (!jump) return;
+    /*
+     * Ціль кладемо в себе, а не читаємо з пропса далі.
+     *
+     * `onJumped` одразу знімає її зверху — інакше перехід спрацював би
+     * вдруге, коли людина повернеться на вкладку своїми ногами. Але
+     * довідник і розбори відкриваються на наступному кроці, і пропс до
+     * того моменту вже порожній: вони показували б перелік із початку
+     * замість тієї картки, по яку прийшли.
+     */
+    setTarget(jump);
+    if (jump.lesson) { setMode('learn'); setOpenId(jump.lesson); }
+    else if (jump.err) setMode('errors');
+    else if (jump.old) setMode('sources');
+    else if (jump.note) setMode('notes');
+    else if (jump.tool) setMode('tools');
+    else if (jump.ref) setMode('ref');
+    else if (jump.tour) setMode('tour');
+    onJumped?.();
+  }, [jump]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const upIdx = openUpTo(prog);
   const stats = courseStats(prog);
   const diary = statsOf(data.practice || [], today());
+  const rec = recallStats(prog);
+  const tools = toolStats(prog);
+  const notes = noteStats(data.notes || []);
+  const errs = errorStats();
 
   const save = async (next) => {
     // у посилку йде лише те, що змінилось відносно завантаженого:
@@ -1814,6 +2245,22 @@ export function CodeTab({ data, reload, toast }) {
         lesson={lesson}
         saved={prog[lesson.id]}
         locked={idx > upIdx}
+        // питання показуємо лише тому, хто щойно здав урок уперше:
+        // тому, хто повернувся подивитись, воно вже ні про що не питає
+        why={prog[lesson.id]?.asked ? null : pickQuestion(lesson.id, 0)}
+        onWhy={(right) => {
+          const was = prog[lesson.id] || {};
+          save({
+            ...prog,
+            [lesson.id]: {
+              ...was,
+              // зрозумів одразу — поняття починає з першого щабля, а не
+              // з нульового: питати його завтра вже нема потреби
+              level: nextLevel(0, right),
+              asked: today(),
+            },
+          });
+        }}
         onBack={() => setOpenId(null)}
         onNext={() => {
           const nxt = CODE_LESSONS[idx + 1];
@@ -1823,6 +2270,9 @@ export function CodeTab({ data, reload, toast }) {
           const next = {
             ...prog,
             [lesson.id]: {
+              // рівень і день повторення переносимо: урок, який
+              // перепройшли, не має починати згадуватись наново
+              ...(prog[lesson.id] || {}),
               id: lesson.id, state: 'done',
               date: new Date().toLocaleDateString('uk-UA'),
               tries: (prog[lesson.id]?.tries || 0) + 1,
@@ -1845,12 +2295,122 @@ export function CodeTab({ data, reload, toast }) {
     );
   }
 
+  if (mode === 'recall') {
+    return (
+      <RecallRoom
+        prog={prog}
+        onBack={() => setMode('learn')}
+        onSave={(marks) => {
+          const next = { ...prog };
+          Object.entries(marks).forEach(([id, level]) => {
+            next[id] = { ...(next[id] || {}), level, asked: today() };
+          });
+          save(next);
+        }}
+      />
+    );
+  }
+
+  if (mode === 'tools') {
+    return (
+      <ToolShelf
+        prog={prog}
+        start={target?.tool}
+        onBack={() => { setTarget(null); setMode('learn'); }}
+        onDone={(id) => save({
+          ...prog,
+          [id]: {
+            ...(prog[id] || {}),
+            id, state: 'done', date: today(),
+            tries: (prog[id]?.tries || 0) + 1,
+            code: '',
+          },
+        })}
+      />
+    );
+  }
+
   if (mode === 'ref') {
-    return <RefBook onBack={() => setMode('learn')} />;
+    return (
+      <RefBook
+        start={target?.ref}
+        notes={data.notes || []}
+        toNotes={() => { setTarget(null); setMode('notes'); }}
+        onBack={() => { setTarget(null); setMode('learn'); }}
+      />
+    );
   }
 
   if (mode === 'tour') {
-    return <TourBook onBack={() => setMode('learn')} />;
+    return <TourBook start={target?.tour} onBack={() => { setTarget(null); setMode('learn'); }} />;
+  }
+
+  if (mode === 'sources') {
+    return (
+      <SrcBook
+        start={target?.old}
+        onBack={() => { setTarget(null); setMode('learn'); }}
+      />
+    );
+  }
+
+  if (mode === 'errors') {
+    return (
+      <ErrBook
+        start={target?.err}
+        locked={(id) => lessonLocked(prog, id)}
+        onBack={() => { setTarget(null); setMode('learn'); }}
+        // урок і картку відкриваємо тим самим шляхом, що й з «Абетки»
+        go={(what, id) => {
+          if (what === 'lesson') { setTarget(null); setOpenId(id); setMode('learn'); }
+          if (what === 'ref') { setTarget({ ref: id }); setMode('ref'); }
+        }}
+        /*
+         * Каталог пояснює, зошит памʼятає.
+         *
+         * Розібрана й записана своїми словами помилка вдруге не забирає
+         * вечір — але писати її з нуля ніхто не буде. Тому форма
+         * відкривається вже з текстом помилки й темою: лишається
+         * дописати, що саме було у вас.
+         */
+        onNote={(e) => {
+          setTarget({
+            note: '',
+            draft: {
+              kind: 'err', ask: e.msg, topic: e.topic || '',
+              tags: e.tags.join(', '), src: '',
+            },
+          });
+          setMode('notes');
+        }}
+      />
+    );
+  }
+
+  if (mode === 'notes') {
+    return (
+      <Notebook
+        list={data.notes || []}
+        canEdit={data.canEdit}
+        // з «Абетки» приходять по темі: зошит одразу показує лише її
+        start={target?.note}
+        draft={target?.draft}
+        onBack={() => { setTarget(null); setMode('learn'); }}
+        onAdd={async (note) => {
+          await api('/api/health', { method: 'POST', body: { action: 'note', note } });
+          await reload();
+        }}
+        onEdit={async (note) => {
+          await api('/api/health', { method: 'POST', body: { action: 'editNote', note } });
+          await reload();
+        }}
+        onDel={async (row) => {
+          await api('/api/health', { method: 'POST', body: { action: 'delNote', row } });
+          await reload();
+        }}
+        toast={toast}
+      />
+    );
   }
 
   if (mode === 'diary') {
@@ -1880,6 +2440,43 @@ export function CodeTab({ data, reload, toast }) {
         </p>
       </div>
 
+      {/* Повторення стоїть першим серед розділів навмисно: решта — про
+          те, щоб дізнатись нове, а це єдине, що не дає забути старе.
+          Курс без нього доводить до кінця людину, яка пам'ятає останні
+          десять уроків із шістдесяти чотирьох. */}
+      <button
+        className={'cd-refb is-recall' + (rec.due > 0 ? ' is-now' : '')}
+        onClick={() => setMode('recall')}
+      >
+        <span className="cd-refb-t">
+          Повторення
+          {rec.due > 0 && <em className="cd-refb-n">{Math.min(rec.due, RECALL_SIZE)}</em>}
+        </span>
+        <span className="cd-refb-d">
+          {rec.total === 0
+            ? 'З\'явиться, коли пройдете перший урок з основ'
+            : rec.due > 0
+              ? `${Math.min(rec.due, RECALL_SIZE)} ${plural(Math.min(rec.due, RECALL_SIZE), 'питання', 'питання', 'питань')} на сьогодні — хвилини три`
+              : `Сьогодні нічого. Тримається ${rec.held} з ${rec.total}`}
+        </span>
+      </button>
+
+      {/* Курс учить писати код, а робота починається з того, що навколо
+          коду: термінал, Git, оточення, пошук причини. Без цього людина
+          вміє писати, але не вміє нічого запустити, нічого зберегти й
+          нічого повернути, як було. */}
+      <button className="cd-refb is-tools" onClick={() => setMode('tools')}>
+        <span className="cd-refb-t">
+          Інструменти
+          {tools.done > 0 && <em className="cd-refb-n">{tools.done}</em>}
+        </span>
+        <span className="cd-refb-d">
+          {tools.done === 0
+            ? `${tools.total} ${plural(tools.total, 'урок', 'уроки', 'уроків')} не про синтаксис: термінал, Git, оточення, пошук причини`
+            : `Зроблено ${tools.done} з ${tools.total}: термінал, Git, оточення, пошук причини`}
+        </span>
+      </button>
+
       {/* Довідник — не додаток до уроків, а друга половина вкладки: уроки
           проходять один раз, а сюди повертаються щоразу, коли забули, як
           саме пишеться те, що вже колись робив. */}
@@ -1899,6 +2496,47 @@ export function CodeTab({ data, reload, toast }) {
         <span className="cd-refb-d">
           {TOURS.length} розборів справжніх файлів «Обліку» — рядок за рядком,
           із поясненням, чому саме так
+        </span>
+      </button>
+
+      {/* Червоний рядок у консолі новачок читає як вирок. Насправді це
+          коротке речення про конкретну річ — і речень цих небагато.
+          Стоїть одразу після повторення, бо потрібен не тоді, коли
+          вчаться, а тоді, коли щось не працює. */}
+      <button className="cd-refb is-errors" onClick={() => setMode('errors')}>
+        <span className="cd-refb-t">Чому я отримую цю помилку</span>
+        <span className="cd-refb-d">
+          {errs.total} {plural(errs.total, 'розібрана', 'розібрані', 'розібраних')} {plural(errs.total, 'помилка', 'помилки', 'помилок')}:
+          що означає, звідки береться, як виглядає полагодженою.
+          Вставте червоний рядок — знайдеться за ним
+        </span>
+      </button>
+
+      {/* Довідник відповідає на питання, які передбачив хтось інший. На
+          решту — а їх більшість — відповідає лише той, хто вже раз їх
+          закрив. Зошит і є тим місцем, де ця відповідь лишається. */}
+      <button className="cd-refb is-notes" onClick={() => setMode('notes')}>
+        <span className="cd-refb-t">
+          Зошит
+          {notes.total > 0 && <em className="cd-refb-n">{notes.total}</em>}
+        </span>
+        <span className="cd-refb-d">
+          {notes.total === 0
+            ? 'Свої питання, помилки й шматки коду — щоб знайти їх через пів року'
+            : `${notes.total} ${plural(notes.total, 'нотатка', 'нотатки', 'нотаток')}`
+              + (notes.topics ? ` в ${notes.topics} ${plural(notes.topics, 'темі', 'темах', 'темах')}` : '')
+              + (notes.open ? `, ${notes.open} без відповіді` : '')}
+        </span>
+      </button>
+
+      {/* Ставиться останнім розділом навмисно: він потрібен не тоді, коли
+          вчаться за цим застосунком, а тоді, коли пішли вчитись деінде —
+          і принесли звідти статтю невідомого віку. */}
+      <button className="cd-refb is-src" onClick={() => setMode('sources')}>
+        <span className="cd-refb-t">Джерела й версії</span>
+        <span className="cd-refb-d">
+          Куди ходити по відповідь, на чому працює цей застосунок
+          і як упізнати статтю, що застаріла
         </span>
       </button>
 
@@ -1975,12 +2613,21 @@ export function CodeTab({ data, reload, toast }) {
  * У кожній картці є рядок «у застосунку»: приклад із підручника
  * забувається, а «ось так зроблено в моєму «Обліку» — ні.
  */
-function RefBook({ onBack }) {
+function RefBook({ onBack, start, notes = [], toNotes }) {
   const [q, setQ] = useState('');
-  const [open, setOpen] = useState(null);
+  const [open, setOpen] = useState(start || null);
 
   const found = findCards(q);
   const searching = q.trim().length > 0;
+  /*
+   * Свої нотатки шукаються тут-таки.
+   *
+   * У роботі не памʼятають, у якому з розділів лежить відповідь, —
+   * памʼятають саме питання. Змушувати людину спершу згадати, чи вона це
+   * колись записувала, означає не знайти нічого: два пошуки замість
+   * одного ніхто робити не буде.
+   */
+  const mine = searching ? findNotes(notes, q) : [];
 
   return (
     <div className="cd-ref">
@@ -1996,9 +2643,29 @@ function RefBook({ onBack }) {
 
       {searching && (
         <div className="cd-ref-n">
-          {found.length === 0
+          {found.length + mine.length === 0
             ? 'Нічого не знайшлось. Спробуйте іншими словами — пошук іде і по коду.'
-            : `Знайдено: ${found.length}`}
+            : `Знайдено: ${found.length}`
+              + (mine.length ? ` та ${mine.length} у зошиті` : '')}
+        </div>
+      )}
+
+      {mine.length > 0 && (
+        <div className="cd-ref-g">
+          <div className="cd-ref-h">
+            <b>Ваш зошит</b>
+            <em>Записане своїми руками — воно згадується найкраще</em>
+          </div>
+          <div className="nb-list">
+            {mine.map((n) => (
+              <Note key={n.row} n={n} open canEdit={false} onToggle={() => {}} />
+            ))}
+          </div>
+          {toNotes && (
+            <button className="act-btn nb-more" onClick={() => toNotes(q)}>
+              Відкрити зошит
+            </button>
+          )}
         </div>
       )}
 
@@ -2036,8 +2703,8 @@ function RefBook({ onBack }) {
  * нуля, і незнайомий файл лякає рівно доти, доки хтось не проведе по
  * ньому пальцем.
  */
-function TourBook({ onBack }) {
-  const [openId, setOpenId] = useState(null);
+function TourBook({ onBack, start }) {
+  const [openId, setOpenId] = useState(start || null);
   const tour = openId ? tourById(openId) : null;
 
   if (tour) return <TourRoom tour={tour} onBack={() => setOpenId(null)} />;
@@ -2136,10 +2803,13 @@ function RefCard({ c, open, onToggle }) {
       {open && (
         <div className="cd-card-b">
           <pre className="cd-card-code">{c.code}</pre>
-          {c.note && <p className="cd-card-n">{c.note}</p>}
-          {c.note2 && <p className="cd-card-n">{c.note2}</p>}
+          {/* Пояснення картки писала людина, і `код` у ньому — зворотними
+              лапками, як усюди. Друкувались вони теж як лапки: «`||`
+              спрацьовує на нулі» читалось саме так, із паличками. */}
+          {c.note && <p className="cd-card-n"><Mono text={c.note} /></p>}
+          {c.note2 && <p className="cd-card-n"><Mono text={c.note2} /></p>}
           {c.here && (
-            <p className="cd-card-here"><b>У застосунку:</b> {c.here}</p>
+            <p className="cd-card-here"><b>У застосунку:</b> <Mono text={c.here} /></p>
           )}
         </div>
       )}
@@ -2153,7 +2823,49 @@ function RefCard({ c, open, onToggle }) {
  * поле вводу: поки код виконується, можна вже читати, що вийшло минулого
  * разу.
  */
-function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
+/**
+ * Питання «чому» одразу після завдання.
+ *
+ * Перевірка уроку дивиться на вивід: розвʼязок можна відкрити, вставити —
+ * і урок зарахується. Коли вчишся сам, це єдиний зворотний звʼязок, і він
+ * перевіряє не те. Одне питання перетворює «я зробив» на «я зрозумів».
+ *
+ * Питання те саме, що потім прийде в повторенні: банк один, робіт дві.
+ */
+function WhyNow({ question, onAnswer }) {
+  const [picked, setPicked] = useState(null);
+  const answered = picked !== null;
+  const ok = picked === question.right;
+
+  return (
+    <div className="cd-why">
+      <div className="cd-why-h">Перевірка розуміння</div>
+      <div className="rc-ask"><Prose text={question.ask} /></div>
+      {question.code && <pre className="rc-code">{question.code}</pre>}
+      <div className="rc-opts">
+        {question.options.map((o, i) => (
+          <button
+            key={o}
+            className={'rc-opt'
+              + (answered && i === question.right ? ' is-right' : '')
+              + (answered && i === picked && i !== question.right ? ' is-wrong' : '')}
+            disabled={answered}
+            onClick={() => { setPicked(i); onAnswer(i === question.right); }}
+          >
+            <Mono text={o} />
+          </button>
+        ))}
+      </div>
+      {answered && (
+        <div className={'rc-why' + (ok ? ' is-right' : '')}>
+          <Prose text={question.why} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry, why: askAtOpen, onWhy }) {
   const [code, setCode] = useState(saved?.code || lesson.start);
   const [out, setOut] = useState(null);        // { ok, text }
   const [err, setErr] = useState('');
@@ -2172,6 +2884,14 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
    * відповідь і розібрати її корисніше, ніж закрити вкладку.
    */
   const [fails, setFails] = useState(0);
+  /*
+   * Питання беремо один раз, коли урок відкрили, і далі тримаємо.
+   *
+   * Інакше воно зникає під час читання: відповідь одразу зберігається,
+   * збереження перемальовує вкладку, і питання, яке вже «поставлене»,
+   * щезає разом із поясненням — тобто саме з тим, заради чого воно й було.
+   */
+  const [why, setWhy] = useState(askAtOpen);
   const iframeRef = useRef(null);
   const STUCK = 2;
 
@@ -2180,6 +2900,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
     setPassed(saved?.state === 'done');
     setOut(null); setErr(''); setShowHint(false); setShowSolution(false);
     setShowExample(false); setFails(0);
+    setWhy(askAtOpen);
   }, [lesson.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (locked) {
@@ -2275,11 +2996,11 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
       )}
 
       <div className="cd-task">
-        <b>Завдання.</b> {lesson.task}
+        <b>Завдання.</b> <Prose text={lesson.task} />
         {/* Ціль була відома лише з тексту помилки, тобто вже після
             невдачі. Тепер її видно до того, як почали писати. */}
         {lesson.want && (
-          <div className="cd-want"><b>Має вийти:</b> {lesson.want}</div>
+          <div className="cd-want"><b>Має вийти:</b> <Prose text={lesson.want} /></div>
         )}
       </div>
 
@@ -2313,6 +3034,12 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
         <div className="cd-ok">✓ Зроблено. Можна йти далі — або лишитись і поекспериментувати.</div>
       )}
 
+      {/* Питання ставимо лише там, де воно написане: урок без питання
+          мовчить, а не показує порожню рамку. */}
+      {passed && !err && why && (
+        <WhyNow question={why} onAnswer={onWhy} />
+      )}
+
       <div className="cd-actions">
         <button className="act-btn act-accept" onClick={run} disabled={busy}>
           {busy ? 'Виконую…' : 'Запустити'}
@@ -2330,7 +3057,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
         )}
       </div>
 
-      {showHint && <div className="cd-hint">{lesson.hint}</div>}
+      {showHint && <div className="cd-hint"><Prose text={lesson.hint} /></div>}
       {showSolution && (
         <>
           {!passed && (
@@ -2360,14 +3087,122 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry }) {
  * список потрібен, щоб бачити поле, а не щоб красиво заповнити його
  * галочками.
  */
-export function AbcTab({ data, reload, toast, canEdit }) {
+/**
+ * Куди йти від теми.
+ *
+ * Стоїть окремо від рядка, а не всередині нього: рядок — кнопка, що
+ * перемикає позначку, а кнопку в кнопку не вкладеш. Тому шляхи — своя
+ * смуга під рядком.
+ *
+ * Тема без жодного шляху не мовчить, а каже про це вголос: список має
+ * показувати, чого в застосунку ще немає, а не робити вигляд, що є все.
+ */
+function AbcWhere({ id, notes = 0, locked, go }) {
+  const p = pathOf(id);
+  /*
+   * Власні нотатки — теж дорога, і часто найкоротша: тему, про яку ви
+   * вже щось записали, ви розумієте не з уроку, а зі свого запису. Тому
+   * вони стоять і там, де застосунок ще не вчить нічого.
+   */
+  const mine = notes > 0 ? (
+    <button className="ab-go is-note" onClick={() => go?.('code', { note: id })}>
+      Зошит · {notes} {plural(notes, 'нотатка', 'нотатки', 'нотаток')}
+    </button>
+  ) : null;
+
+  /*
+   * Те, що в цій темі застаріло.
+   *
+   * Стоїть поруч із уроком навмисно: людина, яка вчить тему, за тиждень
+   * знайде про неї статтю невідомого віку — і має впізнати старий спосіб
+   * з вигляду.
+   */
+  const stale = OLD_WAYS.find((o) => o.topic === id);
+  const old = stale ? (
+    <button className="ab-go is-old" onClick={() => go?.('code', { old: stale.id })}>
+      Застаріло · {stale.id === 'var' ? 'var' : stale.old.split('\n')[0].slice(0, 22)}
+    </button>
+  ) : null;
+
+  /*
+   * Розібрані помилки цієї теми — теж дорога, і починають нею частіше за
+   * урок: до теми приходять не тому, що вирішили її вивчити, а тому, що
+   * на ній щойно спіткнулись.
+   */
+  const broke = errorsOfTopic(id);
+  const errs = broke.length ? (
+    <button className="ab-go is-err" onClick={() => go?.('code', { err: broke[0].id })}>
+      Помилки · {broke.length}
+    </button>
+  ) : null;
+
+  if (!hasWhere(id)) {
+    return (
+      <div className="ab-where is-gap">
+        <span className="ab-gap-t">Тут цього ще не вчать — поки що лише зовнішні джерела</span>
+        {old}
+        {errs}
+        {mine}
+      </div>
+    );
+  }
+  const lessons = (p.lessons || []).map((lid) => CODE_LESSONS.find((l) => l.id === lid)).filter(Boolean);
+  const tools = (p.tools || []).map((tid) => toolById(tid)).filter(Boolean);
+  const cards = (p.ref || []).map((rid) => REF_CARDS.find((c) => c.id === rid)).filter(Boolean);
+  const tours = (p.tour || []).map((tid) => TOURS.find((x) => x.id === tid)).filter(Boolean);
+  const step = p.plan ? PLAN.find((s) => s.n === p.plan) : null;
+
+  return (
+    <div className="ab-where">
+      {lessons.map((l) => (locked?.(l.id)
+        ? (
+          <span key={l.id} className="er-later">
+            Урок «{l.title}» — його черга ще попереду
+          </span>
+        )
+        : (
+          <button key={l.id} className="ab-go is-lesson" onClick={() => go?.('code', { lesson: l.id })}>
+            Урок · {l.title}
+          </button>
+        )))}
+      {tools.map((l) => (
+        <button key={l.id} className="ab-go is-tool" onClick={() => go?.('code', { tool: l.id })}>
+          Інструменти · {l.title}
+        </button>
+      ))}
+      {cards.map((c) => (
+        <button key={c.id} className="ab-go is-ref" onClick={() => go?.('code', { ref: c.id })}>
+          Довідник · {c.t}
+        </button>
+      ))}
+      {tours.map((x) => (
+        <button key={x.id} className="ab-go is-tour" onClick={() => go?.('code', { tour: x.id })}>
+          Розбір · {x.title}
+        </button>
+      ))}
+      {step && (
+        <button className="ab-go is-plan" onClick={() => go?.('plan')}>
+          План · крок {step.n}: {step.topic}
+        </button>
+      )}
+      {old}
+      {errs}
+      {mine}
+    </div>
+  );
+}
+export function AbcTab({ data, reload, toast, canEdit, go }) {
   const marks = data?.abc || {};
   const [busy, setBusy] = useState('');
   const [only, setOnly] = useState('');       // група; порожнє — усі
   const [mustOnly, setMustOnly] = useState(false);
+  // шляхи показуємо на вимогу: 67 тем із переліками уроків — це стіна
+  const [showWhere, setShowWhere] = useState(false);
 
   const p = abcProgress(marks);
   const next = suggestNext(marks);
+  // скільки власних нотаток у кожної теми — щоб абетка вела й у зошит
+  const mine = byTopic(data?.notes || []);
 
   const mark = async (id) => {
     if (!canEdit || busy) return;
@@ -2418,6 +3253,8 @@ export function AbcTab({ data, reload, toast, canEdit }) {
           onClick={() => { setOnly(''); setMustOnly(false); }}>Усе</button>
         <button className={'z-chip' + (mustOnly ? ' on' : '')}
           onClick={() => { setMustOnly((v) => !v); setOnly(''); }}>Обовʼязкове</button>
+        <button className={'z-chip' + (showWhere ? ' on' : '')}
+          onClick={() => setShowWhere((v) => !v)}>Де вчити</button>
         {ABC_GROUPS.map((g) => (
           <button key={g.key} className={'z-chip' + (only === g.key ? ' on' : '')}
             onClick={() => { setOnly(only === g.key ? '' : g.key); setMustOnly(false); }}>
@@ -2437,9 +3274,20 @@ export function AbcTab({ data, reload, toast, canEdit }) {
             </div>
             {items.map((x) => {
               const st = stateOf(marks[x.id]);
+              /*
+               * Шлях показуємо тому, хто цю тему взяв, — і всім, хто
+               * натиснув «Де вчити». Показувати завжди й усім не можна:
+               * шістдесят сім тем із переліками уроків перетворюють
+               * список на стіну, у якій уже нічого не видно.
+               *
+               * Виняток — теми, про які людина вже щось записала: свою
+               * нотатку ховати за перемикачем безглуздо, вона тут
+               * найкоротша дорога.
+               */
+              const where = showWhere || st === 'learning' || !!mine[x.id];
               return (
+                <div className="ab-item" key={x.id}>
                 <button
-                  key={x.id}
                   className={'ab-row is-' + (st || 'none') + (busy === x.id ? ' is-busy' : '')}
                   onClick={() => mark(x.id)}
                   disabled={!canEdit}
@@ -2451,9 +3299,23 @@ export function AbcTab({ data, reload, toast, canEdit }) {
                       {x.must && <span className="ab-must-tag">треба</span>}
                     </span>
                     <span className="ab-what"><Prose text={x.what} /></span>
-                    <span className="ab-why">{x.why}</span>
+                    <span className="ab-why"><Prose text={x.why} /></span>
+                    {/* Що взагалі означає «знаю». Без цього позначку
+                        ставлять на віру, і вона нічого не варта. */}
+                    <span className="ab-know">
+                      <b>Знаю, коли</b> <Prose text={pathOf(x.id).know} />
+                    </span>
                   </span>
                 </button>
+                {where && (
+                  <AbcWhere
+                    id={x.id}
+                    notes={mine[x.id] || 0}
+                    locked={(lid) => lessonLocked(data?.code, lid)}
+                    go={go}
+                  />
+                )}
+                </div>
               );
             })}
           </div>
@@ -2513,7 +3375,9 @@ export function PlanTab({ data }) {
               <b>{s.topic}</b>
               {passed && <span className="pl-ok">✓</span>}
             </div>
-            <div className="pl-why">{s.why}</div>
+            {/* `код` у зворотних лапках друкувався лапками: «через це
+                `||` тихо зʼїдає нульову вагу» читалось саме так */}
+            <div className="pl-why"><Mono text={s.why} /></div>
 
             <div className="pl-row">
               <span className="pl-lab">Прочитати</span>
@@ -2681,6 +3545,690 @@ function Diary({ list, canEdit, onBack, onAdd, toast }) {
   );
 }
 
+/* ---------- Джерела, версії й те, що застаріло ----------
+   Найгірше, що стається з людиною, яка вчиться сама: вона знаходить
+   правильну відповідь на питання, якого вже ніхто не ставить. Стаття
+   2014 року виглядає точнісінько як учорашня.
+
+   Тому тут не «корисні посилання», а три різні речі: куди ходити й чого
+   від кожного не чекати; на чому працює саме цей застосунок; і як
+   упізнати старе в статті, яку щойно знайшли. */
+
+function SrcBook({ start, onBack }) {
+  const s = sourceStats();
+  // прийшли з «Абетки» по конкретне застаріле — воно й розкрите
+  const [openOld, setOpenOld] = useState(start || null);
+
+  return (
+    <div className="cd-ref">
+      <div className="cd-ref-top">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+      </div>
+
+      <div className="cd-intro-box">
+        <Prose text={'Куди ходити по відповідь, на чому працює цей застосунок і як упізнати статтю, що застаріла. Останнє найважливіше: перелік джерел стає в пригоді, доки питання звичне, а далі однаково знайдеться щось поза переліком.'} />
+      </div>
+
+      {/* Позначка «перевірено» стоїть лише там, де справді відкривали, — і
+          з датою. Обіцяти звірку, якої не було, гірше, ніж не обіцяти
+          нічого: людина повірить і не перевірить сама. */}
+      <div className="cd-ref-g">
+        <div className="cd-ref-h">
+          <b>Куди ходити</b>
+          <em>Перевірено з цього застосунку: {s.checked} з {s.total}</em>
+        </div>
+        <div className="cd-ref-list">
+          {SOURCES.map((x) => (
+            <div className="sr-card" key={x.id}>
+              <div className="sr-top">
+                <a className="sr-name" href={x.url} target="_blank" rel="noopener noreferrer">
+                  {x.title}
+                </a>
+                <span className="sr-kind">{x.kind}</span>
+                {x.state === 'ok'
+                  ? <span className="sr-ok">відкривали {x.checked}</span>
+                  : <span className="sr-no">не звірялось із цього застосунку</span>}
+              </div>
+              <div className="sr-host">{x.host} · {x.who}</div>
+              <div className="sr-good"><Mono text={x.good} /></div>
+              <div className="sr-watch"><b>Зважайте:</b> <Mono text={x.watch} /></div>
+              {x.saw && <div className="sr-saw">Того дня там стояло: {x.saw}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Числа тут не переказ, а те, що стоїть у package.json, — і тест це
+          звіряє. Без звірки розділ «версії» протухає першим. */}
+      <div className="cd-ref-g">
+        <div className="cd-ref-h">
+          <b>На чому це працює</b>
+          <em>Те, що стоїть у `package.json` цього застосунку</em>
+        </div>
+        <div className="cd-ref-list">
+          {VERSIONS.map((v) => (
+            <div className="sr-ver" key={v.name}>
+              <div className="sr-ver-h">
+                <b>{v.name}</b>
+                <code className="cd-inline">{v.have}</code>
+              </div>
+              <div className="sr-ver-d"><Mono text={v.note} /></div>
+            </div>
+          ))}
+          <div className="sr-ver">
+            <div className="sr-ver-h">
+              <b>Node.js</b>
+              <code className="cd-inline">LTS {NODE.lts}</code>
+              <span className="sr-ok">перевірено {NODE.checked}</span>
+            </div>
+            <div className="sr-ver-d">
+              <Mono text={NODE.note} /> Того дня поточною була {NODE.current}.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Головне не перелік, а вміння подивитись на знайдене. */}
+      <div className="cd-ref-g">
+        <div className="cd-ref-h">
+          <b>Як читати те, що знайшли</b>
+          <em>Однаково для статті, форуму й відповіді від AI</em>
+        </div>
+        <div className="sr-rules">
+          {HOW_TO_READ.map((r) => (
+            <div className="sr-rule" key={r.t}>
+              <b>{r.t}</b>
+              <span><Mono text={r.d} /></span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="cd-ref-g">
+        <div className="cd-ref-h">
+          <b>Що застаріло</b>
+          <em>Старий спосіб, теперішній і за чим упізнати старий</em>
+        </div>
+        <div className="cd-ref-list">
+          {OLD_WAYS.map((o) => (
+            <div className={'er-card' + (openOld === o.id ? ' is-open' : '')} key={o.id}>
+              <button className="er-head" onClick={() => setOpenOld(openOld === o.id ? null : o.id)}>
+                <span className="er-kind is-quiet">застаріле</span>
+                <span className="er-msg">{o.old.split('\n')[0]}</span>
+              </button>
+              {openOld === o.id && (
+                <div className="er-body">
+                  <div className="er-two">
+                    <div className="er-side is-bad">
+                      <span className="er-lab">Так писали</span>
+                      <pre>{o.old}</pre>
+                    </div>
+                    <div className="er-side is-good">
+                      <span className="er-lab">Так пишуть</span>
+                      <pre>{o.now}</pre>
+                    </div>
+                  </div>
+                  <div className="er-means"><Prose text={o.why} /></div>
+                  {/* Найкорисніший рядок: людина не шукає «застаріле», вона
+                      просто знаходить статтю. */}
+                  <div className="er-find">
+                    <span className="er-lab">Як упізнати</span>
+                    <Prose text={o.spot} />
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="er-note">
+        Перевіреним тут названо рівно те, що справді відкривали з цього
+        застосунку, — і видно, коли. Решта посилань дана як відома, а не як
+        звірена: обіцяти перевірку, якої не було, гірше, ніж не обіцяти
+        нічого. Остання звірка — {CHECK_DAY}.
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Чому я отримую цю помилку ----------
+   Новачок бачить червоний рядок і читає його як вирок. Насправді майже
+   кожна помилка — коротке речення про конкретну річ, і речень цих
+   небагато.
+
+   Головне тут — не перелік, а одне поле: вставив червоний рядок як є, зі
+   стеком і своїми іменами змінних, — і запис знайшовся. Перелік потрібен
+   тому, хто гортає; шукає ж людина рівно тим, що бачить на екрані. */
+
+function ErrCard({ e, open, onToggle, onNote, go, locked }) {
+  return (
+    <div className={'er-card' + (open ? ' is-open' : '')}>
+      <button className="er-head" onClick={onToggle}>
+        <span className={'er-kind is-' + e.kind}>
+          {e.kind === 'quiet' ? 'мовчазна' : e.kind === 'case' ? 'випадок' : 'падає'}
+        </span>
+        <span className="er-msg">{e.msg}</span>
+      </button>
+
+      {open && (
+        <div className="er-body">
+          {/* Те саме різними словами. Найчастіше людина шукає саме
+              «іншим» формулюванням — своїм браузером. */}
+          {e.also.length > 0 && (
+            <div className="er-also">
+              <span className="er-lab">Те саме інакше</span>
+              <ul>{e.also.map((a) => <li key={a}>{a}</li>)}</ul>
+            </div>
+          )}
+
+          <div className="er-means"><Prose text={e.means} /></div>
+
+          <div className="er-causes">
+            <span className="er-lab">Звідки береться</span>
+            {e.causes.map((c) => (
+              <div className="er-cause" key={c.c}>
+                <div className="er-c"><Mono text={c.c} /></div>
+                <div className="er-fix"><Mono text={c.fix} /></div>
+              </div>
+            ))}
+          </div>
+
+          <div className="er-find">
+            <span className="er-lab">Де дивитись</span>
+            <Prose text={e.find} />
+          </div>
+
+          {/* Один і той самий код зламаним і полагодженим. Опис словами
+              каже, що зробити; ці два шматки показують, як це виглядає. */}
+          <div className="er-two">
+            <div className="er-side is-bad">
+              <span className="er-lab">Так падає</span>
+              <pre>{e.bad}</pre>
+            </div>
+            <div className="er-side is-good">
+              <span className="er-lab">Так працює</span>
+              <pre>{e.good}</pre>
+            </div>
+          </div>
+
+          <div className="er-foot">
+            {e.lesson && (locked?.(e.lesson)
+              ? (
+                <span className="er-later">
+                  Урок «{lessonTitle(e.lesson)}» — його черга ще попереду
+                </span>
+              )
+              : (
+                <button className="ab-go is-lesson" onClick={() => go?.('lesson', e.lesson)}>
+                  Урок · {lessonTitle(e.lesson)}
+                </button>
+              ))}
+            {e.ref && (
+              <button className="ab-go is-ref" onClick={() => go?.('ref', e.ref)}>
+                Довідник · {REF_CARDS.find((c) => c.id === e.ref)?.t || e.ref}
+              </button>
+            )}
+            {/* Помилка, розібрана й записана своїми словами, вдруге не
+                забирає вечір. Це і є та сама «перетворити на знання». */}
+            <button className="ab-go is-note" onClick={() => onNote(e)}>
+              Записати в зошит
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ErrBook({ start, onBack, onNote, go, locked }) {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(start || null);
+
+  const s = errorStats();
+  /*
+   * Спершу пробуємо впізнати саму помилку, і лише потім шукаємо словами.
+   *
+   * Людина вставляє червоний рядок цілком — зі стеком, шляхами й своїми
+   * іменами. Звичайний пошук по тексту на такому не знайде нічого:
+   * збігатись мають ознаки, а не рядок.
+   */
+  const hit = matchError(q);
+  const searching = q.trim().length > 0;
+  const found = hit.length ? hit : (searching ? findErrors(q) : ERRORS);
+
+  return (
+    <div className="cd-ref">
+      <div className="cd-ref-top">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+      </div>
+
+      <div className="cd-intro-box">
+        <Prose text={'Вставте червоний рядок з консолі як є — разом зі стеком і своїми іменами змінних. Формулювання в браузерів різні, тож шукається не рядок, а ознаки.'} />
+      </div>
+
+      <textarea
+        className="er-q"
+        rows={2}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="TypeError: Cannot read properties of undefined (reading 'map')"
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+      />
+
+      {searching && (
+        <div className="cd-ref-n">
+          {found.length === 0
+            ? 'Такої помилки тут ще немає. Спробуйте коротший шматок — саме той, що виглядає незвичним.'
+            : hit.length
+              ? `Упізнано за текстом помилки: ${hit.length}`
+              : `Знайдено за словами: ${found.length}`}
+        </div>
+      )}
+
+      {searching ? (
+        <div className="cd-ref-list">
+          {found.map((e) => (
+            <ErrCard
+              key={e.id}
+              e={e}
+              // перший збіг розкритий одразу: по нього й приходили
+              open={open === e.id || e.id === found[0].id}
+              onToggle={() => setOpen(open === e.id ? null : e.id)}
+              onNote={onNote}
+              go={go}
+              locked={locked}
+            />
+          ))}
+        </div>
+      ) : (
+        ERR_GROUPS.map((g) => {
+          const list = found.filter((e) => e.g === g.key);
+          if (!list.length) return null;
+          return (
+            <div className="cd-ref-g" key={g.key}>
+              <div className="cd-ref-h">
+                <b>{g.label}</b>
+                <em>{g.hint}</em>
+              </div>
+              <div className="cd-ref-list">
+                {list.map((e) => (
+                  <ErrCard
+                    key={e.id}
+                    e={e}
+                    open={open === e.id}
+                    onToggle={() => setOpen(open === e.id ? null : e.id)}
+                    onNote={onNote}
+                    go={go}
+                    locked={locked}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })
+      )}
+
+      {!searching && (
+        <div className="er-note">
+          Мовчазних тут {s.quiet}: вони не падають, просто на екрані неправда.
+          Такі шукають найдовше — бо шукати нема за чим.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Зошит ----------
+   Курс, довідник і абетка — чуже знання, розкладене кимось іншим. Тут
+   своє: питання, яке довелось шукати; помилка, на яку пішов вечір;
+   команда, яку щоразу згадуєш наново.
+
+   Від щоденника практики відрізняється тим, як його читають. Щоденник —
+   хронологія, її гортають зверху. Зошит не читають, у ньому шукають, і
+   серпневий запис має знайтись у лютому за словом, яке тоді спаде на
+   думку. Тому пошук іде й по коду, а тема й мітки не прикраса. */
+
+/** Одна нотатка. Розгорнута — коли її обрали або коли шукали */
+function Note({ n, open, canEdit, onToggle, onEdit, onDel }) {
+  const [sure, setSure] = useState(false);
+  const kind = kindBy(n.kind);
+  const src = sourceBy(n.src);
+  const risky = n.src === 'ai' && !n.checked;
+
+  return (
+    <div className={'nb-note' + (open ? ' is-open' : '') + (noteOpen(n) ? ' is-unanswered' : '')}>
+      <button className="nb-head" onClick={onToggle}>
+        <span className={'nb-kind is-' + n.kind}>{kind.label}</span>
+        <span className="nb-ask"><Mono text={n.ask} /></span>
+        <span className="nb-meta">
+          {n.topic && <i className="nb-topic">{topicLabel(n.topic)}</i>}
+          {noteOpen(n) && <i className="nb-open">без відповіді</i>}
+          {risky && <i className="nb-risk">від AI · не перевірено</i>}
+          <i className="nb-date">{n.date}</i>
+        </span>
+      </button>
+
+      {open && (
+        <div className="nb-body">
+          {n.answer && <div className="nb-answer"><Prose text={n.answer} /></div>}
+          {n.code && <pre className="nb-code">{n.code}</pre>}
+
+          {noteOpen(n) && (
+            <div className="nb-still">
+              Відповіді ще немає. Знайдете — допишіть сюди: питання, записане й
+              закрите, вдруге не забирає вечір.
+            </div>
+          )}
+
+          <div className="nb-foot">
+            {n.tags.map((t) => <span key={t} className="nb-tag">{t}</span>)}
+            {src.short && <span className="nb-src">{src.short}</span>}
+            {n.src === 'ai' && n.checked && <span className="nb-src is-ok">перевірено запуском</span>}
+            {canEdit && (
+              <span className="nb-acts">
+                <button className="nb-act" onClick={onEdit}>Виправити</button>
+                {/* два кроки замість вікна: нотатку пишуть руками, і
+                    прибрати її випадковим дотиком не має бути легко */}
+                <button
+                  className={'nb-act' + (sure ? ' is-sure' : '')}
+                  onClick={() => (sure ? onDel() : setSure(true))}
+                  onBlur={() => setSure(false)}
+                >
+                  {sure ? 'Точно прибрати?' : 'Прибрати'}
+                </button>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NoteForm({ form, setForm, busy, onSave, onCancel }) {
+  const kind = kindBy(form.kind);
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  return (
+    <div className="dy-form nb-form">
+      {/* Вид міняє питання форми, а не колір значка: «помилка» просить
+          текст помилки дослівно — саме його вставлять у пошук наступного
+          разу, і саме його ніхто не памʼятає через тиждень. */}
+      <div className="nb-kinds">
+        {KINDS.map((k) => (
+          <button
+            key={k.key}
+            className={'z-chip' + (form.kind === k.key ? ' on' : '')}
+            onClick={() => set('kind', k.key)}
+          >
+            {k.label}
+          </button>
+        ))}
+      </div>
+      <div className="nb-about">{kind.about}</div>
+
+      <label className="dy-field">
+        <span className="dy-lab">
+          {kind.askLab}
+          <i className="dy-req">обовʼязково</i>
+        </span>
+        <textarea
+          rows={2}
+          value={form.ask}
+          placeholder={kind.askEx}
+          onChange={(e) => set('ask', e.target.value)}
+        />
+        <em className="dy-hint">Так, як ви шукатимете це через пів року</em>
+      </label>
+
+      <label className="dy-field">
+        <span className="dy-lab">{kind.answerLab}</span>
+        <textarea
+          rows={3}
+          value={form.answer}
+          placeholder={kind.answerEx}
+          onChange={(e) => set('answer', e.target.value)}
+        />
+        <em className="dy-hint">Своїми словами. Скопійоване не згадується</em>
+      </label>
+
+      <label className="dy-field">
+        <span className="dy-lab">Код або команда</span>
+        <textarea
+          className="nb-mono"
+          rows={3}
+          value={form.code}
+          placeholder={'git restore .'}
+          onChange={(e) => set('code', e.target.value)}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+        />
+      </label>
+
+      <div className="nb-two">
+        <label className="dy-field">
+          <span className="dy-lab">Тема</span>
+          <select value={form.topic} onChange={(e) => set('topic', e.target.value)}>
+            <option value="">— без теми —</option>
+            {ABC_GROUPS.map((g) => (
+              <optgroup key={g.key} label={g.label}>
+                {byGroup(g.key).map((a) => <option key={a.id} value={a.id}>{a.t}</option>)}
+              </optgroup>
+            ))}
+          </select>
+          <em className="dy-hint">Звʼязує нотатку з абеткою</em>
+        </label>
+
+        <label className="dy-field">
+          <span className="dy-lab">Мітки</span>
+          <input
+            value={form.tags}
+            placeholder="react, форма"
+            onChange={(e) => set('tags', e.target.value)}
+          />
+          <em className="dy-hint">Через кому</em>
+        </label>
+      </div>
+
+      <div className="dy-field">
+        <span className="dy-lab">Звідки</span>
+        <div className="nb-kinds">
+          {NOTE_SOURCES.map((s) => (
+            <button
+              key={s.key || 'self'}
+              className={'z-chip' + (form.src === s.key ? ' on' : '')}
+              onClick={() => set('src', s.key)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Відповідь від AI варта рівно стільки, скільки ви її перевірили.
+          Список стоїть тут, а не в уроці, бо потрібен саме в цю мить. */}
+      {form.src === 'ai' && (
+        <div className="nb-ai">
+          <div className="nb-ai-h">Перш ніж записати це як своє</div>
+          <ul>
+            {AI_CHECK.map((x) => <li key={x}><Mono text={x} /></li>)}
+          </ul>
+          <label className="nb-check">
+            <input
+              type="checkbox"
+              checked={!!form.checked}
+              onChange={(e) => set('checked', e.target.checked)}
+            />
+            <span>Запустив і побачив значення</span>
+          </label>
+        </div>
+      )}
+
+      <div className="cd-actions">
+        <button className="act-btn act-accept" onClick={onSave} disabled={busy}>
+          {busy ? 'Записую…' : form.row ? 'Зберегти зміни' : 'Записати'}
+        </button>
+        <button className="act-btn" onClick={onCancel}>Скасувати</button>
+      </div>
+    </div>
+  );
+}
+
+const emptyNote = (topic = '') => ({
+  kind: 'q', ask: '', answer: '', code: '', topic, src: '', checked: false, tags: '',
+});
+
+function Notebook({ list, canEdit, start, draft, onBack, onAdd, onEdit, onDel, toast }) {
+  const [q, setQ] = useState('');
+  const [kind, setKind] = useState('');
+  const [topic, setTopic] = useState(start || '');
+  /*
+   * Прийшли з каталогу помилок — форма вже відкрита й заповнена тим, що
+   * там було. Писати текст помилки з нуля вдруге ніхто не стане, а
+   * запис, якого не зробили, нічого не варт.
+   */
+  const [form, setForm] = useState(draft ? { ...emptyNote(), ...draft } : null);
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(null);
+
+  const s = noteStats(list);
+  const found = findNotes(list, q, { kind, topic });
+  const searching = q.trim().length > 0;
+
+  const save = async () => {
+    const bad = noteError(form);
+    if (bad) { toast?.(bad); return; }
+    setBusy(true);
+    try {
+      await (form.row ? onEdit(form) : onAdd(form));
+      setForm(null);
+    } catch (e) {
+      toast?.(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const del = async (n) => {
+    try { await onDel(n.row); } catch (e) { toast?.(e.message); }
+  };
+
+  return (
+    <div className="cd-room">
+      <div className="cd-room-h">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+        <b>Зошит</b>
+      </div>
+
+      <div className="cd-intro-box">
+        <Prose text={'Своє, а не чуже. Питання, яке довелось шукати; помилка, на яку пішов вечір; команда, яку щоразу згадуєте наново; правило, до якого дійшли самі.'} />
+        <Prose text={'Щоденник практики гортають зверху — це хронологія. Зошит не читають, у ньому шукають: запис із серпня має знайтись у лютому за словом, яке тоді спаде на думку. Тому пошук іде й по коду.'} />
+      </div>
+
+      {s.total > 0 && (
+        <div className="dy-stats">
+          <div className="dy-stat"><b>{s.total}</b><span>{plural(s.total, 'нотатка', 'нотатки', 'нотаток')}</span></div>
+          {s.topics > 0 && <div className="dy-stat"><b>{s.topics}</b><span>{plural(s.topics, 'тема', 'теми', 'тем')}</span></div>}
+          {s.open > 0 && <div className="dy-stat is-open"><b>{s.open}</b><span>без відповіді</span></div>}
+          {s.unchecked > 0 && <div className="dy-stat is-risk"><b>{s.unchecked}</b><span>від AI, не перевірено</span></div>}
+        </div>
+      )}
+
+      {canEdit && !form && (
+        <div className="cd-actions">
+          <button className="act-btn act-accept" onClick={() => setForm(emptyNote(topic))}>
+            Записати
+          </button>
+        </div>
+      )}
+
+      {canEdit && form && (
+        <NoteForm
+          form={form}
+          setForm={setForm}
+          busy={busy}
+          onSave={save}
+          onCancel={() => setForm(null)}
+        />
+      )}
+
+      {s.total > 0 && !form && (
+        <>
+          <div className="cd-ref-top nb-top">
+            <input
+              className="cd-ref-q"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Що шукаєте? Пошук іде й по коду"
+            />
+          </div>
+          <div className="z-chips nb-filters">
+            <button className={'z-chip' + (!kind ? ' on' : '')} onClick={() => setKind('')}>Усі</button>
+            {s.byKind.filter((k) => k.count > 0).map((k) => (
+              <button
+                key={k.key}
+                className={'z-chip' + (kind === k.key ? ' on' : '')}
+                onClick={() => setKind(kind === k.key ? '' : k.key)}
+              >
+                {k.label} {k.count}
+              </button>
+            ))}
+            {topic && (
+              <button className="z-chip on" onClick={() => setTopic('')}>
+                Тема: {topicLabel(topic)} ✕
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {list.length === 0 && !form && (
+        <div className="nb-starters">
+          <div className="dy-ideas-h">Зошит порожній. Перші чотири записи є в кожного</div>
+          {STARTERS.map((x) => (
+            <button
+              key={x.ask}
+              className="nb-starter"
+              disabled={!canEdit}
+              onClick={() => setForm({ ...emptyNote(), kind: x.kind })}
+            >
+              <b>{x.ask}</b>
+              <span>{x.d}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {list.length > 0 && found.length === 0 && (
+        <div className="h-empty">
+          {searching
+            ? 'Нічого не знайшлось. Спробуйте іншими словами — або запишіть відповідь, коли знайдете її деінде.'
+            : 'У цьому розрізі порожньо.'}
+        </div>
+      )}
+
+      <div className="nb-list">
+        {found.map((n) => (
+          <Note
+            key={n.row}
+            n={n}
+            open={open === n.row || searching}
+            canEdit={canEdit}
+            onToggle={() => setOpen(open === n.row ? null : n.row)}
+            onEdit={() => setForm({ ...n, tags: n.tags.join(', ') })}
+            onDel={() => del(n)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * «Що почитати далі». Стоїть унизу уроку й до розвʼязання виглядає
  * стримано: спершу треба зробити завдання руками, а вже потім читати,
@@ -2690,6 +4238,7 @@ function Diary({ list, canEdit, onBack, onAdd, toast }) {
 function NextRead({ lesson, done }) {
   const n = nextLink(lesson);
   if (!n) return null;
+  const src = sourceOf(n.url);
   return (
     <a
       className={'cd-next' + (done ? ' is-done' : '')}
@@ -2697,11 +4246,13 @@ function NextRead({ lesson, done }) {
       target="_blank"
       rel="noopener noreferrer"
     >
+      {/* Раніше тут стояло просто «англійською». Назва джерела корисніша:
+          видно, чиє це слово — команди React, Mozilla чи чийогось блогу. */}
       <span className="cd-next-l">
-        Далі почитати{n.foreign && ' · англійською'}
+        Далі почитати{src ? ` · ${src.title}` : ''}{n.foreign && ' · англійською'}
       </span>
-      <b>{n.t}</b>
-      {n.d && <span className="cd-next-d">{n.d}</span>}
+      <b><Prose text={n.t} /></b>
+      {n.d && <span className="cd-next-d"><Prose text={n.d} /></span>}
     </a>
   );
 }
