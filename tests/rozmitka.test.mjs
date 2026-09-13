@@ -23,6 +23,7 @@ import { PATHS } from '../lib/paths.js';
 import { KINDS, AI_CHECK, STARTERS } from '../lib/notes.js';
 import { TOOL_LESSONS } from '../lib/tools.js';
 import { ERRORS } from '../lib/errors.js';
+import { SOURCES, VERSIONS, OLD_WAYS, HOW_TO_READ, NODE } from '../lib/sources.js';
 
 /** Усе, що сторінка показує людині як текст, — з адресою, де шукати */
 const texts = [];
@@ -52,6 +53,12 @@ ERRORS.forEach((e) => {
   put(`помилка ${e.id}`, e.means, e.find);
   e.causes.forEach((c) => put(`помилка ${e.id}`, c.c, c.fix));
 });
+SOURCES.forEach((s) => put(`джерело ${s.id}`, s.good, s.watch));
+VERSIONS.forEach((v) => put(`версія ${v.name}`, v.note));
+put('версії', NODE.note);
+// `old` і `now` — код, розмітки в них немає
+OLD_WAYS.forEach((o) => put(`застаріле ${o.id}`, o.why, o.spot));
+HOW_TO_READ.forEach((r) => put('як читати', r.t, r.d));
 Object.entries(PATHS).forEach(([id, p]) => put(`шлях ${id}`, p.know));
 KINDS.forEach((k) => put(`зошит ${k.key}`, k.label, k.about, k.askLab, k.askEx, k.answerLab, k.answerEx));
 put('зошит', ...AI_CHECK);

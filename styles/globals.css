@@ -4437,3 +4437,53 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   border: 1px dashed var(--line-soft); color: var(--muted);
   font-size: .76rem; font-style: italic;
 }
+
+/* ---------- Джерела й версії ----------
+   Позначка «перевірено» стоїть лише там, де справді відкривали, і поруч
+   із датою. Тому вона зелена й помітна, а «не звірялось» — сіре й
+   спокійне: це не попередження, а чесний стан. */
+
+.cd-refb.is-src:hover { border-color: var(--gray); }
+.cd-refb.is-src .cd-refb-t { color: var(--text-dim); }
+
+.sr-card {
+  padding: 11px 13px; border-radius: var(--r-sm);
+  border: 1px solid var(--line-soft); background: var(--panel);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.sr-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.sr-name { font-size: .95rem; font-weight: 600; color: var(--blue); text-decoration: none; }
+.sr-name:hover { text-decoration: underline; }
+.sr-kind {
+  padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line-soft);
+  font-size: .66rem; color: var(--muted);
+  letter-spacing: .04em; text-transform: uppercase;
+}
+.sr-ok { font-size: .72rem; color: var(--green); }
+.sr-no { font-size: .72rem; color: var(--muted); font-style: italic; }
+.sr-host { font-family: var(--mono); font-size: .74rem; color: var(--muted); }
+.sr-good { font-size: .86rem; line-height: 1.5; color: var(--text-dim); }
+.sr-watch { font-size: .82rem; line-height: 1.5; color: var(--text-dim); }
+.sr-watch b { color: var(--amber); font-weight: 600; }
+.sr-saw { font-family: var(--mono); font-size: .74rem; color: var(--green); }
+
+.sr-ver {
+  padding: 10px 12px; border-radius: var(--r-sm);
+  border: 1px solid var(--line-soft); background: var(--panel);
+}
+.sr-ver-h { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.sr-ver-h b { font-size: .92rem; }
+.sr-ver-d { margin-top: 4px; font-size: .82rem; line-height: 1.5; color: var(--text-dim); }
+
+.sr-rules { display: flex; flex-direction: column; gap: 8px; }
+.sr-rule {
+  padding: 9px 11px; border-radius: var(--r-sm);
+  background: var(--panel-2); border-left: 3px solid var(--line);
+  display: flex; flex-direction: column; gap: 2px;
+}
+/* Останнє правило — те саме, що й для коду від AI: запустити й подивитись
+   на значення. Тому воно й виділене. */
+.sr-rule:last-child { border-left-color: var(--green); }
+.sr-rule b { font-size: .86rem; }
+.sr-rule span { font-size: .82rem; color: var(--text-dim); line-height: 1.5; }
+.ab-go.is-old:hover { border-color: var(--amber); }
