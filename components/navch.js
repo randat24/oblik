@@ -39,7 +39,13 @@ import {
   ERR_GROUPS, ERRORS, matchError, findErrors, errorStats, errorsOfTopic,
 } from '../lib/errors';
 import {
-  KINDS, SOURCES, AI_CHECK, STARTERS, KIND_KEYS,
+  SOURCES, VERSIONS, NODE, OLD_WAYS, HOW_TO_READ, CHECK_DAY,
+  sourceById, sourceOf, sourceStats,
+} from '../lib/sources';
+import {
+  // «джерела» тут і в `lib/sources` — різні речі: там сайти, тут «звідки
+  // взялась відповідь», тож імена розводимо на вході
+  KINDS, SOURCES as NOTE_SOURCES, AI_CHECK, STARTERS, KIND_KEYS,
   findNotes, noteStats, byTopic, kindBy, sourceBy, topicLabel, noteError,
   isOpen as noteOpen,
 } from '../lib/notes';
@@ -2199,6 +2205,7 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
     setTarget(jump);
     if (jump.lesson) { setMode('learn'); setOpenId(jump.lesson); }
     else if (jump.err) setMode('errors');
+    else if (jump.old) setMode('sources');
     else if (jump.note) setMode('notes');
     else if (jump.tool) setMode('tools');
     else if (jump.ref) setMode('ref');
@@ -2336,6 +2343,15 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
 
   if (mode === 'tour') {
     return <TourBook start={target?.tour} onBack={() => { setTarget(null); setMode('learn'); }} />;
+  }
+
+  if (mode === 'sources') {
+    return (
+      <SrcBook
+        start={target?.old}
+        onBack={() => { setTarget(null); setMode('learn'); }}
+      />
+    );
   }
 
   if (mode === 'errors') {
@@ -2510,6 +2526,17 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
             : `${notes.total} ${plural(notes.total, 'нотатка', 'нотатки', 'нотаток')}`
               + (notes.topics ? ` в ${notes.topics} ${plural(notes.topics, 'темі', 'темах', 'темах')}` : '')
               + (notes.open ? `, ${notes.open} без відповіді` : '')}
+        </span>
+      </button>
+
+      {/* Ставиться останнім розділом навмисно: він потрібен не тоді, коли
+          вчаться за цим застосунком, а тоді, коли пішли вчитись деінде —
+          і принесли звідти статтю невідомого віку. */}
+      <button className="cd-refb is-src" onClick={() => setMode('sources')}>
+        <span className="cd-refb-t">Джерела й версії</span>
+        <span className="cd-refb-d">
+          Куди ходити по відповідь, на чому працює цей застосунок
+          і як упізнати статтю, що застаріла
         </span>
       </button>
 
@@ -3084,6 +3111,20 @@ function AbcWhere({ id, notes = 0, locked, go }) {
   ) : null;
 
   /*
+   * Те, що в цій темі застаріло.
+   *
+   * Стоїть поруч із уроком навмисно: людина, яка вчить тему, за тиждень
+   * знайде про неї статтю невідомого віку — і має впізнати старий спосіб
+   * з вигляду.
+   */
+  const stale = OLD_WAYS.find((o) => o.topic === id);
+  const old = stale ? (
+    <button className="ab-go is-old" onClick={() => go?.('code', { old: stale.id })}>
+      Застаріло · {stale.id === 'var' ? 'var' : stale.old.split('\n')[0].slice(0, 22)}
+    </button>
+  ) : null;
+
+  /*
    * Розібрані помилки цієї теми — теж дорога, і починають нею частіше за
    * урок: до теми приходять не тому, що вирішили її вивчити, а тому, що
    * на ній щойно спіткнулись.
@@ -3099,6 +3140,7 @@ function AbcWhere({ id, notes = 0, locked, go }) {
     return (
       <div className="ab-where is-gap">
         <span className="ab-gap-t">Тут цього ще не вчать — поки що лише зовнішні джерела</span>
+        {old}
         {errs}
         {mine}
       </div>
@@ -3143,6 +3185,7 @@ function AbcWhere({ id, notes = 0, locked, go }) {
           План · крок {step.n}: {step.topic}
         </button>
       )}
+      {old}
       {errs}
       {mine}
     </div>
@@ -3502,6 +3545,153 @@ function Diary({ list, canEdit, onBack, onAdd, toast }) {
   );
 }
 
+/* ---------- Джерела, версії й те, що застаріло ----------
+   Найгірше, що стається з людиною, яка вчиться сама: вона знаходить
+   правильну відповідь на питання, якого вже ніхто не ставить. Стаття
+   2014 року виглядає точнісінько як учорашня.
+
+   Тому тут не «корисні посилання», а три різні речі: куди ходити й чого
+   від кожного не чекати; на чому працює саме цей застосунок; і як
+   упізнати старе в статті, яку щойно знайшли. */
+
+function SrcBook({ start, onBack }) {
+  const s = sourceStats();
+  // прийшли з «Абетки» по конкретне застаріле — воно й розкрите
+  const [openOld, setOpenOld] = useState(start || null);
+
+  return (
+    <div className="cd-ref">
+      <div className="cd-ref-top">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+      </div>
+
+      <div className="cd-intro-box">
+        <Prose text={'Куди ходити по відповідь, на чому працює цей застосунок і як упізнати статтю, що застаріла. Останнє найважливіше: перелік джерел стає в пригоді, доки питання звичне, а далі однаково знайдеться щось поза переліком.'} />
+      </div>
+
+      {/* Позначка «перевірено» стоїть лише там, де справді відкривали, — і
+          з датою. Обіцяти звірку, якої не було, гірше, ніж не обіцяти
+          нічого: людина повірить і не перевірить сама. */}
+      <div className="cd-ref-g">
+        <div className="cd-ref-h">
+          <b>Куди ходити</b>
+          <em>Перевірено з цього застосунку: {s.checked} з {s.total}</em>
+        </div>
+        <div className="cd-ref-list">
+          {SOURCES.map((x) => (
+            <div className="sr-card" key={x.id}>
+              <div className="sr-top">
+                <a className="sr-name" href={x.url} target="_blank" rel="noopener noreferrer">
+                  {x.title}
+                </a>
+                <span className="sr-kind">{x.kind}</span>
+                {x.state === 'ok'
+                  ? <span className="sr-ok">відкривали {x.checked}</span>
+                  : <span className="sr-no">не звірялось із цього застосунку</span>}
+              </div>
+              <div className="sr-host">{x.host} · {x.who}</div>
+              <div className="sr-good"><Mono text={x.good} /></div>
+              <div className="sr-watch"><b>Зважайте:</b> <Mono text={x.watch} /></div>
+              {x.saw && <div className="sr-saw">Того дня там стояло: {x.saw}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Числа тут не переказ, а те, що стоїть у package.json, — і тест це
+          звіряє. Без звірки розділ «версії» протухає першим. */}
+      <div className="cd-ref-g">
+        <div className="cd-ref-h">
+          <b>На чому це працює</b>
+          <em>Те, що стоїть у `package.json` цього застосунку</em>
+        </div>
+        <div className="cd-ref-list">
+          {VERSIONS.map((v) => (
+            <div className="sr-ver" key={v.name}>
+              <div className="sr-ver-h">
+                <b>{v.name}</b>
+                <code className="cd-inline">{v.have}</code>
+              </div>
+              <div className="sr-ver-d"><Mono text={v.note} /></div>
+            </div>
+          ))}
+          <div className="sr-ver">
+            <div className="sr-ver-h">
+              <b>Node.js</b>
+              <code className="cd-inline">LTS {NODE.lts}</code>
+              <span className="sr-ok">перевірено {NODE.checked}</span>
+            </div>
+            <div className="sr-ver-d">
+              <Mono text={NODE.note} /> Того дня поточною була {NODE.current}.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Головне не перелік, а вміння подивитись на знайдене. */}
+      <div className="cd-ref-g">
+        <div className="cd-ref-h">
+          <b>Як читати те, що знайшли</b>
+          <em>Однаково для статті, форуму й відповіді від AI</em>
+        </div>
+        <div className="sr-rules">
+          {HOW_TO_READ.map((r) => (
+            <div className="sr-rule" key={r.t}>
+              <b>{r.t}</b>
+              <span><Mono text={r.d} /></span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="cd-ref-g">
+        <div className="cd-ref-h">
+          <b>Що застаріло</b>
+          <em>Старий спосіб, теперішній і за чим упізнати старий</em>
+        </div>
+        <div className="cd-ref-list">
+          {OLD_WAYS.map((o) => (
+            <div className={'er-card' + (openOld === o.id ? ' is-open' : '')} key={o.id}>
+              <button className="er-head" onClick={() => setOpenOld(openOld === o.id ? null : o.id)}>
+                <span className="er-kind is-quiet">застаріле</span>
+                <span className="er-msg">{o.old.split('\n')[0]}</span>
+              </button>
+              {openOld === o.id && (
+                <div className="er-body">
+                  <div className="er-two">
+                    <div className="er-side is-bad">
+                      <span className="er-lab">Так писали</span>
+                      <pre>{o.old}</pre>
+                    </div>
+                    <div className="er-side is-good">
+                      <span className="er-lab">Так пишуть</span>
+                      <pre>{o.now}</pre>
+                    </div>
+                  </div>
+                  <div className="er-means"><Prose text={o.why} /></div>
+                  {/* Найкорисніший рядок: людина не шукає «застаріле», вона
+                      просто знаходить статтю. */}
+                  <div className="er-find">
+                    <span className="er-lab">Як упізнати</span>
+                    <Prose text={o.spot} />
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="er-note">
+        Перевіреним тут названо рівно те, що справді відкривали з цього
+        застосунку, — і видно, коли. Решта посилань дана як відома, а не як
+        звірена: обіцяти перевірку, якої не було, гірше, ніж не обіцяти
+        нічого. Остання звірка — {CHECK_DAY}.
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Чому я отримую цю помилку ----------
    Новачок бачить червоний рядок і читає його як вирок. Насправді майже
    кожна помилка — коротке речення про конкретну річ, і речень цих
@@ -3848,7 +4038,7 @@ function NoteForm({ form, setForm, busy, onSave, onCancel }) {
       <div className="dy-field">
         <span className="dy-lab">Звідки</span>
         <div className="nb-kinds">
-          {SOURCES.map((s) => (
+          {NOTE_SOURCES.map((s) => (
             <button
               key={s.key || 'self'}
               className={'z-chip' + (form.src === s.key ? ' on' : '')}
@@ -4048,6 +4238,7 @@ function Notebook({ list, canEdit, start, draft, onBack, onAdd, onEdit, onDel, t
 function NextRead({ lesson, done }) {
   const n = nextLink(lesson);
   if (!n) return null;
+  const src = sourceOf(n.url);
   return (
     <a
       className={'cd-next' + (done ? ' is-done' : '')}
@@ -4055,8 +4246,10 @@ function NextRead({ lesson, done }) {
       target="_blank"
       rel="noopener noreferrer"
     >
+      {/* Раніше тут стояло просто «англійською». Назва джерела корисніша:
+          видно, чиє це слово — команди React, Mozilla чи чийогось блогу. */}
       <span className="cd-next-l">
-        Далі почитати{n.foreign && ' · англійською'}
+        Далі почитати{src ? ` · ${src.title}` : ''}{n.foreign && ' · англійською'}
       </span>
       <b><Prose text={n.t} /></b>
       {n.d && <span className="cd-next-d"><Prose text={n.d} /></span>}
