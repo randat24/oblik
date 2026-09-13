@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { PATHS, pathOf, hasWhere, gaps, coverage, MUST_GAPS } from '../lib/paths.js';
 import { ABC } from '../lib/abc.js';
 import { CODE_LESSONS } from '../lib/code.js';
+import { TOOL_LESSONS } from '../lib/tools.js';
 import { REF_CARDS } from '../lib/ref.js';
 import { TOURS } from '../lib/tour.js';
 import { PLAN } from '../lib/plan.js';
@@ -35,6 +36,38 @@ test('усі уроки в шляхах справді існують', () => {
     (p.lessons || []).forEach((l) => { if (!ids.has(l)) bad.push(`${topic} → ${l}`); });
   });
   assert.deepEqual(bad, []);
+});
+
+test('усі уроки про інструменти в шляхах справді існують', () => {
+  const ids = new Set(TOOL_LESSONS.map((l) => l.id));
+  const bad = [];
+  Object.entries(PATHS).forEach(([topic, p]) => {
+    (p.tools || []).forEach((t) => { if (!ids.has(t)) bad.push(`${topic} → ${t}`); });
+  });
+  assert.deepEqual(bad, []);
+});
+
+test('уроки курсу й уроки про інструменти не переплутані місцями', () => {
+  /*
+   * Обидва поля — переліки id уроків, і з вигляду однакові. Поставлений
+   * не в те поле id веде в порожнє місце: «Урок · undefined» або кнопка,
+   * яка нічого не відкриває.
+   */
+  const course = new Set(CODE_LESSONS.map((l) => l.id));
+  const tools = new Set(TOOL_LESSONS.map((l) => l.id));
+  const bad = [];
+  Object.entries(PATHS).forEach(([topic, p]) => {
+    (p.lessons || []).forEach((l) => { if (tools.has(l)) bad.push(`${topic}: ${l} у lessons`); });
+    (p.tools || []).forEach((t) => { if (course.has(t)) bad.push(`${topic}: ${t} у tools`); });
+  });
+  assert.deepEqual(bad, []);
+});
+
+test('кожен урок про інструменти згадується хоч в одній темі', () => {
+  // урок, до якого не веде жодна тема, знайде лише той, хто вже знає, що він є
+  const used = new Set(Object.values(PATHS).flatMap((p) => p.tools || []));
+  const lonely = TOOL_LESSONS.filter((l) => !used.has(l.id)).map((l) => l.id);
+  assert.deepEqual(lonely, []);
 });
 
 test('усі картки довідника в шляхах справді існують', () => {
