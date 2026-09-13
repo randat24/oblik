@@ -2752,33 +2752,46 @@ function TourRoom({ tour, onBack }) {
         <div className="cd-tlevel">{tour.level}</div>
       </div>
 
-      {tour.intro.map((p, i) => <p className="cd-tp" key={i}><Mono text={p} /></p>)}
+      {tour.intro.map((p, i) => <p className="cd-tp" key={i}>{p}</p>)}
 
       <div className="cd-tsteps">
         {tour.steps.map((s, i) => (
           <div className="cd-tstep" key={i}>
             <pre className="cd-card-code">{s.code}</pre>
-            <p className="cd-tsay"><Mono text={s.say} /></p>
+            <p className="cd-tsay"><Marked text={s.say} /></p>
           </div>
         ))}
       </div>
 
       <div className="cd-twhy">
         <h3>Що з цього забрати</h3>
-        {tour.why.map((p, i) => <p key={i}><Mono text={p} /></p>)}
+        {tour.why.map((p, i) => <p key={i}><Marked text={p} /></p>)}
       </div>
 
       {/* Читання без спроби не лишається в голові, тож кожен розбір
           закінчується однією зміною, яку можна внести за хвилину. */}
       <div className="cd-ttry">
         <h3>Спробуйте</h3>
-        <p><Mono text={tour.try} /></p>
+        <p>{tour.try}</p>
       </div>
     </div>
   );
 }
 
 /** Дві зірочки — жирним, зворотні лапки — кодом. Більше в поясненнях не треба. */
+function Marked({ text }) {
+  const parts = String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return (
+    <>
+      {parts.map((p, i) => {
+        if (p.startsWith('**') && p.endsWith('**')) return <b key={i}>{p.slice(2, -2)}</b>;
+        if (p.startsWith('`') && p.endsWith('`')) return <code key={i}>{p.slice(1, -1)}</code>;
+        return p;
+      })}
+    </>
+  );
+}
+
 /** Картка згорнута, поки не потрібна: список із тридцяти розгорнутих не гортається */
 function RefCard({ c, open, onToggle }) {
   return (
@@ -3016,10 +3029,7 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry, why:
         </div>
       )}
 
-      {/* Найчитаніший текст у курсі — і найдовше друкувався лапками.
-          «Потрібні `async` і `await` » так і читалось, із паличками, у
-          сорока двох уроках із сімдесяти. */}
-      {err && <div className="cd-err"><Mono text={err} /></div>}
+      {err && <div className="cd-err">{err}</div>}
       {passed && !err && (
         <div className="cd-ok">✓ Зроблено. Можна йти далі — або лишитись і поекспериментувати.</div>
       )}
