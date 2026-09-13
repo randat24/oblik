@@ -4130,3 +4130,69 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   display: block; padding: 6px 4px 10px 34px;
   font-size: .76rem; color: var(--muted); font-style: italic;
 }
+
+/* ---------- Інструменти: термінал, Git, оточення, пошук причини ----------
+   Уроки курсу перевіряються запуском коду. Ці — ні: те, що тут
+   відбувається, відбувається в чужому терміналі, і застосунок цього не
+   бачить. Тому й виглядають вони інакше — не редактор із кнопкою
+   «Запустити», а перелік кроків із позначками та кілька питань. */
+
+.cd-refb.is-tools:hover { border-color: var(--blue); }
+.cd-refb.is-tools .cd-refb-t { color: var(--blue); }
+.cd-tag.is-tools { border-color: rgba(102,144,171,.4); color: var(--blue); }
+
+.tl-steps {
+  margin: 16px 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.tl-step {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 11px 13px; border-radius: var(--r);
+  border: 1px solid var(--line-soft); background: var(--panel);
+}
+/* Відмічений крок гасне, а не зникає: до нього ще повертаються, коли
+   наступний не вийшов. */
+.tl-step.is-on { border-color: var(--green-dim); opacity: .72; }
+.tl-tick {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--muted); font-family: var(--mono); font-size: .78rem;
+  cursor: pointer; padding: 0;
+}
+.tl-tick:hover { border-color: var(--green); color: var(--green); }
+.tl-step.is-on .tl-tick { border-color: var(--green); color: var(--green); }
+.tl-step-b { min-width: 0; }
+.tl-do p { margin: 0; font-size: .9rem; line-height: 1.5; }
+.tl-see { margin-top: 5px; font-size: .82rem; color: var(--text-dim); line-height: 1.5; }
+.tl-see p { display: inline; margin: 0; }
+.tl-see b {
+  color: var(--muted); font-weight: 600; font-size: .68rem;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+
+.tl-verify {
+  margin: 18px 0; padding: 14px 16px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--panel-2);
+}
+.tl-verify-d {
+  margin-bottom: 14px; font-size: .82rem; color: var(--muted); line-height: 1.5;
+}
+.tl-verify-d p { margin: 0; }
+.tl-verify .rc-ask { font-size: .95rem; }
+.tl-verify .rc-opt { background: var(--panel); }
+/* Питання йдуть підряд, тож між ними потрібна межа: інакше варіанти
+   одного зливаються з наступним питанням. */
+.tl-ask + .tl-ask { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line-soft); }
+.tl-again {
+  display: block; margin-top: 10px; padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--text-dim); font-size: .78rem; cursor: pointer;
+}
+.tl-again:hover { border-color: var(--blue); color: var(--text); }
+
+/* Тут кнопка одна, а `.act-btn` тягнеться на всю ширину рядка: сама по
+   собі вона виглядала б як головна дія, якою не є. */
+.tl-actions .act-btn { flex: 0 0 auto; }
+
+.ab-go.is-tool:hover { border-color: var(--blue); }

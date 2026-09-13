@@ -246,6 +246,20 @@ test('codeRows: рядок на кожен урок, у порядку курс�
   assert.deepEqual(rows[1], [CODE_LESSONS[1].id, '', '', 0, '', 0, '']);
 });
 
+test('codeRows не губить записів, яких немає в курсі', () => {
+  /*
+   * Лист переписується цілком, тож усе, чого немає в переліку рядків,
+   * зникає назавжди. Уроки про інструменти живуть окремо від курсу й
+   * саме так і зникали при першому ж збереженні.
+   */
+  const rows = codeRows({ t1: { state: 'done', date: '13.09.2026', tries: 1, code: '' } });
+  assert.equal(rows.length, CODE_LESSONS.length + 1);
+  const mine = rows.find((r) => r[CD.id] === 't1');
+  assert.deepEqual(mine, ['t1', 'done', '13.09.2026', 1, '', 0, '']);
+  // і повертається звідти цілим
+  assert.equal(parseCode([CODE_HEADERS, ...rows]).t1.state, 'done');
+});
+
 test('рівень повторення переживає запис у лист', () => {
   const before = { b1: { state: 'done', date: '16.08.2026', tries: 1, code: '', level: 3, asked: '01.09.2026' } };
   const after = parseCode([CODE_HEADERS, ...codeRows(before)]);

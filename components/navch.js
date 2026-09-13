@@ -23,6 +23,7 @@ import {
   buildSession, partQueue, applyResults,
 } from '../lib/mult';
 import { CODE_LESSONS, TRACKS, openUpTo, courseStats, nextLink } from '../lib/code';
+import { TOOL_LESSONS, toolById, toolStats } from '../lib/tools';
 // DAY_SIZE тут своє — у множення воно теж є, і означає інше число
 import {
   buildQueue, recallStats, nextLevel, pick as pickQuestion,
@@ -1770,16 +1771,31 @@ function CodeEditor({ value, onChange, mode, rows, onRun }) {
   );
 }
 
-/** Текст пояснення з `код` у зворотних лапках — підсвічений моноширинним */
+/**
+ * Розмітка всередині рядка: `код` у зворотних лапках і **наголос**.
+ *
+ * Без абзацу навколо — саме тому окремо від `Prose`. Той самий текст
+ * трапляється не лише в поясненні, а й у варіанті відповіді, а варіант —
+ * це кнопка, і абзац усередині кнопки ламає і верстку, і розмітку. Доти
+ * зворотні лапки в питаннях повторення показувались як лапки: двадцять
+ * шість варіантів на кшталт «\`git status\` і \`git log\`» читались саме так,
+ * із паличками.
+ *
+ * Код розбирається першим: `2 ** 3` у лапках лишається кодом, а не
+ * наголосом на пробілі.
+ */
+function Mono({ text }) {
+  const parts = String(text).split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) => {
+    if (p.startsWith('`')) return <code key={i} className="cd-inline">{p.slice(1, -1)}</code>;
+    if (p.startsWith('**')) return <b key={i}>{p.slice(2, -2)}</b>;
+    return <span key={i}>{p}</span>;
+  });
+}
+
+/** Те саме абзацом — як пишуть пояснення */
 function Prose({ text }) {
-  const parts = String(text).split(/(`[^`]+`)/g);
-  return (
-    <p>
-      {parts.map((p, i) => (p.startsWith('`')
-        ? <code key={i} className="cd-inline">{p.slice(1, -1)}</code>
-        : <span key={i}>{p}</span>))}
-    </p>
-  );
+  return <p><Mono text={text} /></p>;
 }
 
 /**
@@ -1878,7 +1894,7 @@ function RecallRoom({ prog, onBack, onSave }) {
               done.current[item.id] = nextLevel(item.level, ok);
             }}
           >
-            {o}
+            <Mono text={o} />
           </button>
         ))}
       </div>
@@ -1901,6 +1917,233 @@ function RecallRoom({ prog, onBack, onSave }) {
 }
 
 const lessonTitle = (id) => CODE_LESSONS.find((l) => l.id === id)?.title || id;
+
+/* ---------- Інструменти ----------
+   Уроки курсу перевіряються запуском коду. Ці — ні, і не можуть: те, що
+   тут відбувається, відбувається в чужому терміналі, на чужому
+   компʼютері, у чужому вікні браузера. Застосунок цього не бачить і
+   вдавати, що бачить, не буде.
+
+   Тому перевірка тут інша: кроки, які людина відмічає сама, і кілька
+   питань, на які не відповісти, не подивившись на екран. «Що надрукував
+   `pwd` — шлях чи перелік файлів» питає не про пам'ять. */
+
+/** Одне питання перевірки: відповідь, пояснення й право спробувати ще */
+function ToolAsk({ q, picked, onPick, onAgain }) {
+  const answered = picked !== null && picked !== undefined;
+  const ok = picked === q.right;
+
+  return (
+    <div className="tl-ask">
+      <div className="rc-ask"><Prose text={q.ask} /></div>
+      <div className="rc-opts">
+        {q.options.map((o, i) => (
+          <button
+            key={o}
+            className={'rc-opt'
+              + (answered && i === q.right ? ' is-right' : '')
+              + (answered && i === picked && i !== q.right ? ' is-wrong' : '')}
+            disabled={answered}
+            onClick={() => onPick(i)}
+          >
+            <Mono text={o} />
+          </button>
+        ))}
+      </div>
+      {answered && (
+        <div className={'rc-why' + (ok ? ' is-right' : '')}>
+          <Prose text={q.why} />
+          {/* Схибив — може спробувати ще: це не іспит, а привід
+              придивитись. Але спершу він читає, чому не так. */}
+          {!ok && (
+            <button className="tl-again" onClick={onAgain}>Спробувати ще</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolRoom({ lesson, saved, onBack, onDone }) {
+  /*
+   * Галочки на кроках лежать у браузері, а не в таблиці.
+   *
+   * Це чернетка, а не результат: «я вже набрав `pwd`» цікаво лише доти,
+   * доки урок відкритий. Результат — відповіді на питання, і вони
+   * зберігаються як слід.
+   */
+  const key = `oblik_tool_${lesson.id}`;
+  const [ticks, setTicks] = useState([]);
+  const [picks, setPicks] = useState({});
+  const [showHint, setShowHint] = useState(false);
+  const sent = useRef(false);
+
+  useEffect(() => {
+    setPicks({});
+    setShowHint(false);
+    sent.current = false;
+    try {
+      const raw = JSON.parse(localStorage.getItem(key) || '[]');
+      setTicks(Array.isArray(raw) ? raw : []);
+    } catch { setTicks([]); }
+  }, [lesson.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggle = (i) => {
+    const next = ticks.includes(i) ? ticks.filter((x) => x !== i) : [...ticks, i];
+    setTicks(next);
+    try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* дарма */ }
+  };
+
+  const allRight = lesson.verify.every((q, i) => picks[i] === q.right);
+  const wasDone = saved?.state === 'done';
+
+  useEffect(() => {
+    // зараховуємо один раз: збереження перемальовує вкладку, і без цієї
+    // засувки урок ішов у таблицю щоразу
+    if (allRight && !sent.current) { sent.current = true; onDone(); }
+  }, [allRight]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="cd-room">
+      <div className="cd-room-h">
+        <button className="cd-back" onClick={onBack}>← До інструментів</button>
+        <b>{lesson.title}</b>
+      </div>
+
+      <div className="cd-intro-box">
+        {lesson.intro.map((t, i) => <Prose key={i} text={t} />)}
+      </div>
+
+      {/* Кроки — не інструкція до прочитання, а перелік того, що треба
+          зробити у себе. Тому в кожного написано, що має статись у
+          відповідь: інакше незрозуміло, чи вийшло. */}
+      <ol className="tl-steps">
+        {lesson.steps.map((s, i) => {
+          const on = ticks.includes(i);
+          return (
+            <li className={'tl-step' + (on ? ' is-on' : '')} key={i}>
+              <button
+                className="tl-tick"
+                onClick={() => toggle(i)}
+                aria-label={on ? 'Зроблено' : 'Позначити зробленим'}
+              >
+                {on ? '✓' : i + 1}
+              </button>
+              <div className="tl-step-b">
+                <div className="tl-do"><Prose text={s.do} /></div>
+                <div className="tl-see"><b>Має статись:</b> <Prose text={s.see} /></div>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="cd-task">
+        <b>Завдання.</b> <Prose text={lesson.task} />
+        <div className="cd-want"><b>Має вийти:</b> <Prose text={lesson.want} /></div>
+      </div>
+
+      <div className="cd-actions tl-actions">
+        <button className="act-btn" onClick={() => setShowHint((v) => !v)}>
+          {showHint ? 'Сховати підказку' : 'Підказка'}
+        </button>
+      </div>
+      {showHint && <div className="cd-hint"><Prose text={lesson.hint} /></div>}
+
+      <div className="tl-verify">
+        <div className="cd-why-h">Перевірка — коли зробили</div>
+        <div className="tl-verify-d"><Prose text={lesson.why} /></div>
+        {lesson.verify.map((q, i) => (
+          <ToolAsk
+            key={i}
+            q={q}
+            picked={picks[i]}
+            onPick={(v) => setPicks((p) => ({ ...p, [i]: v }))}
+            onAgain={() => setPicks((p) => { const n = { ...p }; delete n[i]; return n; })}
+          />
+        ))}
+      </div>
+
+      {lesson.next && (
+        <a
+          className="cd-next"
+          href={lesson.next.url}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span className="cd-next-l">Першоджерело</span>
+          <b><Prose text={lesson.next.t} /></b>
+          <span className="cd-next-d"><Prose text={lesson.next.d} /></span>
+        </a>
+      )}
+
+      {allRight && (
+        <div className="cd-ok">✓ Зроблено. Ці команди тепер ваші — далі вони просто набираються.</div>
+      )}
+      {!allRight && wasDone && (
+        <div className="cd-hint">Цей урок уже зарахований — ви відкрили його, щоб пригадати.</div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Полиця з уроками про інструменти.
+ *
+ * Без замків: термінал потрібен тоді, коли потрібен, і ставити його
+ * умовою для «Далі» означало б загородити вхід. Порядок усередині все ж
+ * є — Git після терміналу, бо інакше нема де набирати команди, — але це
+ * порада, а не замок.
+ */
+function ToolShelf({ prog, start, onBack, onDone }) {
+  const [openId, setOpenId] = useState(start || null);
+  const lesson = openId ? toolById(openId) : null;
+
+  if (lesson) {
+    return (
+      <ToolRoom
+        lesson={lesson}
+        saved={prog[lesson.id]}
+        onBack={() => setOpenId(null)}
+        onDone={() => onDone(lesson.id)}
+      />
+    );
+  }
+
+  return (
+    <div className="cd-room">
+      <div className="cd-room-h">
+        <button className="cd-back" onClick={onBack}>← До уроків</button>
+        <b>Інструменти</b>
+      </div>
+
+      <div className="cd-intro-box">
+        <Prose text={'Курс учить писати код на сторінці: нічого не треба ставити, помилився — перезавантажив. Справжня робота починається інакше — із чорного вікна, у якому треба щось надрукувати, і з питання «а як тепер повернути, як було».'} />
+        <Prose text={'Ці уроки стоять окремо й відкриті всі: термінал потрібен тоді, коли потрібен. Перевіряються вони не запуском коду — те, що тут відбувається, відбувається у вас, — а кроками, які ви робите, і питаннями, на які не відповісти, не подивившись на екран.'} />
+      </div>
+
+      <div className="cd-list">
+        {TOOL_LESSONS.map((l, i) => {
+          const done = prog[l.id]?.state === 'done';
+          return (
+            <button
+              key={l.id}
+              className={'cd-item' + (done ? ' is-done' : '')}
+              onClick={() => setOpenId(l.id)}
+            >
+              <i className="cd-item-i">{done ? '✓' : i + 1}</i>
+              <span className="cd-item-b">
+                <b>{l.title}</b>
+                <em>{l.goal}</em>
+              </span>
+              <span className="cd-tag is-tools">Ремесло</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export function CodeTab({ data, reload, toast, jump, onJumped }) {
   const [prog, setProg] = useState(() => data.code || {});
@@ -1933,6 +2176,7 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
      */
     setTarget(jump);
     if (jump.lesson) { setMode('learn'); setOpenId(jump.lesson); }
+    else if (jump.tool) setMode('tools');
     else if (jump.ref) setMode('ref');
     else if (jump.tour) setMode('tour');
     onJumped?.();
@@ -1942,6 +2186,7 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
   const stats = courseStats(prog);
   const diary = statsOf(data.practice || [], today());
   const rec = recallStats(prog);
+  const tools = toolStats(prog);
 
   const save = async (next) => {
     // у посилку йде лише те, що змінилось відносно завантаженого:
@@ -2033,6 +2278,25 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
     );
   }
 
+  if (mode === 'tools') {
+    return (
+      <ToolShelf
+        prog={prog}
+        start={target?.tool}
+        onBack={() => { setTarget(null); setMode('learn'); }}
+        onDone={(id) => save({
+          ...prog,
+          [id]: {
+            ...(prog[id] || {}),
+            id, state: 'done', date: today(),
+            tries: (prog[id]?.tries || 0) + 1,
+            code: '',
+          },
+        })}
+      />
+    );
+  }
+
   if (mode === 'ref') {
     return <RefBook start={target?.ref} onBack={() => { setTarget(null); setMode('learn'); }} />;
   }
@@ -2086,6 +2350,22 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
             : rec.due > 0
               ? `${Math.min(rec.due, RECALL_SIZE)} ${plural(Math.min(rec.due, RECALL_SIZE), 'питання', 'питання', 'питань')} на сьогодні — хвилини три`
               : `Сьогодні нічого. Тримається ${rec.held} з ${rec.total}`}
+        </span>
+      </button>
+
+      {/* Курс учить писати код, а робота починається з того, що навколо
+          коду: термінал, Git, оточення, пошук причини. Без цього людина
+          вміє писати, але не вміє нічого запустити, нічого зберегти й
+          нічого повернути, як було. */}
+      <button className="cd-refb is-tools" onClick={() => setMode('tools')}>
+        <span className="cd-refb-t">
+          Інструменти
+          {tools.done > 0 && <em className="cd-refb-n">{tools.done}</em>}
+        </span>
+        <span className="cd-refb-d">
+          {tools.done === 0
+            ? `${tools.total} ${plural(tools.total, 'урок', 'уроки', 'уроків')} не про синтаксис: термінал, Git, оточення, пошук причини`
+            : `Зроблено ${tools.done} з ${tools.total}: термінал, Git, оточення, пошук причини`}
         </span>
       </button>
 
@@ -2391,7 +2671,7 @@ function WhyNow({ question, onAnswer }) {
             disabled={answered}
             onClick={() => { setPicked(i); onAnswer(i === question.right); }}
           >
-            {o}
+            <Mono text={o} />
           </button>
         ))}
       </div>
@@ -2646,6 +2926,7 @@ function AbcWhere({ id, go }) {
     );
   }
   const lessons = (p.lessons || []).map((lid) => CODE_LESSONS.find((l) => l.id === lid)).filter(Boolean);
+  const tools = (p.tools || []).map((tid) => toolById(tid)).filter(Boolean);
   const cards = (p.ref || []).map((rid) => REF_CARDS.find((c) => c.id === rid)).filter(Boolean);
   const tours = (p.tour || []).map((tid) => TOURS.find((x) => x.id === tid)).filter(Boolean);
   const step = p.plan ? PLAN.find((s) => s.n === p.plan) : null;
@@ -2655,6 +2936,11 @@ function AbcWhere({ id, go }) {
       {lessons.map((l) => (
         <button key={l.id} className="ab-go is-lesson" onClick={() => go?.('code', { lesson: l.id })}>
           Урок · {l.title}
+        </button>
+      ))}
+      {tools.map((l) => (
+        <button key={l.id} className="ab-go is-tool" onClick={() => go?.('code', { tool: l.id })}>
+          Інструменти · {l.title}
         </button>
       ))}
       {cards.map((c) => (
