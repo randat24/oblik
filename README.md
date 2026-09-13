@@ -187,7 +187,7 @@ public/    іконки, service worker, скріншоти довідки
 scripts/   збірка пісочниці для уроків React
 styles/    один globals.css, без CSS-модулів і без Tailwind
 tests/     node --test, без залежностей
-docs/      розгортання з нуля
+docs/      розгортання з нуля й заміна ключів
 ```
 
 ## Запуск
@@ -200,6 +200,8 @@ npm run dev                  # http://localhost:3000
 
 Повне розгортання з нуля — [`docs/setup.md`](docs/setup.md).
 Перелік змінних оточення з поясненнями — [`.env.example`](.env.example).
+Ключ кудись потрапив — [`docs/rotate.md`](docs/rotate.md): що з чим повʼязано
+й у якому порядку міняти, щоб застосунок не ліг між кроками.
 
 ## Тести
 
