@@ -4196,3 +4196,144 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .tl-actions .act-btn { flex: 0 0 auto; }
 
 .ab-go.is-tool:hover { border-color: var(--blue); }
+
+/* ---------- Зошит: свої питання, помилки й шматки коду ----------
+   Довідник відповідає на питання, які передбачив хтось інший. На решту —
+   а їх більшість — відповідає лише той, хто вже раз їх закрив.
+
+   Виглядає він як список, у якому шукають, а не як стрічка, яку гортають:
+   згорнуті рядки, розгортаються по одному, а під час пошуку — усі. Те
+   саме рішення, що й у довіднику, і з тієї ж причини. */
+
+.cd-refb.is-notes:hover { border-color: var(--green); }
+.cd-refb.is-notes .cd-refb-t { color: var(--green); }
+
+.dy-stat.is-open { border-color: var(--line); }
+.dy-stat.is-open b { color: var(--text-dim); }
+/* Неперевірена відповідь від AI — не помилка, але й не знання. Колір
+   тут рівно для того, щоб це число не губилось серед інших. */
+.dy-stat.is-risk { border-color: rgba(196,87,74,.4); }
+.dy-stat.is-risk b { color: var(--red); }
+
+.nb-top { margin-top: 4px; }
+.nb-filters { margin: 10px 0 4px; }
+
+.nb-list { display: flex; flex-direction: column; gap: 6px; }
+.nb-note {
+  border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  background: var(--panel); overflow: hidden;
+}
+.nb-note.is-open { border-color: var(--line); }
+.nb-note.is-unanswered { border-left: 3px solid var(--amber-dim); }
+
+.nb-head {
+  width: 100%; display: flex; flex-direction: column; gap: 5px;
+  padding: 10px 12px; background: none; border: 0;
+  text-align: left; cursor: pointer; font: inherit; color: var(--text);
+}
+.nb-head:hover { background: var(--panel-2); }
+.nb-ask { font-size: .92rem; line-height: 1.45; }
+.nb-ask code { font-size: .84rem; }
+
+.nb-kind {
+  align-self: flex-start; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--line-soft); color: var(--muted);
+  font-size: .66rem; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.nb-kind.is-q { border-color: rgba(102,144,171,.4); color: var(--blue); }
+.nb-kind.is-err { border-color: rgba(196,87,74,.4); color: var(--red); }
+.nb-kind.is-snip { border-color: rgba(122,166,83,.4); color: var(--green); }
+.nb-kind.is-rule { border-color: rgba(217,173,37,.4); color: var(--amber); }
+
+.nb-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.nb-meta i { font-style: normal; font-size: .72rem; color: var(--muted); }
+.nb-topic { color: var(--text-dim) !important; }
+.nb-open { color: var(--amber) !important; }
+.nb-risk { color: var(--red) !important; }
+.nb-date { margin-left: auto; }
+
+.nb-body {
+  padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.nb-answer { padding-top: 10px; font-size: .88rem; line-height: 1.55; color: var(--text-dim); }
+.nb-answer p { margin: 0; }
+.nb-code {
+  margin: 0; padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  font-family: var(--mono); font-size: .82rem; line-height: 1.55;
+  overflow-x: auto; white-space: pre;
+}
+.nb-still {
+  padding: 8px 10px; border-radius: var(--r-sm);
+  background: var(--panel-2); border-left: 3px solid var(--amber);
+  font-size: .82rem; color: var(--text-dim); line-height: 1.5;
+}
+
+.nb-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.nb-tag {
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  font-size: .72rem; color: var(--text-dim);
+}
+.nb-src { font-size: .72rem; color: var(--muted); }
+.nb-src.is-ok { color: var(--green); }
+.nb-acts { margin-left: auto; display: flex; gap: 6px; }
+.nb-act {
+  padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: transparent;
+  color: var(--muted); font: inherit; font-size: .74rem; cursor: pointer;
+}
+.nb-act:hover { border-color: var(--blue); color: var(--text-dim); }
+.nb-act.is-sure { border-color: var(--red); color: var(--red); }
+
+.nb-form { gap: 14px; }
+.nb-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.nb-about { font-size: .8rem; color: var(--muted); line-height: 1.5; margin-top: -6px; }
+.nb-mono { font-family: var(--mono) !important; font-size: .84rem !important; }
+.nb-two { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.nb-two select {
+  width: 100%; padding: 8px 10px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  color: var(--text); font-family: var(--sans); font-size: .9rem;
+}
+
+/* Список перевірки стоїть у формі, а не в уроці: він потрібен саме в ту
+   мить, коли чужу відповідь записують як свою. */
+.nb-ai {
+  padding: 12px 14px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid rgba(196,87,74,.35);
+}
+.nb-ai-h {
+  font-size: .68rem; color: var(--red); letter-spacing: .08em;
+  text-transform: uppercase; margin-bottom: 8px;
+}
+.nb-ai ul { margin: 0; padding-left: 18px; }
+.nb-ai li { font-size: .84rem; line-height: 1.55; color: var(--text-dim); margin-bottom: 5px; }
+.nb-check { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: .86rem; }
+.nb-check input { width: 17px; height: 17px; accent-color: var(--green); }
+
+.nb-starters {
+  padding: 12px 14px; border-radius: var(--r);
+  background: var(--panel-2); border: 1px dashed var(--line);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.nb-starter {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+  padding: 9px 11px; border-radius: var(--r-sm);
+  border: 1px solid var(--line-soft); background: var(--panel);
+  font: inherit; color: var(--text); cursor: pointer;
+}
+.nb-starter:hover:not(:disabled) { border-color: var(--green); }
+.nb-starter:disabled { cursor: default; opacity: .6; }
+.nb-starter b { font-size: .88rem; }
+.nb-starter span { font-size: .8rem; color: var(--muted); line-height: 1.45; }
+
+.nb-more { flex: 0 0 auto; align-self: flex-start; }
+
+.ab-go.is-note:hover { border-color: var(--green); }
+/* У пробілі текст і кнопка стоять одне під одним: сам пробіл — рядок, а
+   не чип, і в ряд із чипом він не стає. */
+.ab-where.is-gap .ab-gap-t { display: block; }
+.ab-where.is-gap .ab-go { display: inline-block; margin-top: 6px; }
