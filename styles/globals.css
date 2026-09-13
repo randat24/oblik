@@ -24,23 +24,6 @@
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
   --sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
 
-  /*
-   * Розмір того, у що тицяють пальцем.
-   *
-   * `--tap-min` — нижня межа з WCAG 2.2, критерій 2.5.8 Target Size
-   * (Minimum), рівень AA: 24×24 CSS-пікселі. Нижче не буває нічого.
-   *
-   * `--tap` — скільки насправді треба цьому застосунку. Ним користуються
-   * не за столом: у машині, в рукавицях, на морозі й поспіхом. Сорок
-   * чотири — те, на що цілиться палець, не дивлячись.
-   *
-   * Критерій звірити з першоджерелом не вдалось: w3.org не відкривається
-   * з оточення, де це писалось (13.09.2026). Числа взяті з памʼяті —
-   * перевірте, коли буде доступ.
-   */
-  --tap: 44px;
-  --tap-min: 24px;
-
   --r: 8px;
   --r-sm: 5px;
   --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.25);
@@ -540,12 +523,9 @@ input:focus, select:focus, textarea:focus {
   .h-quick-x, .box-con-add { padding: 0 12px; }
 
   /* Статус міняють щодня, а поле було заввишки з двадцять чотири пікселі —
-     влучити пальцем важко. Те саме для полів, які правлять прямо в картці.
-
-     Було 34: більше за критерій доступності, але менше за палець. Тепер
-     `--tap`, як і решта мішеней. */
-  .pill, select.pill { min-height: var(--tap); }
-  .ghost, input.ghost, select.ghost, textarea.ghost { min-height: var(--tap); }
+     влучити пальцем важко. Те саме для полів, які правлять прямо в картці. */
+  .pill, select.pill { min-height: 34px; }
+  .ghost, input.ghost, select.ghost, textarea.ghost { min-height: 34px; }
 }
 /* min-width: max-content не дає таблиці стискатися до нечитабельних стовпчиків —
    замість цього обгортка прокручується вбік */
@@ -1012,9 +992,7 @@ label {
 textarea.ghost {
   width: 100%; background: transparent; border: 1px solid transparent;
   color: var(--text); padding: 3px 6px; border-radius: var(--r-sm);
-  /* У примітку тицяють, щоб поставити курсор, — це така сама мішень, як
-     кнопка. Було 30. */
-  font-family: var(--sans); font-size: 0.92rem; resize: vertical; min-height: var(--tap);
+  font-family: var(--sans); font-size: 0.92rem; resize: vertical; min-height: 30px;
   field-sizing: content;
 }
 textarea.ghost:hover { border-color: var(--line-soft); background: var(--panel-2); }
@@ -3886,11 +3864,8 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   font-size: .89rem; color: var(--text-dim); line-height: 1.6; max-width: 62ch;
 }
 .cd-tsay b { color: var(--text); }
-/* У розборах моноширинний трохи менший за загальний: рядків із кодом там
-   багато, і повний розмір робить абзац рябим. Правило стоїть після
-   `.cd-inline` і перекриває його саме тут. */
-.cd-tsay code, .cd-twhy code, .cd-tp code, .cd-ttry code {
-  font-size: .84em; padding: 0; background: none;
+.cd-tsay code, .cd-twhy code {
+  font-family: var(--mono); font-size: .84em; color: var(--amber);
 }
 
 .cd-twhy {
@@ -4512,84 +4487,3 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .sr-rule b { font-size: .86rem; }
 .sr-rule span { font-size: .82rem; color: var(--text-dim); line-height: 1.5; }
 .ab-go.is-old:hover { border-color: var(--amber); }
-
-
-/* ---------- Розмір того, у що тицяють ----------
-   Три яруси, і кожен про своє.
-
-   Перший — нижня межа для геть усього інтерактивного: 24×24. Це не
-   порада, а критерій доступності; єдине, що було нижче, — хрестик
-   сканера на 23×18.
-
-   Другий — 44 для всього, у що цілиться палець: кнопки дій, вкладки,
-   чипи, поля вводу, нижня навігація. Застосунком користуються в машині
-   й у рукавицях, і 34 пікселі там означають два дотики замість одного.
-
-   Третій — дрібні значки, які мають лишитись дрібними: стрілки
-   «‹ ›», хрестики, крапки прогортування. Їм більшає не сам значок, а
-   ділянка дотику — невидимим шаром поверх. Виглядає так само, влучається
-   як слід. */
-
-button, [role="button"], input, select, textarea,
-.tab, .bnav-b, .ab-go, .nb-act, .er-later {
-  min-height: var(--tap-min);
-}
-
-/* Те, у що цілиться палець */
-.act-btn, .btn, .z-chip, .h-btn, .cmd-open, .tab, .bnav-b,
-.sd-place, .kit-off, .btn-group, .h-world, .h-kcal-sw, .h-hday, .vtoggle button,
-.who-out, .nb-starter, .cd-refb, .cd-item, .nb-head, .er-head,
-.rc-opt, .tl-tick, .act-btn.act-accept {
-  min-height: var(--tap);
-}
-
-/* Поля вводу — теж мішень: у них ціляться, щоб поставити курсор */
-input:not([type="checkbox"]):not([type="radio"]),
-select, .search-input, .cd-ref-q, .er-q, .dy-field input, .nb-two select {
-  min-height: var(--tap);
-}
-/* Прапорці лишаються прапорцями, але ділянку дотику мають повну */
-input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
-
-/*
- * Дрібний значок із повноцінною ділянкою дотику.
- *
- * `::after` розтягнутий за межі кнопки й прозорий: на екрані нічого не
- * змінилось, а палець потрапляє. `position: relative` потрібне самій
- * кнопці, інакше шар поїде до найближчого предка.
- */
-.scan-x, .h-hnav, .h-back, .h-quick-b, .h-quick-x, .h-fire {
-  position: relative;
-}
-.scan-x::after, .h-hnav::after, .h-back::after,
-.h-quick-b::after, .h-quick-x::after, .h-fire::after {
-  content: '';
-  position: absolute;
-  top: 50%; left: 50%;
-  width: var(--tap); height: var(--tap);
-  transform: translate(-50%, -50%);
-}
-
-/* Хрестик сканера був єдиним, що не дотягував до 24 навіть за розміром */
-.scan-x { min-width: var(--tap-min); padding: 0 6px; }
-/* Кнопка сканера вузька: заввишки вона вже 44, лишилось ушир */
-.cmd-open.scan-open { min-width: var(--tap); }
-
-/*
- * Крапки гортання лишаються як є — і це не недогляд.
- *
- * Вони стоять упритул одна до одної, тож розтягнута ділянка одної
- * накрила б сусідню: дотик між ними діставався б тій, що вище в порядку
- * малювання. Самі крапки 32×32 — критерій виконано й без розтягування, а
- * точність влучання від нього стала б гіршою, а не кращою.
- */
-
-/*
- * Проміжки між сусідами.
- *
- * У самому критерії є послаблення: дрібну мішень можна лишити, якщо
- * навколо неї вистачає порожнечі. Зворотне теж правда — великі кнопки
- * впритул дають промахи не менші за дрібні. Шість пікселів — той
- * проміжок, за якого палець не зачіпає сусіда.
- */
-.cd-actions, .z-chips, .nb-kinds, .nb-filters, .h-quick { gap: 8px; }
