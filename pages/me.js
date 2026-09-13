@@ -3,6 +3,7 @@ import Head from 'next/head';
 import {
   api, today, stamp, short, num, plural, plur, mayEdit, setCanEdit,
 } from '../components/util';
+import { OfflineBar } from '../components/offline-bar';
 import { MultTab, CodeTab, AbcTab, PlanTab, lessonsDone, lessonsTotal } from '../components/navch';
 // Чиста логіка тренажера — без звернень до таблиць, тому їде і в браузер
 import {
@@ -784,6 +785,8 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
     try {
       await api('/api/health', { method: 'POST', body: { action: 'delFood', row, date } });
       await reload();
+    } catch (e) {
+      toast(e.message);
     } finally { setBusy(false); }
   };
 
@@ -852,6 +855,13 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
           try {
             await api('/api/health', { method: 'POST', body: { action: 'day', day: { date, water: v } } });
             await reload();
+          } catch (e) {
+            /*
+             * Без цього рядка помилка йшла в нікуди: `finally` стояв, а
+             * `catch` — ні. Людина тиснула «+500», нічого не змінювалось і
+             * ніхто не казав чому. Без мережі це стало помітно щоразу.
+             */
+            toast(e.message);
           } finally { setBusy(false); }
         }}
         onOpen={() => setDayEdit(true)}
@@ -2011,7 +2021,7 @@ function SuggestBlock({ data, day, onPick }) {
 
 /* ---------- Вкладка «Страви» ---------- */
 
-function DishesTab({ data, reload, setBusy }) {
+function DishesTab({ data, reload, setBusy, toast }) {
   const [edit, setEdit] = useState(null); // {name, items} або 'new'
   const dishes = data.dishes || [];
 
@@ -2021,6 +2031,8 @@ function DishesTab({ data, reload, setBusy }) {
     try {
       await api('/api/health', { method: 'POST', body: { action: 'delDish', name } });
       await reload();
+    } catch (e) {
+      toast?.(e.message);
     } finally { setBusy(false); }
   };
 
@@ -4217,6 +4229,9 @@ export default function Osobyste() {
     <>
       <Head><title>Особисте</title></Head>
       <div className={'h-wrap' + (busy ? ' is-busy' : '')}>
+        {/* Звʼязку немає однаково і тут, і на головній — мовчати про це в
+            одному з двох розділів немає жодної причини. */}
+        <OfflineBar onSynced={(n) => toast(`Надіслано відкладені записи: ${n}`)} />
         {/* Гість бачить розділ, але нічого не змінює — і має про це знати
             одразу, а не після натискання кнопки, яка нічого не зробить. */}
         {data.canEdit === false && (
@@ -4300,7 +4315,7 @@ export default function Osobyste() {
 
         {tab === 'day' && <DayTab data={data} date={date} setDate={setDate} reload={load} setBusy={setBusy} toast={toast} />}
         {tab === 'weight' && <WeightTab data={data} reload={load} />}
-        {tab === 'dishes' && <DishesTab data={data} reload={load} setBusy={setBusy} />}
+        {tab === 'dishes' && <DishesTab data={data} reload={load} setBusy={setBusy} toast={toast} />}
         {tab === 'body' && <BodyTab data={data} reload={load} />}
         {tab === 'meds' && <MedsTab data={data} reload={load} setBusy={setBusy} toast={toast} />}
         {tab === 'mult' && <MultTab data={data} reload={load} toast={toast} />}
