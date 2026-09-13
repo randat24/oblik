@@ -4011,6 +4011,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .ab-what p { margin: 0; font-size: .84rem; color: var(--text-dim); line-height: 1.5; }
 .ab-why { font-size: .8rem; color: var(--muted); line-height: 1.5; }
+.ab-why p { margin: 0; }
 
 /* ---------- Повторення пройденого ----------
    Курс проходять один раз і забувають те, що робили на третій день. Цей
@@ -4091,3 +4092,41 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
    посиланні «далі почитати» — скрізь, де текст писала людина. Абзац від
    Prose там зайвий: він розриває рядок, який мав лишитись рядком. */
 .cd-task p, .cd-want p, .cd-hint p, .cd-next p { display: inline; margin: 0; }
+
+/* ---------- Абетка: куди йти від теми ----------
+   Карта була повна, а дороги від неї не вело нікуди. Смуга під темою —
+   це і є дорога: урок, картка довідника, розбір справжнього коду.
+
+   Тема без жодного шляху не мовчить: список має показувати, чого в
+   застосунку ще немає, а не робити вигляд, що є все. */
+
+.ab-item { display: block; }
+.ab-know {
+  display: block; margin-top: 6px; font-size: .78rem; color: var(--text-dim);
+  line-height: 1.45;
+}
+.ab-know b {
+  color: var(--muted); font-weight: 600; font-size: .68rem;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.ab-know p { display: inline; margin: 0; }
+
+.ab-where {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin: 0 0 10px; padding: 0 4px 0 34px;   /* під позначкою зліва */
+}
+.ab-go {
+  padding: 5px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--text-dim); font-size: .76rem; cursor: pointer;
+  text-align: left;
+}
+.ab-go:hover { border-color: var(--blue); color: var(--text); }
+.ab-go.is-lesson:hover { border-color: var(--amber); }
+.ab-go.is-tour:hover { border-color: var(--green); }
+
+/* Пробіл виглядає як пробіл, а не як помилка: це перелік роботи. */
+.ab-where.is-gap {
+  display: block; padding: 6px 4px 10px 34px;
+  font-size: .76rem; color: var(--muted); font-style: italic;
+}
