@@ -33,6 +33,7 @@ import { PLAN, COURSE, nextSteps, planProgress, lessonOf, tourOf } from '../lib/
 import {
   ABC, ABC_GROUPS, STATES, byGroup, abcProgress, suggestNext, cycleState, stateOf,
 } from '../lib/abc';
+import { pathOf, hasWhere, coverage } from '../lib/paths';
 import { changedOnly } from '../lib/patch';
 import { FIELDS as PRACTICE_FIELDS, statsOf, freshIdeas } from '../lib/practice';
 import { REF_GROUPS, REF_CARDS, findCards } from '../lib/ref';
@@ -1901,8 +1902,9 @@ function RecallRoom({ prog, onBack, onSave }) {
 
 const lessonTitle = (id) => CODE_LESSONS.find((l) => l.id === id)?.title || id;
 
-export function CodeTab({ data, reload, toast }) {
+export function CodeTab({ data, reload, toast, jump, onJumped }) {
   const [prog, setProg] = useState(() => data.code || {});
+  const [target, setTarget] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [saving, setSaving] = useState(false);
   // Курс проходять один раз, а довідник відкривають щотижня — тож це не
@@ -1910,6 +1912,31 @@ export function CodeTab({ data, reload, toast }) {
   const [mode, setMode] = useState('learn');
 
   useEffect(() => { setProg(data.code || {}); }, [data.code]);
+
+  /*
+   * Прийшли сюди з «Абетки» — одразу відкриваємо те, по що прийшли.
+   *
+   * Ціль знімаємо з полиці відразу: інакше вона спрацює вдруге, коли
+   * людина повернеться на вкладку своїми ногами, і замість переліку
+   * уроків знову відкриється той самий урок.
+   */
+  useEffect(() => {
+    if (!jump) return;
+    /*
+     * Ціль кладемо в себе, а не читаємо з пропса далі.
+     *
+     * `onJumped` одразу знімає її зверху — інакше перехід спрацював би
+     * вдруге, коли людина повернеться на вкладку своїми ногами. Але
+     * довідник і розбори відкриваються на наступному кроці, і пропс до
+     * того моменту вже порожній: вони показували б перелік із початку
+     * замість тієї картки, по яку прийшли.
+     */
+    setTarget(jump);
+    if (jump.lesson) { setMode('learn'); setOpenId(jump.lesson); }
+    else if (jump.ref) setMode('ref');
+    else if (jump.tour) setMode('tour');
+    onJumped?.();
+  }, [jump]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const upIdx = openUpTo(prog);
   const stats = courseStats(prog);
@@ -2007,11 +2034,11 @@ export function CodeTab({ data, reload, toast }) {
   }
 
   if (mode === 'ref') {
-    return <RefBook onBack={() => setMode('learn')} />;
+    return <RefBook start={target?.ref} onBack={() => { setTarget(null); setMode('learn'); }} />;
   }
 
   if (mode === 'tour') {
-    return <TourBook onBack={() => setMode('learn')} />;
+    return <TourBook start={target?.tour} onBack={() => { setTarget(null); setMode('learn'); }} />;
   }
 
   if (mode === 'diary') {
@@ -2157,9 +2184,9 @@ export function CodeTab({ data, reload, toast }) {
  * У кожній картці є рядок «у застосунку»: приклад із підручника
  * забувається, а «ось так зроблено в моєму «Обліку» — ні.
  */
-function RefBook({ onBack }) {
+function RefBook({ onBack, start }) {
   const [q, setQ] = useState('');
-  const [open, setOpen] = useState(null);
+  const [open, setOpen] = useState(start || null);
 
   const found = findCards(q);
   const searching = q.trim().length > 0;
@@ -2218,8 +2245,8 @@ function RefBook({ onBack }) {
  * нуля, і незнайомий файл лякає рівно доти, доки хтось не проведе по
  * ньому пальцем.
  */
-function TourBook({ onBack }) {
-  const [openId, setOpenId] = useState(null);
+function TourBook({ onBack, start }) {
+  const [openId, setOpenId] = useState(start || null);
   const tour = openId ? tourById(openId) : null;
 
   if (tour) return <TourRoom tour={tour} onBack={() => setOpenId(null)} />;
@@ -2599,11 +2626,62 @@ function LessonRoom({ lesson, saved, locked, onBack, onNext, onDone, onTry, why:
  * список потрібен, щоб бачити поле, а не щоб красиво заповнити його
  * галочками.
  */
-export function AbcTab({ data, reload, toast, canEdit }) {
+/**
+ * Куди йти від теми.
+ *
+ * Стоїть окремо від рядка, а не всередині нього: рядок — кнопка, що
+ * перемикає позначку, а кнопку в кнопку не вкладеш. Тому шляхи — своя
+ * смуга під рядком.
+ *
+ * Тема без жодного шляху не мовчить, а каже про це вголос: список має
+ * показувати, чого в застосунку ще немає, а не робити вигляд, що є все.
+ */
+function AbcWhere({ id, go }) {
+  const p = pathOf(id);
+  if (!hasWhere(id)) {
+    return (
+      <div className="ab-where is-gap">
+        Тут цього ще не вчать — поки що лише зовнішні джерела
+      </div>
+    );
+  }
+  const lessons = (p.lessons || []).map((lid) => CODE_LESSONS.find((l) => l.id === lid)).filter(Boolean);
+  const cards = (p.ref || []).map((rid) => REF_CARDS.find((c) => c.id === rid)).filter(Boolean);
+  const tours = (p.tour || []).map((tid) => TOURS.find((x) => x.id === tid)).filter(Boolean);
+  const step = p.plan ? PLAN.find((s) => s.n === p.plan) : null;
+
+  return (
+    <div className="ab-where">
+      {lessons.map((l) => (
+        <button key={l.id} className="ab-go is-lesson" onClick={() => go?.('code', { lesson: l.id })}>
+          Урок · {l.title}
+        </button>
+      ))}
+      {cards.map((c) => (
+        <button key={c.id} className="ab-go is-ref" onClick={() => go?.('code', { ref: c.id })}>
+          Довідник · {c.t}
+        </button>
+      ))}
+      {tours.map((x) => (
+        <button key={x.id} className="ab-go is-tour" onClick={() => go?.('code', { tour: x.id })}>
+          Розбір · {x.title}
+        </button>
+      ))}
+      {step && (
+        <button className="ab-go is-plan" onClick={() => go?.('plan')}>
+          План · крок {step.n}: {step.topic}
+        </button>
+      )}
+    </div>
+  );
+}
+export function AbcTab({ data, reload, toast, canEdit, go }) {
   const marks = data?.abc || {};
   const [busy, setBusy] = useState('');
   const [only, setOnly] = useState('');       // група; порожнє — усі
   const [mustOnly, setMustOnly] = useState(false);
+  // шляхи показуємо на вимогу: 67 тем із переліками уроків — це стіна
+  const [showWhere, setShowWhere] = useState(false);
 
   const p = abcProgress(marks);
   const next = suggestNext(marks);
@@ -2657,6 +2735,8 @@ export function AbcTab({ data, reload, toast, canEdit }) {
           onClick={() => { setOnly(''); setMustOnly(false); }}>Усе</button>
         <button className={'z-chip' + (mustOnly ? ' on' : '')}
           onClick={() => { setMustOnly((v) => !v); setOnly(''); }}>Обовʼязкове</button>
+        <button className={'z-chip' + (showWhere ? ' on' : '')}
+          onClick={() => setShowWhere((v) => !v)}>Де вчити</button>
         {ABC_GROUPS.map((g) => (
           <button key={g.key} className={'z-chip' + (only === g.key ? ' on' : '')}
             onClick={() => { setOnly(only === g.key ? '' : g.key); setMustOnly(false); }}>
@@ -2676,9 +2756,16 @@ export function AbcTab({ data, reload, toast, canEdit }) {
             </div>
             {items.map((x) => {
               const st = stateOf(marks[x.id]);
+              /*
+               * Шлях показуємо тому, хто цю тему взяв, — і всім, хто
+               * натиснув «Де вчити». Показувати завжди й усім не можна:
+               * шістдесят сім тем із переліками уроків перетворюють
+               * список на стіну, у якій уже нічого не видно.
+               */
+              const where = showWhere || st === 'learning';
               return (
+                <div className="ab-item" key={x.id}>
                 <button
-                  key={x.id}
                   className={'ab-row is-' + (st || 'none') + (busy === x.id ? ' is-busy' : '')}
                   onClick={() => mark(x.id)}
                   disabled={!canEdit}
@@ -2690,9 +2777,16 @@ export function AbcTab({ data, reload, toast, canEdit }) {
                       {x.must && <span className="ab-must-tag">треба</span>}
                     </span>
                     <span className="ab-what"><Prose text={x.what} /></span>
-                    <span className="ab-why">{x.why}</span>
+                    <span className="ab-why"><Prose text={x.why} /></span>
+                    {/* Що взагалі означає «знаю». Без цього позначку
+                        ставлять на віру, і вона нічого не варта. */}
+                    <span className="ab-know">
+                      <b>Знаю, коли</b> <Prose text={pathOf(x.id).know} />
+                    </span>
                   </span>
                 </button>
+                {where && <AbcWhere id={x.id} go={go} />}
+                </div>
               );
             })}
           </div>

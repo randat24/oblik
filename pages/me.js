@@ -4122,10 +4122,21 @@ export default function Osobyste() {
     } catch { /* приватне вікно — просто почнемо з початку */ }
   }, []);
 
+  /*
+   * Куди саме йшли.
+   *
+   * «Абетка» веде не просто на вкладку, а на конкретний урок чи картку:
+   * інакше людина потрапляє в перелік із шістдесяти семи уроків і шукає
+   * там те, що їй щойно назвали. Ціль живе тут, бо вкладки — сусіди й
+   * одна про одну не знають.
+   */
+  const [jump, setJump] = useState(null);
+
   /** Перейти на вкладку разом зі світом, у якому вона живе */
-  const go = useCallback((key) => {
+  const go = useCallback((key, target) => {
     setTab(key);
     setWorld(worldOf(key));
+    setJump(target || null);
     try { localStorage.setItem('oblik_me_tab', key); } catch { /* дарма */ }
   }, []);
 
@@ -4293,9 +4304,15 @@ export default function Osobyste() {
         {tab === 'body' && <BodyTab data={data} reload={load} />}
         {tab === 'meds' && <MedsTab data={data} reload={load} setBusy={setBusy} toast={toast} />}
         {tab === 'mult' && <MultTab data={data} reload={load} toast={toast} />}
-        {tab === 'code' && <CodeTab data={data} reload={load} toast={toast} />}
+        {tab === 'code' && (
+          <CodeTab data={data} reload={load} toast={toast}
+            jump={jump} onJumped={() => setJump(null)} />
+        )}
         {tab === 'plan' && <PlanTab data={data} />}
-        {tab === 'abc' && <AbcTab data={data} reload={load} toast={toast} canEdit={data?.canEdit} />}
+        {tab === 'abc' && (
+          <AbcTab data={data} reload={load} toast={toast}
+            canEdit={data?.canEdit} go={go} />
+        )}
         {tab === 'stats' && <StatsTab data={data} />}
         {tab === 'goals' && <GoalsTab data={data} reload={load} setBusy={setBusy} />}
       </div>
