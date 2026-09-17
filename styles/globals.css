@@ -1839,6 +1839,16 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-mcell-d.is-up { color: var(--red); }
 .h-mcell-d.is-down { color: var(--green); }
 
+/* Скільки зміни ваги припало на жир */
+.h-share { margin: 2px 0 10px; }
+.h-share-bar {
+  height: 8px; border-radius: 20px; overflow: hidden;
+  background: var(--red-dim); border: 1px solid var(--line-soft);
+}
+.h-share-bar > i { display: block; height: 100%; background: var(--green); }
+.h-share-l { margin-top: 6px; font-size: .76rem; color: var(--muted); }
+.h-share-l b { font-family: var(--mono); color: var(--green); }
+
 .h-tablewrap { overflow-x: auto; }
 .h-table { border-collapse: collapse; width: 100%; font-size: .82rem; min-width: max-content; }
 .h-table th, .h-table td {
