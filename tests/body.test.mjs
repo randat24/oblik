@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { dateOf } from '../lib/weight.js';
 import {
-  weightOn, split, composition, compositionVerdict,
+  weightOn, split, composition, compositionVerdict, oddValue,
   whtr, whtrLabel, whr, whrLabel, ffmi, ffmiLabel, katchBmr, bmiVsFat,
 } from '../lib/body.js';
 
@@ -156,6 +156,33 @@ test('набір: у жир чи в мʼязи — різні висновки',
 
 test('без розкладу висновку немає', () => {
   assert.equal(compositionVerdict(null), null);
+});
+
+/* ── описки в замірах ──────────────────────────────────────────────────── */
+
+test('число в межах не викликає підозр', () => {
+  assert.equal(oddValue(104, 40, 200), null);
+  assert.equal(oddValue(40, 40, 200), null, 'сама межа — ще норма');
+  assert.equal(oddValue(200, 40, 200), null);
+});
+
+test('помилка на порядок — і підказка, що малось на увазі', () => {
+  // класика: на рулетці 104, у полі 10.4
+  assert.equal(oddValue(10.4, 40, 200).hint, 104);
+  assert.equal(oddValue(1040, 40, 200).hint, 104);
+  assert.equal(oddValue(9.2, 40, 200).hint, 92);
+});
+
+test('просто дивне число лишається без підказки', () => {
+  const o = oddValue(3000, 40, 200);
+  assert.equal(o.value, 3000);
+  assert.equal(o.hint, null, 'ні ×10, ні ÷10 не лягають у межі');
+});
+
+test('порожнє поле — не помилка', () => {
+  assert.equal(oddValue('', 40, 200), null);
+  assert.equal(oddValue(null, 40, 200), null);
+  assert.equal(oddValue(undefined, 40, 200), null);
 });
 
 /* ── пропорції ─────────────────────────────────────────────────────────── */
