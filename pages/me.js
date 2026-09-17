@@ -15,7 +15,11 @@ import {
   lessonProgress, partProgress, unlockedLessons,
   buildSession, partQueue, applyResults,
 } from '../lib/mult';
-import { pace, forecast, verdicts } from '../lib/weight';
+import { pace, forecast, verdicts, smooth, trend } from '../lib/weight';
+import {
+  weightOn, split, composition, compositionVerdict,
+  whtr, whtrLabel, whr, whrLabel, ffmi, ffmiLabel, katchBmr, bmiVsFat,
+} from '../lib/body';
 
 /*
  * Особистий розділ здоров'я. Свідомо окрема сторінка з власним кодом:
@@ -34,13 +38,13 @@ const BUILD = (process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || '').slice(0, 7);
  * записати півсантиметра, якщо стрічка лягла між поділками.
  */
 const BODY_FIELDS = [
-  { key: 'chest', label: 'Груди', unit: 'см', cm: true },
-  { key: 'waist', label: 'Талія', unit: 'см', cm: true },
-  { key: 'belly', label: 'Живіт', unit: 'см', cm: true },
-  { key: 'hips', label: 'Стегна', unit: 'см', cm: true },
-  { key: 'biceps', label: 'Біцепс', unit: 'см', cm: true },
-  { key: 'thigh', label: 'Стегно', unit: 'см', cm: true },
-  { key: 'neck', label: 'Шия', unit: 'см', cm: true },
+  { key: 'chest', label: 'Груди', unit: 'см' },
+  { key: 'waist', label: 'Талія', unit: 'см' },
+  { key: 'belly', label: 'Живіт', unit: 'см' },
+  { key: 'hips', label: 'Стегна', unit: 'см' },
+  { key: 'biceps', label: 'Біцепс', unit: 'см' },
+  { key: 'thigh', label: 'Стегно', unit: 'см' },
+  { key: 'neck', label: 'Шия', unit: 'см' },
   { key: 'fat', label: '% жиру', unit: '%' },
 ];
 
@@ -91,6 +95,24 @@ function navyFat({ sex, height, waist, neck, hips }) {
   return v >= 3 && v <= 70 ? v : null;
 }
 
+/**
+ * Наскільки можна вірити цьому відсотку.
+ *
+ * Формула стоїть на обхваті талії, а стрічка бреше на сантиметр від
+ * натягу й вдиху. Сантиметр талії — це майже цілий відсоток жиру, тобто
+ * під кілограм жирової маси. Показувати «18.3%» без цієї межі — обіцяти
+ * точність, якої немає.
+ */
+function navyFatSpread(p, d = 1) {
+  const base = navyFat(p);
+  if (base === null) return null;
+  const w = num(p.waist);
+  const near = [navyFat({ ...p, waist: w - d }), navyFat({ ...p, waist: w + d })]
+    .filter((v) => v !== null)
+    .map((v) => Math.abs(v - base));
+  return near.length ? Math.max(...near) : null;
+}
+
 // Скільки тіло витрачає у спокої — формула Міффліна-Сан Жеора
 function bmr({ sex, weight, height, age }) {
   const w = num(weight), h = num(height), a = num(age);
@@ -126,14 +148,24 @@ const STAND_GOAL = 12;
  * витратами з активністю і витратами у спокої, тобто саме та енергія,
  * яку треба спалити рухом. Хвилини тренувань беремо з рівня активності.
  */
-function calcNorm({ sex, weight, height, age, activity, aim }) {
-  const base = bmr({ sex, weight, height, age });
+function calcNorm({ sex, weight, height, age, activity, aim, lean }) {
+  /*
+   * Коли безжирова маса відома, вгадувати склад тіла не треба. Міффлін
+   * рахує з ваги, зросту й віку — тобто підставляє середню людину; Кетч-
+   * Макардл рахує з тієї маси, яка й витрачає енергію. Жир не витрачає
+   * майже нічого, тож на краях різниця виходить у сотні калорій.
+   */
+  const lm = num(lean);
+  const katch = katchBmr(lm);
+  const base = katch === null ? bmr({ sex, weight, height, age }) : katch;
   if (base === null) return null;
   const act = num(activity) || 1.375;
   const tdee = base * act;
   const kcal = tdee * (1 + (num(aim) || 0) / 100);
   const w = num(weight);
-  const protein = Math.round(w * 1.8);
+  // Білок потрібен мʼязам, а не жиру: коли суха маса відома, рахуємо з неї.
+  // Інакше на вазі з великим відсотком жиру норма виходить завищеною.
+  const protein = Math.round(lm > 0 ? lm * 2.2 : w * 1.8);
   const fat = Math.round(w * 0.9);
   const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
   // округлюємо до десятків: ціль кільця — орієнтир, а не точне число
@@ -152,7 +184,30 @@ function calcNorm({ sex, weight, height, age, activity, aim }) {
     protein, fat, carbs,
     move, exercise, stand: STAND_GOAL,
     fiber, sugar, sodium,
+    method: katch === null ? 'mifflin' : 'katch',
+    lean: lm > 0 ? lm : null,
   };
+}
+
+/**
+ * Останній замір тіла, доведений до складу маси.
+ *
+ * Відсоток беремо записаний, а якщо його немає — рахуємо з обхватів. Вагу
+ * на той день беремо згладжену: інакше безжирова маса стрибала б на той
+ * самий кілограм води, через який і написаний увесь lib/weight.
+ */
+function lastSplit(data) {
+  const g = data.goals || {};
+  const rows = [...(data.body || [])].sort((a, b) => stamp(a.date) - stamp(b.date));
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const m = rows[i];
+    const fat = m.fat != null ? m.fat
+      : navyFat({ sex: g.sex, height: g.height, waist: m.waist, neck: m.neck, hips: m.hips });
+    const w = weightOn(data.days, m.date);
+    const s = w ? split(w.kg, fat) : null;
+    if (s) return { ...s, date: m.date, weightDate: w.date, gap: w.gap };
+  }
+  return null;
 }
 
 /**
@@ -2832,28 +2887,65 @@ function BodyTab({ data, reload }) {
   const prev = rows[1];
 
   const g = data.goals || {};
-  // вага на день заміру, а якщо її нема — найсвіжіша до цієї дати
-  const weightAt = (date) => {
-    const upto = data.days.filter((d) => d.weight != null && stamp(d.date) <= stamp(date));
-    return upto.length ? upto[upto.length - 1].weight : null;
+
+  /*
+   * Відсоток жиру: записаний, якщо він є, інакше порахований з обхватів.
+   * Окремо тримаємо те, чи це оцінка формули — лише для неї має сенс
+   * показувати межу похибки.
+   */
+  const fatOf = (m) => {
+    const auto = navyFat({
+      sex: g.sex, height: g.height, waist: m.waist, neck: m.neck, hips: m.hips,
+    });
+    if (m.fat == null) return { fat: auto, auto: true };
+    // підставлене формулою значення лишається оцінкою, хоч і записане
+    const same = auto !== null && Math.abs(m.fat - auto) <= 0.15;
+    return { fat: m.fat, auto: same };
   };
+
   const derive = (m) => {
     if (!m) return null;
-    const w = weightAt(m.date);
-    const fat = m.fat != null ? m.fat
-      : navyFat({ sex: g.sex, height: g.height, waist: m.waist, neck: m.neck, hips: m.hips });
-    const mass = w != null && fat != null ? (w * fat) / 100 : null;
+    // вага на день заміру — згладжена: денний кілограм води тут усе псує
+    const w = weightOn(data.days, m.date);
+    const { fat, auto } = fatOf(m);
+    const s = w ? split(w.kg, fat) : null;
     return {
-      weight: w,
+      weight: w ? w.kg : null,
+      weightDate: w ? w.date : null,
+      weightGap: w ? w.gap : null,
       fat,
-      fatMass: mass,
-      leanMass: mass != null ? w - mass : null,
-      bmi: bmi(w, g.height),
+      fatAuto: auto,
+      fatMass: s ? s.fatKg : null,
+      leanMass: s ? s.leanKg : null,
+      bmi: bmi(w ? w.kg : null, g.height),
     };
   };
   const dLast = derive(last);
   const dPrev = derive(prev);
   const delta = (a, b) => (a != null && b != null ? n1(a - b) : null);
+
+  // Розклад зміни ваги на жир і решту тіла — головне питання всієї вкладки
+  const points = data.body
+    .map((m) => {
+      const w = weightOn(data.days, m.date);
+      const { fat } = fatOf(m);
+      return w && fat != null ? { date: m.date, weight: w.kg, fat } : null;
+    })
+    .filter(Boolean);
+  const comp = composition(points);
+  const compSay = compositionVerdict(comp);
+
+  const spread = last && dLast?.fatAuto
+    ? navyFatSpread({
+      sex: g.sex, height: g.height, waist: last.waist, neck: last.neck, hips: last.hips,
+    })
+    : null;
+
+  const ratioWaist = whtr(last?.waist, g.height);
+  const ratioHip = whr(last?.waist, last?.hips);
+  const muscleIndex = ffmi(dLast?.leanMass, g.height);
+  const bmiSay = bmiVsFat(dLast?.bmi, dLast?.fat, g.sex);
+  const signed = (v) => (v > 0 ? '+' : '') + n1(v);
 
   return (
     <>
@@ -2868,12 +2960,20 @@ function BodyTab({ data, reload }) {
         <>
           <div className="h-mgrid">
             {BODY_FIELDS.filter((f) => f.key !== 'fat' && last[f.key] != null).map((f) => {
-              const raw = prev && prev[f.key] != null ? last[f.key] - prev[f.key] : null;
-              const d = raw === null ? null : n1(raw);
+              /*
+               * Не різниця з минулим заміром, а тренд за вікно. Стрічка
+               * бреше на пів сантиметра від натягу й вдиху, тож два сусідні
+               * заміри дають різницю двох похибок. Місяця зазвичай досить;
+               * якщо замірів так рідко, що у вікно потрапив один — беремо
+               * ширше вікно й чесно пишемо, за скільки днів це насправді.
+               */
+              const t = trend(data.body, f.key, 28) || trend(data.body, f.key, 120);
+              const d = t ? t.delta : null;
               return (
                 <div className="h-mcell" key={f.key}>
                   <div className="h-mcell-v">{n1(last[f.key])}<i> {f.unit}</i></div>
                   <div className="h-mcell-l">{f.label}</div>
+                  {t && d !== 0 && <div className="h-mcell-s">за {t.days} дн.</div>}
                   {d !== null && d !== 0 && (
                     <div className={'h-mcell-d' + (d > 0 ? ' is-up' : ' is-down')}>
                       {d > 0 ? '+' : ''}{d}
@@ -2891,6 +2991,7 @@ function BodyTab({ data, reload }) {
               <div className="h-mgrid">
                 {dLast.fat != null && (
                   <Derived label="Жир" value={n1(dLast.fat)} unit="%"
+                    sub={spread ? `± ${n1(spread)} — точність стрічки` : null}
                     delta={delta(dLast.fat, dPrev?.fat)} good="down" />
                 )}
                 {dLast.fatMass != null && (
@@ -2906,13 +3007,85 @@ function BodyTab({ data, reload }) {
                     delta={delta(dLast.bmi, dPrev?.bmi)} good="down" />
                 )}
               </div>
+              {bmiSay && <div className="h-sw-say is-note">{bmiSay}</div>}
+
+              {(ratioWaist != null || ratioHip != null || muscleIndex) && (
+                <>
+                  <div className="h-sec"><h3>Пропорції</h3></div>
+                  <div className="h-mgrid">
+                    {ratioWaist != null && (
+                      <Derived label="Талія / зріст" value={ratioWaist.toFixed(2)}
+                        sub={whtrLabel(ratioWaist)} delta={null} />
+                    )}
+                    {ratioHip != null && (
+                      <Derived label="Талія / стегна" value={ratioHip.toFixed(2)}
+                        sub={whrLabel(ratioHip, g.sex)} delta={null} />
+                    )}
+                    {muscleIndex && (
+                      <Derived label="Індекс мʼязів" value={n1(muscleIndex.norm)}
+                        sub={ffmiLabel(muscleIndex.norm, g.sex)} delta={null} />
+                    )}
+                  </div>
+                  <div className="h-hint">
+                    Талія має бути меншою за половину зросту — це простіше за ІМТ
+                    і краще за нього показує жир на животі, той самий, що
+                    навколо органів.
+                    {ratioWaist != null && (
+                      <> За вашого зросту це <b>{n1((num(g.height) || 0) / 2)} см</b>.</>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {comp && (
+                <>
+                  <div className="h-sec"><h3>Куди пішла вага</h3></div>
+                  <div className="h-mgrid">
+                    <div className="h-mcell">
+                      <div className="h-mcell-v">{signed(comp.dWeight)}<i> кг</i></div>
+                      <div className="h-mcell-l">Вага</div>
+                      <div className="h-mcell-s">за {comp.days} дн., з {comp.from}</div>
+                    </div>
+                    <div className="h-mcell">
+                      <div className="h-mcell-v">{signed(comp.dFat)}<i> кг</i></div>
+                      <div className="h-mcell-l">Жир</div>
+                      <div className="h-mcell-s">зараз {n1(comp.fatNow)} кг</div>
+                    </div>
+                    <div className="h-mcell">
+                      <div className="h-mcell-v">{signed(comp.dLean)}<i> кг</i></div>
+                      <div className="h-mcell-l">Решта тіла</div>
+                      <div className="h-mcell-s">зараз {n1(comp.leanNow)} кг</div>
+                    </div>
+                  </div>
+                  {comp.share !== null && comp.share > 0 && comp.share <= 100 && (
+                    <div className="h-share">
+                      <div className="h-share-bar">
+                        <i style={{ width: comp.share + '%' }} />
+                      </div>
+                      <div className="h-share-l">
+                        <b>{comp.share}%</b> зміни ваги — жир, решта {100 - comp.share}% —
+                        мʼязи й вода
+                      </div>
+                    </div>
+                  )}
+                  {compSay && <div className={'h-sw-say is-' + compSay.tone}>{compSay.text}</div>}
+                </>
+              )}
+
               {dLast.fat != null && dLast.weight != null && (
-                <ExcessFat weight={dLast.weight} fat={dLast.fat} />
+                <ExcessFat weight={dLast.weight} fat={dLast.fat} sex={g.sex} />
               )}
 
               <div className="h-hint">
                 Відсоток жиру — за формулою ВМС США (талія, шия, зріст).
-                {dLast.weight != null && <> Маси пораховані з ваги <b>{n1(dLast.weight)} кг</b>.</>}
+                {dLast.weight != null && (
+                  <> Маси пораховані зі згладженої ваги <b>{n1(dLast.weight)} кг</b>
+                    {dLast.weightGap > 3 && (
+                      <> — останнє зважування було за {dLast.weightGap}{' '}
+                      {plur(dLast.weightGap, ['день', 'дні', 'днів'])} до заміру</>
+                    )}.
+                  </>
+                )}
                 {' '}Це оцінка, а не заміри калiпером — цінна саме динамікою.
               </div>
             </>
@@ -2921,7 +3094,8 @@ function BodyTab({ data, reload }) {
           {!dLast?.fat && (
             <div className="h-hint">
               Щоб рахувалися відсоток жиру й маси, вкажіть стать і зріст на
-              вкладці «Цілі», а тут — талію й шию.
+              вкладці «Цілі», а тут — талію, шию
+              {g.sex === 'f' ? ' і стегна' : ''}.
             </div>
           )}
 
@@ -2931,7 +3105,9 @@ function BodyTab({ data, reload }) {
               <thead>
                 <tr>
                   <th>Дата</th>
-                  {BODY_FIELDS.map((f) => <th key={f.key}>{f.label}{f.cm ? ', см' : ''}</th>)}
+                  {BODY_FIELDS.map((f) => (
+                    <th key={f.key}>{f.key === 'fat' ? f.label : `${f.label}, ${f.unit}`}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -2959,19 +3135,32 @@ function BodyTab({ data, reload }) {
  * жиру, тож потрібна вага при бажаному відсотку — це безжирова маса,
  * поділена на «одиниця мінус відсоток».
  */
-const SHAPE_TARGETS = [
-  { fat: 20, label: 'Здоровий рівень', note: 'без зайвого, але без рельєфу' },
-  { fat: 15, label: 'Підтягнуте тіло', note: 'видно форму, живіт плаский' },
-  { fat: 12, label: 'Спортивне', note: 'видно прес, помітні мʼязи' },
-  { fat: 10, label: 'Сухе', note: 'рельєф; довго тримати важко' },
-];
+/*
+ * Межі різні для чоловіків і жінок, і це не дрібниця. Життєво потрібного
+ * жиру в жінки втричі більше: 10% для неї — не «сухе тіло», а зниклий цикл
+ * і проблеми з кістками. Доти тут стояв один чоловічий список для всіх.
+ */
+const SHAPE_TARGETS = {
+  m: [
+    { fat: 20, label: 'Здоровий рівень', note: 'без зайвого, але без рельєфу' },
+    { fat: 15, label: 'Підтягнуте тіло', note: 'видно форму, живіт плаский' },
+    { fat: 12, label: 'Спортивне', note: 'видно прес, помітні мʼязи' },
+    { fat: 10, label: 'Сухе', note: 'рельєф; довго тримати важко' },
+  ],
+  f: [
+    { fat: 28, label: 'Здоровий рівень', note: 'без зайвого, але без рельєфу' },
+    { fat: 24, label: 'Підтягнуте тіло', note: 'видно форму, живіт плаский' },
+    { fat: 21, label: 'Спортивне', note: 'окреслена талія, помітні мʼязи' },
+    { fat: 18, label: 'Сухе', note: 'нижче — уже ризик для циклу й кісток' },
+  ],
+};
 
-function ExcessFat({ weight, fat }) {
+function ExcessFat({ weight, fat, sex }) {
   if (weight == null || fat == null) return null;
   const fatMass = (weight * fat) / 100;
   const lean = weight - fatMass;
 
-  const rows = SHAPE_TARGETS.map((t) => {
+  const rows = SHAPE_TARGETS[sex === 'f' ? 'f' : 'm'].map((t) => {
     const target = lean / (1 - t.fat / 100);
     return { ...t, target, drop: weight - target };
   });
@@ -3147,12 +3336,30 @@ function GoalsTab({ data, reload, setBusy }) {
 
   const age = vals.birthYear ? new Date().getFullYear() - num(vals.birthYear) : null;
 
-  // остання зважена вага — з неї й рахуємо норму
+  /*
+   * Вага для норми — згладжена, а не остання з ваг. Норма, порахована з
+   * ранку після солоного, виходила на сотню калорій іншою, ніж порахована
+   * наступного дня, хоча тіло за ніч не змінилось.
+   */
   const weighed = data.days.filter((d) => d.weight != null);
-  const weight = weighed.length ? weighed[weighed.length - 1].weight : null;
+  const line = smooth(data.days);
+  const weight = line.length
+    ? n1(line[line.length - 1].v)
+    : (weighed.length ? weighed[weighed.length - 1].weight : null);
+
+  /*
+   * Безжирова маса — лише зі свіжого заміру. Двомісячної давнини цифра вже
+   * не про це тіло, і рахувати з неї витрати чесніше не намагатись: тоді
+   * працює звичайний Міффлін.
+   */
+  const comp = lastSplit(data);
+  const compAge = comp ? Math.round((Date.now() - stamp(comp.date)) / 86400000) : null;
+  const fresh = comp && compAge <= 60 ? comp : null;
+
   const norm = calcNorm({
     sex: vals.sex, weight, height: vals.height, age,
     activity: vals.activity || '1.375', aim: vals.aim || '-20',
+    lean: fresh ? fresh.leanKg : null,
   });
 
   /** Один запис у таблицю. Порожні значення не шлемо — вони лише сміття. */
@@ -3267,8 +3474,24 @@ function GoalsTab({ data, reload, setBusy }) {
             {saved && <div className="h-ok" style={{ marginTop: 8 }}>норми записано</div>}
           </div>
           <div className="h-hint">
-            Пораховано за формулою Міффліна-Сан Жеора з ваги <b>{n1(weight)} кг</b>,
-            зросту й віку. Це орієнтир: якщо за два-три тижні вага не рухається
+            {norm.method === 'katch' ? (
+              <>
+                Пораховано за формулою Кетча-Макардла з безжирової маси{' '}
+                <b>{n1(norm.lean)} кг</b> — вона відома із заміру від <b>{fresh.date}</b>,
+                тож склад тіла не довелось угадувати. Білок теж рахується з неї,
+                а не з повної ваги: жиру білок не потрібен.
+              </>
+            ) : (
+              <>
+                Пораховано за формулою Міффліна-Сан Жеора з ваги <b>{n1(weight)} кг</b>,
+                зросту й віку.
+                {comp && (
+                  <> Замір тіла є, але йому вже {compAge} {plur(compAge, ['день', 'дні', 'днів'])} —
+                  зробіть новий, і норма рахуватиметься з безжирової маси, точніше.</>
+                )}
+              </>
+            )}
+            {' '}Це орієнтир: якщо за два-три тижні вага не рухається
             так, як хочете, підправте число руками.
           </div>
         </>
