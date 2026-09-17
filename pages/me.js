@@ -39,12 +39,12 @@ const BUILD = (process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || '').slice(0, 7);
  */
 const BODY_FIELDS = [
   { key: 'chest', label: 'Груди', unit: 'см' },
-  { key: 'waist', label: 'Талія', unit: 'см' },
-  { key: 'belly', label: 'Живіт', unit: 'см' },
-  { key: 'hips', label: 'Стегна', unit: 'см' },
+  { key: 'waist', label: 'Талія', unit: 'см', where: 'найвужче місце' },
+  { key: 'belly', label: 'Живіт', unit: 'см', where: 'на рівні пупка' },
+  { key: 'hips', label: 'Стегна', unit: 'см', where: 'найширше місце' },
   { key: 'biceps', label: 'Біцепс', unit: 'см' },
   { key: 'thigh', label: 'Стегно', unit: 'см' },
-  { key: 'neck', label: 'Шия', unit: 'см' },
+  { key: 'neck', label: 'Шия', unit: 'см', where: 'під кадиком' },
   { key: 'fat', label: '% жиру', unit: '%' },
 ];
 
@@ -72,12 +72,33 @@ const GOAL_FIELDS = [
 ];
 
 /**
- * Відсоток жиру за формулою ВМС США (US Navy) — та сама, що в популярних
- * застосунках. Чоловікам потрібні талія, шия і зріст; жінкам ще й стегна.
- * Обхвати в сантиметрах.
+ * Який саме обхват бере формула.
+ *
+ * Це не дрібниця й не синонім. ВМС США міряють чоловікові живіт на рівні
+ * пупка — зазвичай найширше місце, — а жінці природну талію, тобто
+ * найвужче. Різниця між цими двома місцями на одному тілі буває з десяток
+ * сантиметрів, а сантиметр тут коштує близько відсотка жиру.
+ *
+ * Тому в застосунку два окремі поля, і формула бере те, яке їй належить.
+ * Якщо потрібного немає — береться друге: у старих записах живіт часто не
+ * заповнювали, і мовчати про них гірше, ніж порахувати з тим, що є.
  */
-function navyFat({ sex, height, waist, neck, hips }) {
-  const h = num(height), w = num(waist), n = num(neck);
+function navyGirth({ sex, waist, belly, girth }) {
+  const forced = num(girth);
+  if (forced > 0) return forced;
+  const w = num(waist), b = num(belly);
+  if (sex === 'f') return w > 0 ? w : b;
+  return b > 0 ? b : w;
+}
+
+/**
+ * Відсоток жиру за формулою ВМС США (US Navy) — та сама, що в популярних
+ * застосунках. Чоловікам потрібні живіт, шия і зріст; жінкам — талія,
+ * стегна, шия і зріст. Обхвати в сантиметрах.
+ */
+function navyFat(p) {
+  const { sex, height, neck, hips } = p;
+  const h = num(height), w = navyGirth(p), n = num(neck);
   if (!(h > 0 && w > 0 && n > 0)) return null;
   const lg = Math.log10;
   let d;
@@ -98,16 +119,16 @@ function navyFat({ sex, height, waist, neck, hips }) {
 /**
  * Наскільки можна вірити цьому відсотку.
  *
- * Формула стоїть на обхваті талії, а стрічка бреше на сантиметр від
- * натягу й вдиху. Сантиметр талії — це майже цілий відсоток жиру, тобто
- * під кілограм жирової маси. Показувати «18.3%» без цієї межі — обіцяти
+ * Формула стоїть на одному обхваті, а стрічка бреше на сантиметр від
+ * натягу й вдиху. Сантиметр тут — це майже цілий відсоток жиру, тобто під
+ * кілограм жирової маси. Показувати «18.3%» без цієї межі — обіцяти
  * точність, якої немає.
  */
 function navyFatSpread(p, d = 1) {
   const base = navyFat(p);
   if (base === null) return null;
-  const w = num(p.waist);
-  const near = [navyFat({ ...p, waist: w - d }), navyFat({ ...p, waist: w + d })]
+  const g = navyGirth(p);
+  const near = [navyFat({ ...p, girth: g - d }), navyFat({ ...p, girth: g + d })]
     .filter((v) => v !== null)
     .map((v) => Math.abs(v - base));
   return near.length ? Math.max(...near) : null;
@@ -202,7 +223,10 @@ function lastSplit(data) {
   for (let i = rows.length - 1; i >= 0; i--) {
     const m = rows[i];
     const fat = m.fat != null ? m.fat
-      : navyFat({ sex: g.sex, height: g.height, waist: m.waist, neck: m.neck, hips: m.hips });
+      : navyFat({
+        sex: g.sex, height: g.height,
+        waist: m.waist, belly: m.belly, neck: m.neck, hips: m.hips,
+      });
     const w = weightOn(data.days, m.date);
     const s = w ? split(w.kg, fat) : null;
     if (s) return { ...s, date: m.date, weightDate: w.date, gap: w.gap };
@@ -2894,13 +2918,24 @@ function BodyTab({ data, reload }) {
    * показувати межу похибки.
    */
   const fatOf = (m) => {
-    const auto = navyFat({
-      sex: g.sex, height: g.height, waist: m.waist, neck: m.neck, hips: m.hips,
-    });
+    const base = { sex: g.sex, height: g.height, neck: m.neck, hips: m.hips };
+    const auto = navyFat({ ...base, waist: m.waist, belly: m.belly });
     if (m.fat == null) return { fat: auto, auto: true };
+
+    const near = (v) => v !== null && Math.abs(m.fat - v) <= 0.15;
     // підставлене формулою значення лишається оцінкою, хоч і записане
-    const same = auto !== null && Math.abs(m.fat - auto) <= 0.15;
-    return { fat: m.fat, auto: same };
+    if (near(auto)) return { fat: m.fat, auto: true };
+
+    /*
+     * Доти формула брала талію й чоловікам, і своє ж число лишалось
+     * записаним у таблиці. Такий запис — не замір, а стара оцінка за
+     * невірним обхватом, тож рахуємо його наново. Справжній замір
+     * каліпером чи вагами не збігається з жодною з формул і лишається як є.
+     */
+    const legacy = navyFat({ ...base, girth: m.waist });
+    if (near(legacy) && auto !== null) return { fat: auto, auto: true };
+
+    return { fat: m.fat, auto: false };
   };
 
   const derive = (m) => {
@@ -2937,7 +2972,8 @@ function BodyTab({ data, reload }) {
 
   const spread = last && dLast?.fatAuto
     ? navyFatSpread({
-      sex: g.sex, height: g.height, waist: last.waist, neck: last.neck, hips: last.hips,
+      sex: g.sex, height: g.height,
+      waist: last.waist, belly: last.belly, neck: last.neck, hips: last.hips,
     })
     : null;
 
@@ -3077,7 +3113,8 @@ function BodyTab({ data, reload }) {
               )}
 
               <div className="h-hint">
-                Відсоток жиру — за формулою ВМС США (талія, шия, зріст).
+                Відсоток жиру — за формулою ВМС США
+                {g.sex === 'f' ? ' (талія, стегна, шия, зріст)' : ' (живіт на рівні пупка, шия, зріст)'}.
                 {dLast.weight != null && (
                   <> Маси пораховані зі згладженої ваги <b>{n1(dLast.weight)} кг</b>
                     {dLast.weightGap > 3 && (
@@ -3094,8 +3131,8 @@ function BodyTab({ data, reload }) {
           {!dLast?.fat && (
             <div className="h-hint">
               Щоб рахувалися відсоток жиру й маси, вкажіть стать і зріст на
-              вкладці «Цілі», а тут — талію, шию
-              {g.sex === 'f' ? ' і стегна' : ''}.
+              вкладці «Цілі», а тут — шию і
+              {g.sex === 'f' ? ' талію зі стегнами' : ' живіт на рівні пупка'}.
             </div>
           )}
 
@@ -3228,10 +3265,9 @@ function BodyModal({ data, onClose, onDone }) {
   const [err, setErr] = useState('');
 
   const g = data.goals || {};
-  // формула працює в сантиметрах — переводимо назад те, що ввели в міліметрах
   const auto = navyFat({
     sex: g.sex, height: g.height,
-    waist: vals.waist, neck: vals.neck, hips: vals.hips,
+    waist: vals.waist, belly: vals.belly, neck: vals.neck, hips: vals.hips,
   });
 
   useEffect(() => {
@@ -3276,6 +3312,7 @@ function BodyModal({ data, onClose, onDone }) {
           <div key={f.key}>
             <label>
               {f.label}{f.unit ? `, ${f.unit}` : ''}
+              {f.where && <i className="h-where">{f.where}</i>}
               {f.key === 'fat' && auto !== null && !manualFat && <i className="h-auto">авто</i>}
             </label>
             <input
@@ -3293,7 +3330,8 @@ function BodyModal({ data, onClose, onDone }) {
       </div>
       {auto !== null && (
         <div className="h-hint">
-          Відсоток жиру порахований за формулою ВМС США з талії, шиї та зросту:
+          Відсоток жиру порахований за формулою ВМС США
+          {g.sex === 'f' ? ' з талії, стегон, шиї та зросту' : ' з живота, шиї та зросту'}:
           {' '}<b>{n1(auto)}%</b>.
           {manualFat && (
             <> Ви ввели своє значення — <button className="h-link" onClick={() => setManualFat(false)}>повернути пораховане</button>.</>
@@ -3302,7 +3340,8 @@ function BodyModal({ data, onClose, onDone }) {
       )}
       {auto === null && (
         <div className="h-hint">
-          Щоб відсоток жиру рахувався сам, заповніть талію й шию тут, а стать
+          Щоб відсоток жиру рахувався сам, заповніть тут шию і
+          {g.sex === 'f' ? ' талію зі стегнами' : ' живіт на рівні пупка'}, а стать
           і зріст — на вкладці «Цілі».
         </div>
       )}

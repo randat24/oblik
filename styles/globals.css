@@ -2089,6 +2089,12 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .h-mcell-s { font-size: .7rem; color: var(--text-dim); margin-top: 2px; }
 
+/* Де саме класти стрічку — підпис поруч із назвою поля */
+.h-where {
+  font-style: normal; font-size: .6rem; letter-spacing: 0;
+  text-transform: none; color: var(--muted); margin-left: 6px;
+}
+
 /* Штрихкод */
 .h-food-top { display: flex; margin-bottom: 4px; }
 .h-btn-scan { flex: 1; border-style: dashed; }
