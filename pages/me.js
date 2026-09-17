@@ -17,7 +17,7 @@ import {
 } from '../lib/mult';
 import { pace, forecast, verdicts, smooth, trend } from '../lib/weight';
 import {
-  weightOn, split, composition, compositionVerdict,
+  weightOn, split, composition, compositionVerdict, oddValue,
   whtr, whtrLabel, whr, whrLabel, ffmi, ffmiLabel, katchBmr, bmiVsFat,
 } from '../lib/body';
 
@@ -38,14 +38,14 @@ const BUILD = (process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || '').slice(0, 7);
  * записати півсантиметра, якщо стрічка лягла між поділками.
  */
 const BODY_FIELDS = [
-  { key: 'chest', label: 'Груди', unit: 'см' },
-  { key: 'waist', label: 'Талія', unit: 'см', where: 'найвужче місце' },
-  { key: 'belly', label: 'Живіт', unit: 'см', where: 'на рівні пупка' },
-  { key: 'hips', label: 'Стегна', unit: 'см', where: 'найширше місце' },
-  { key: 'biceps', label: 'Біцепс', unit: 'см' },
-  { key: 'thigh', label: 'Стегно', unit: 'см' },
-  { key: 'neck', label: 'Шия', unit: 'см', where: 'під кадиком' },
-  { key: 'fat', label: '% жиру', unit: '%' },
+  { key: 'chest', label: 'Груди', unit: 'см', min: 50, max: 200 },
+  { key: 'waist', label: 'Талія', unit: 'см', where: 'найвужче місце', min: 40, max: 200 },
+  { key: 'belly', label: 'Живіт', unit: 'см', where: 'на рівні пупка', min: 40, max: 200 },
+  { key: 'hips', label: 'Стегна', unit: 'см', where: 'найширше місце', min: 50, max: 200 },
+  { key: 'biceps', label: 'Біцепс', unit: 'см', min: 15, max: 70 },
+  { key: 'thigh', label: 'Стегно', unit: 'см', min: 25, max: 110 },
+  { key: 'neck', label: 'Шия', unit: 'см', where: 'під кадиком', min: 20, max: 70 },
+  { key: 'fat', label: '% жиру', unit: '%', min: 3, max: 70 },
 ];
 
 // Стать, зріст і рік народження — не цілі, а вихідні дані для формул
@@ -3263,6 +3263,8 @@ function BodyModal({ data, onClose, onDone }) {
   const [manualFat, setManualFat] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  // друге натискання «Зберегти» — згода записати сумнівне число як є
+  const [force, setForce] = useState(false);
 
   const g = data.goals || {};
   const auto = navyFat({
@@ -3288,7 +3290,29 @@ function BodyModal({ data, onClose, onDone }) {
     setVals((p) => (p.fat === v ? p : { ...p, fat: v }));
   }, [auto, manualFat]);
 
+  /*
+   * Числа, які більше схожі на описку, ніж на замір. Не забороняємо —
+   * тіла бувають різні, — але й не даємо зберегти мовчки: помилка на
+   * порядок псує не лише сам рядок, а й увесь розклад ваги на жир і мʼязи,
+   * і знаходиться вона потім місяцями.
+   */
+  const odd = BODY_FIELDS
+    .map((f) => {
+      const o = f.min ? oddValue(vals[f.key], f.min, f.max) : null;
+      return o ? { ...o, field: f } : null;
+    })
+    .filter(Boolean);
+
   const save = async () => {
+    if (odd.length && !force) {
+      setForce(true);
+      setErr(
+        odd.map((o) => `${o.field.label}: ${o.value} ${o.field.unit}`
+          + (o.hint ? ` — може, ${o.hint}?` : ' — це поза звичайними межами')).join('; ')
+        + '. Якщо число правильне, натисніть «Зберегти» ще раз.'
+      );
+      return;
+    }
     setBusy(true); setErr('');
     try {
       const body = { date, note };
@@ -3322,9 +3346,19 @@ function BodyModal({ data, onClose, onDone }) {
               value={vals[f.key] || ''}
               onChange={(e) => {
                 if (f.key === 'fat') setManualFat(true);
+                // число змінилось — згода на попереднє сумнівне більше не діє
+                setForce(false);
                 setVals((p) => ({ ...p, [f.key]: e.target.value }));
               }}
             />
+            {odd.find((o) => o.field.key === f.key) && (
+              <div className="h-warn">
+                схоже на описку
+                {odd.find((o) => o.field.key === f.key).hint
+                  ? ` — може, ${odd.find((o) => o.field.key === f.key).hint}?`
+                  : ''}
+              </div>
+            )}
           </div>
         ))}
       </div>
