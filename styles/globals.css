@@ -46,6 +46,50 @@ body {
 }
 .wrap { max-width: 1500px; margin: 0 auto; }
 
+/*
+ * Смуга прокрутки.
+ *
+ * Windows малює свою: світло-сіру, з кнопками-стрілками по краях і
+ * рамкою навколо повзунка. Посеред темної картки вона виглядає як
+ * шматок чужого застосунку — і найбільше це видно в примітці, де смуга
+ * стоїть просто в тексті.
+ *
+ * Робимо тонку й у кольорах панелі. Кнопки-стрілки прибираємо: по них
+ * давно ніхто не клікає, а місця вони з'їдають більше за сам повзунок.
+ * Саму смугу лишаємо видимою — без неї не зрозуміло, що текст довший,
+ * ніж видно.
+ *
+ * Тільки для миші. На телефоні система малює смугу поверх вмісту й лише
+ * під час гортання — там вона нікому не заважає, а спроба підмінити її
+ * своєю відбирає ширину в самого тексту.
+ *
+ * Правил два набори, і це не дубль. Свіжі Chrome та Edge беруть перші
+ * два рядки, а `::-webkit-` при них навмисно вимикають — тому ці два
+ * рядки й вирішують, як усе виглядатиме на Windows. Решта потрібна для
+ * Safari й старих складань, які стандартних властивостей не знають:
+ * саме там прибираються кнопки-стрілки.
+ */
+@media (pointer: fine) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    /* прозора рамка + background-clip дають відступ від краю, тож повзунок
+       виглядає тонким, а хапати його можна за всю ширину смуги */
+    background: var(--line);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: 20px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--gray); background-clip: content-box; }
+  ::-webkit-scrollbar-button { display: none; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+}
+
 /* ---------- Шапка ---------- */
 header {
   display: flex; align-items: center; justify-content: space-between;
