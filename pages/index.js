@@ -1861,7 +1861,11 @@ function download(filename, text) {
 }
 
 function bodyCols(headers, cols, snIdx, idIdx, tagCols = []) {
-  const skip = new Set([nameOf(cols), snIdx, idIdx, cols.status, ...tagCols].filter((i) => i >= 0));
+  // примітка йде окремим рядком у кінці картки, тож із загального списку її
+  // прибираємо — інакше показалась би двічі, ще й вузьким однорядковим полем
+  const skip = new Set(
+    [nameOf(cols), snIdx, idIdx, cols.status, cols.note, ...tagCols].filter((i) => i >= 0)
+  );
   return headers.map((_, i) => i).filter((i) => !skip.has(i));
 }
 
@@ -1917,7 +1921,11 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
   const [issuing, setIssuing] = useState(null);
   const [highlightRow, setHighlightRow] = useState(focusRow || null);
   const [mode, setMode] = useViewMode();
+  // свіжий текст приміток за рядком: без нього смужка-акцент зʼявлялась би
+  // аж після перезавантаження, хоч примітка вже записана
+  const [notes, setNotes] = useState({});
   const toast = useToast();
+  const grow = useGrow();
 
   useNewRecordHotkey(useCallback(() => setAdding(true), []));
 
@@ -1966,6 +1974,10 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
       saveFailed(toast, e);
     }
   };
+
+  /** Примітка: свіжа, якщо її щойно правили, інакше та, що прийшла з таблиці */
+  const noteOf = (it) =>
+    (notes[it.row] !== undefined ? notes[it.row] : it.values[cols.note]) || '';
 
   /** Картка запису — одна й та сама у звичайному списку і в групуванні */
   const renderCard = (it) => (
@@ -2055,6 +2067,29 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
             </span>
           </div>
         ))}
+
+        {/* Написана примітка світиться, порожня — ні: акцент, що стоїть
+            завжди, за тиждень перестають помічати. */}
+        {cols.note >= 0 && (
+          <div className={'drow' + (noteOf(it) ? ' has-note' : '')}>
+            <span className="drow-k">{headers[cols.note] || 'Примітка'}</span>
+            <span className="drow-v">
+              <textarea
+                className="ghost"
+                rows={1}
+                defaultValue={noteOf(it)}
+                placeholder="—"
+                {...grow}
+                onBlur={(e) => {
+                  const prev = noteOf(it);
+                  if (e.target.value === prev) return;
+                  setNotes((p) => ({ ...p, [it.row]: e.target.value }));
+                  save(it.row, cols.note, e.target.value, prev);
+                }}
+              />
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="actions">
