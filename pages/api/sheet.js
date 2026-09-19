@@ -8,7 +8,12 @@ import {
   findColumns,
   distinctValues,
   mergeWithDefaults,
+  ensureColumn,
 } from '../../lib/sheets';
+
+// Куди писати те, чого не вміщає жодна колонка. Назва звична для таблиці:
+// саме так примітка зветься в «Складі» й у «Рибаківці».
+const NOTE_HEADER = 'Примітка';
 
 /** Коли цей лист звіряли востаннє — щоб було видно на самій сторінці */
 async function auditInfo(name) {
@@ -52,6 +57,21 @@ export default withAuth(async (req, res) => {
   const dataRows = values.slice(1);
   const cols = findColumns(headers);
 
+  /*
+   * Лист із картками завжди має куди написати словами.
+   *
+   * «Кропива» такої колонки не мала взагалі, тож сказати «антена на скотчі»
+   * було ніде: картка показує рівно ті поля, які є в таблиці. Дописуємо
+   * заголовок у кінець — так само, як лікуються заголовки в інших листах.
+   */
+  if (cfg.kind === 'items' && cols.note === -1) {
+    const added = await ensureColumn(name, headers, NOTE_HEADER);
+    if (added >= 0) {
+      headers[added] = NOTE_HEADER;
+      cols.note = added;
+    }
+  }
+
   const items = [];
   dataRows.forEach((row, i) => {
     const padded = [...row];
@@ -76,7 +96,9 @@ export default withAuth(async (req, res) => {
   const masked = new Set(cfg.maskPasswords ? cols.maskCols : []);
   const suggestions = {};
   headers.forEach((_, i) => {
-    if (i === 0 || masked.has(i) || i === cols.status || i === cols.type || i === cols.date) return;
+    // примітка — не довідник: підказувати чужий текст тут нема сенсу
+    if (i === 0 || masked.has(i) || i === cols.status || i === cols.type ||
+        i === cols.date || i === cols.note) return;
     const vals = distinctValues(dataRows, i);
     const filled = dataRows.filter((r) => (r[i] || '').toString().trim()).length;
     if (vals.length >= 1 && vals.length <= 40 && vals.length * 2 <= filled) suggestions[i] = vals;
