@@ -53,7 +53,17 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
   return (
     <div className="login-wrap">
       <div className="login-box">
-        <h1 style={{ fontSize: '1.1rem', marginBottom: 18 }}>Облік майна</h1>
+        <div className="login-brand">
+          <span className="brand-mark" aria-hidden="true">О</span>
+          <div>
+            <h1>Облік</h1>
+            <p>Система управління майном</p>
+          </div>
+        </div>
+        <div className="login-heading">
+          <h2>Вхід до системи</h2>
+          <p>Введіть свої дані, щоб продовжити роботу</p>
+        </div>
 
         {expired && (
           <div className="login-note">
@@ -94,7 +104,7 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
           </>
         )}
 
-        <button className="btn" style={{ width: '100%', marginTop: 16 }} onClick={submit} disabled={busy}>
+        <button className="btn login-submit" onClick={submit} disabled={busy}>
           {busy ? '...' : 'Увійти'}
         </button>
         {err && <div className="err">{err}</div>}
@@ -1261,7 +1271,13 @@ export default function Home({ startView }) {
             дітям, а ми тут самі той контекст і ставимо */}
         <OfflineBar onSynced={(n) => push(`Надіслано відкладені записи: ${n}`)} />
         <header>
-          <h1>Облік майна<span className="ver">{VERSION}</span></h1>
+          <div className="app-brand">
+            <span className="brand-mark" aria-hidden="true">О</span>
+            <div>
+              <h1>Облік майна<span className="ver">{VERSION}</span></h1>
+              <span className="brand-subtitle">Єдиний простір управління</span>
+            </div>
+          </div>
           <div className="state">
             {state}
             {BUILD && <span className="build" title="Версія збірки">{BUILD}</span>}
