@@ -37,7 +37,9 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
+  const submit = async (event) => {
+    event?.preventDefault();
+    if (busy) return;
     setBusy(true);
     setErr('');
     try {
@@ -53,60 +55,69 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
   return (
     <div className="login-wrap">
       <div className="login-box">
-        <h1 style={{ fontSize: '1.1rem', marginBottom: 18 }}>Облік майна</h1>
-
-        {expired && (
-          <div className="login-note">
-            Сесія завершилась — так налаштовано: кожні 4 години о 00:00, 04:00,
-            08:00 і далі потрібно ввести PIN знову.
+        <div className="login-brand">
+          <span className="brand-mark" aria-hidden="true">О</span>
+          <div>
+            <h1>Облік</h1>
+            <p>Система управління майном</p>
           </div>
-        )}
+        </div>
+        <div className="login-heading">
+          <h2>Вхід до системи</h2>
+          <p>Введіть свої дані, щоб продовжити роботу</p>
+        </div>
 
-        {mode === 'pin' ? (
-          <>
-            <label>Позивний</label>
-            <select value={callsign} onChange={(e) => setCallsign(e.target.value)}>
-              {callsigns.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <div style={{ marginTop: 12 }}>
-              <label>PIN</label>
+        <form onSubmit={submit}>
+          {expired && (
+            <div className="login-note">
+              Сесія завершилась — так налаштовано: кожні 4 години о 00:00, 04:00,
+              08:00 і далі потрібно ввести PIN знову.
+            </div>
+          )}
+
+          {mode === 'pin' ? (
+            <>
+              <label htmlFor="login-callsign">Позивний</label>
+              <select id="login-callsign" value={callsign} onChange={(e) => setCallsign(e.target.value)}>
+                {callsigns.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <div style={{ marginTop: 12 }}>
+                <label htmlFor="login-pin">PIN</label>
+                <input
+                  id="login-pin" type="password" inputMode="numeric" autoComplete="off"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  autoFocus
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <label htmlFor="login-password">Спільний пароль</label>
               <input
-                type="password" inputMode="numeric" autoComplete="off"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submit()}
-                style={{ width: '100%' }}
+                id="login-password" type="password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
                 autoFocus
               />
-            </div>
-          </>
-        ) : (
-          <>
-            <label>Спільний пароль</label>
-            <input
-              type="password"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && submit()}
-              style={{ width: '100%' }}
-              autoFocus
-            />
-          </>
-        )}
+            </>
+          )}
 
-        <button className="btn" style={{ width: '100%', marginTop: 16 }} onClick={submit} disabled={busy}>
-          {busy ? '...' : 'Увійти'}
-        </button>
-        {err && <div className="err">{err}</div>}
-
-        {callsigns.length > 0 && (
-          <button
-            className="login-alt"
-            onClick={() => { setMode(mode === 'pin' ? 'pw' : 'pin'); setErr(''); }}
-          >
-            {mode === 'pin' ? 'Увійти спільним паролем' : 'Увійти за позивним'}
+          <button type="submit" className="btn login-submit" disabled={busy}>
+            {busy ? 'Входимо…' : 'Увійти'}
           </button>
-        )}
+          {err && <div className="err" role="alert">{err}</div>}
+
+          {callsigns.length > 0 && (
+            <button
+              type="button"
+              className="login-alt"
+              onClick={() => { setMode(mode === 'pin' ? 'pw' : 'pin'); setErr(''); }}
+            >
+              {mode === 'pin' ? 'Увійти спільним паролем' : 'Увійти за позивним'}
+            </button>
+          )}
+        </form>
       </div>
     </div>
   );
@@ -1261,7 +1272,13 @@ export default function Home({ startView }) {
             дітям, а ми тут самі той контекст і ставимо */}
         <OfflineBar onSynced={(n) => push(`Надіслано відкладені записи: ${n}`)} />
         <header>
-          <h1>Облік майна<span className="ver">{VERSION}</span></h1>
+          <div className="app-brand">
+            <span className="brand-mark" aria-hidden="true">О</span>
+            <div>
+              <h1>Облік майна<span className="ver">{VERSION}</span></h1>
+              <span className="brand-subtitle">Єдиний простір управління</span>
+            </div>
+          </div>
           <div className="state">
             {state}
             {BUILD && <span className="build" title="Версія збірки">{BUILD}</span>}
