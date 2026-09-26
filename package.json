@@ -10,6 +10,7 @@
     "build:sandbox": "node scripts/build-sandbox.mjs",
     "start": "next start",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test 'tests/*.test.mjs'",
+    "lint": "eslint .",
     "test:watch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --watch 'tests/*.test.mjs'"
   },
   "dependencies": {
@@ -23,7 +24,11 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "esbuild": "^0.28.2",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
     "sucrase": "^3.35.1"
   }
 }

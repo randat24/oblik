@@ -13,7 +13,7 @@
 import { useState, useEffect, useRef } from 'react';
 
 import {
-  startOffline, flushQueue, onOfflineChange, getState, takeDropped, getQueue,
+  startOffline, flushQueue, onOfflineChange, getState, takeDropped, takeResent, getQueue,
 } from '../lib/offline';
 
 /*
@@ -57,6 +57,8 @@ function whenOf(t) {
 export function OfflineBar({ onSynced }) {
   const [st, setSt] = useState({ online: true, pending: 0, syncing: false, stopped: null });
   const [bad, setBad] = useState([]);
+  // записи, що пішли не з першої спроби: могли задвоїтись
+  const [again, setAgain] = useState([]);
   const [open, setOpen] = useState(false);
   const [queue, setQueue] = useState([]);
 
@@ -67,6 +69,8 @@ export function OfflineBar({ onSynced }) {
       setQueue(getQueue());
       const d = takeDropped();
       if (d.length) setBad((p) => [...p, ...d]);
+      const r = takeResent();
+      if (r.length) setAgain((p) => [...p, ...r]);
     });
     const stop = startOffline();
     return () => { off(); stop(); };
@@ -82,7 +86,7 @@ export function OfflineBar({ onSynced }) {
     wasPending.current = st.pending;
   }, [st.pending, st.online]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (st.online && !st.pending && !bad.length) return null;
+  if (st.online && !st.pending && !bad.length && !again.length) return null;
 
   const stopText = st.online && !st.syncing && st.pending > 0 ? STOP_TEXT[st.stopped] : null;
   const list = open ? (queue.length ? queue : getQueue()) : [];
@@ -96,6 +100,8 @@ export function OfflineBar({ onSynced }) {
           {st.online && st.syncing && 'Надсилаємо відкладені записи…'}
           {st.online && !st.syncing && st.pending > 0 && (stopText || 'Є відкладені записи')}
           {st.online && !st.pending && bad.length > 0 && 'Частину записів сервер не прийняв'}
+          {st.online && !st.pending && !bad.length && again.length > 0 &&
+            `Надіслано повторно після обриву: ${again.length} — перевірте, чи не задвоїлось`}
         </span>
         {/*
           Лічильник тепер кнопка: доти побачити, що саме лежить у черзі,
@@ -113,6 +119,14 @@ export function OfflineBar({ onSynced }) {
         )}
         {st.online && st.pending > 0 && !st.syncing && (
           <button className="offline-act" onClick={() => flushQueue()}>Надіслати</button>
+        )}
+        {again.length > 0 && (
+          <button className="offline-act" onClick={() => {
+            alert(again.map((e) => `${nameOf(e)} · ${whenOf(e.at)}`).join('\n'));
+            setAgain([]);
+          }}>
+            Які саме
+          </button>
         )}
         {bad.length > 0 && (
           <button className="offline-act" onClick={() => {
