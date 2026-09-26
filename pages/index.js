@@ -37,7 +37,9 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const submit = async () => {
+  const submit = async (event) => {
+    event?.preventDefault();
+    if (busy) return;
     setBusy(true);
     setErr('');
     try {
@@ -65,58 +67,57 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
           <p>Введіть свої дані, щоб продовжити роботу</p>
         </div>
 
-        {expired && (
-          <div className="login-note">
-            Сесія завершилась — так налаштовано: кожні 4 години о 00:00, 04:00,
-            08:00 і далі потрібно ввести PIN знову.
-          </div>
-        )}
+        <form onSubmit={submit}>
+          {expired && (
+            <div className="login-note">
+              Сесія завершилась — так налаштовано: кожні 4 години о 00:00, 04:00,
+              08:00 і далі потрібно ввести PIN знову.
+            </div>
+          )}
 
-        {mode === 'pin' ? (
-          <>
-            <label>Позивний</label>
-            <select value={callsign} onChange={(e) => setCallsign(e.target.value)}>
-              {callsigns.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <div style={{ marginTop: 12 }}>
-              <label>PIN</label>
+          {mode === 'pin' ? (
+            <>
+              <label htmlFor="login-callsign">Позивний</label>
+              <select id="login-callsign" value={callsign} onChange={(e) => setCallsign(e.target.value)}>
+                {callsigns.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <div style={{ marginTop: 12 }}>
+                <label htmlFor="login-pin">PIN</label>
+                <input
+                  id="login-pin" type="password" inputMode="numeric" autoComplete="off"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  autoFocus
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <label htmlFor="login-password">Спільний пароль</label>
               <input
-                type="password" inputMode="numeric" autoComplete="off"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submit()}
-                style={{ width: '100%' }}
+                id="login-password" type="password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
                 autoFocus
               />
-            </div>
-          </>
-        ) : (
-          <>
-            <label>Спільний пароль</label>
-            <input
-              type="password"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && submit()}
-              style={{ width: '100%' }}
-              autoFocus
-            />
-          </>
-        )}
+            </>
+          )}
 
-        <button className="btn login-submit" onClick={submit} disabled={busy}>
-          {busy ? '...' : 'Увійти'}
-        </button>
-        {err && <div className="err">{err}</div>}
-
-        {callsigns.length > 0 && (
-          <button
-            className="login-alt"
-            onClick={() => { setMode(mode === 'pin' ? 'pw' : 'pin'); setErr(''); }}
-          >
-            {mode === 'pin' ? 'Увійти спільним паролем' : 'Увійти за позивним'}
+          <button type="submit" className="btn login-submit" disabled={busy}>
+            {busy ? 'Входимо…' : 'Увійти'}
           </button>
-        )}
+          {err && <div className="err" role="alert">{err}</div>}
+
+          {callsigns.length > 0 && (
+            <button
+              type="button"
+              className="login-alt"
+              onClick={() => { setMode(mode === 'pin' ? 'pw' : 'pin'); setErr(''); }}
+            >
+              {mode === 'pin' ? 'Увійти спільним паролем' : 'Увійти за позивним'}
+            </button>
+          )}
+        </form>
       </div>
     </div>
   );
