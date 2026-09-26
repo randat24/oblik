@@ -1571,6 +1571,12 @@ function runPage(html, timeoutMs = 3000) {
  * складає кілька змін в одному такті в одну.
  */
 function runReact(code, clicks = [], timeoutMs = 6000) {
+  /*
+   * `<\/script>` із похилою рискою — не помилка й не зайве екранування,
+   * хоч лінтер і бачить його таким. Цей рядок їде в HTML як є, і
+   * непорушене `</script>` закрило б тег просто посеред коду пісочниці.
+   */
+  /* eslint-disable no-useless-escape */
   const shell = `
 <div id="root"></div>
 <script src="/vendor/react-sandbox.js"><\/script>
@@ -1600,6 +1606,7 @@ function runReact(code, clicks = [], timeoutMs = 6000) {
   });
 })();
 <\/script>`;
+  /* eslint-enable no-useless-escape */
 
   const promise = new Promise((resolve) => {
     let done = false;

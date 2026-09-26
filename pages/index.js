@@ -1257,7 +1257,9 @@ export default function Home({ startView }) {
   return (
     <ToastCtx.Provider value={push}>
       <div className="wrap">
-        <OfflineBar onSynced={(n) => toast(`Надіслано відкладені записи: ${n}`)} />
+        {/* `push`, а не `toast`: той живе в контексті й доступний лише
+            дітям, а ми тут самі той контекст і ставимо */}
+        <OfflineBar onSynced={(n) => push(`Надіслано відкладені записи: ${n}`)} />
         <header>
           <h1>Облік майна<span className="ver">{VERSION}</span></h1>
           <div className="state">
