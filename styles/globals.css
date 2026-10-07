@@ -1,33 +1,113 @@
 :root {
+  color-scheme: dark;
+
+  /*
+   * OBLIK / Signal 0.1 — джерело правди для кольору, геометрії й руху.
+   *
+   * Імена з префіксом `--ob-` узяті з комплекту редизайну без змін, щоб
+   * значення можна було звіряти з `tokens.css` і `GUIDE.md` рядок у рядок.
+   * Нижче старі імена (`--bg`, `--panel`, `--amber`…) лишаються як
+   * псевдоніми: на них спирається півтори тисячі місць у коді, і
+   * перейменовувати їх зараз означало б переписати застосунок замість
+   * того, щоб його перефарбувати. Руководство прямо радить саме так:
+   * прибирати дублі аж тоді, коли все перенесено.
+   */
+  --ob-bg: #101214;
+  --ob-surface: #171a1d;
+  --ob-elevated: #1d2125;
+  --ob-hover: #242a2f;
+  --ob-line: #2a3036;
+  --ob-control-line: #6c7988;
+
+  --ob-text: #f1f4f6;
+  --ob-secondary: #a6afb9;
+  --ob-muted: #929ca8;
+
+  --ob-accent: #a3f0cf;
+  --ob-accent-hover: #bcf7df;
+  --ob-accent-ink: #101c17;
+  /* Похідні від акценту: заливка під ним і ледь помітна рамка. У комплекті
+     їх немає — вони виведені з `--ob-accent`, щоб не лишати в коді
+     напівпрозорий бурштин зі старої палітри. */
+  --ob-accent-bg: #18352b;
+  --ob-accent-dim-line: #3a6354;
+
+  --ob-success: #a3f0cf;
+  --ob-success-bg: #18352b;
+  --ob-warning: #f4c778;
+  --ob-warning-bg: #392e1c;
+  --ob-danger: #ff9b9b;
+  --ob-danger-bg: #3b2227;
+  --ob-info: #98c5ff;
+  --ob-info-bg: #1d2d42;
+
+  --ob-font: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  --ob-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --ob-space-1: 4px;
+  --ob-space-2: 8px;
+  --ob-space-3: 12px;
+  --ob-space-4: 16px;
+  --ob-space-5: 20px;
+  --ob-space-6: 24px;
+  --ob-space-8: 32px;
+  --ob-space-10: 40px;
+  --ob-space-12: 48px;
+  --ob-space-16: 64px;
+
+  --ob-radius-sm: 6px;
+  --ob-radius-md: 10px;
+  --ob-radius-lg: 14px;
+  --ob-radius-xl: 18px;
+
+  --ob-shadow: 0 24px 80px #0008;
+  --ob-focus: 0 0 0 2px var(--ob-bg), 0 0 0 4px var(--ob-accent);
+  --ob-duration-fast: 120ms;
+  --ob-duration-normal: 180ms;
+  --ob-ease: cubic-bezier(.2, .8, .2, 1);
+
+  /* ---- старі імена, тепер на нових значеннях ---- */
+
   /* Фон і поверхні — три рівні глибини, щоб картки читались як окремі обʼєкти */
-  --bg: #0f1210;
-  --panel: #171b16;
-  --panel-2: #1f241d;
-  --panel-3: #272d24;
-  --line: #2e352a;
-  --line-soft: #232a20;
+  --bg: var(--ob-bg);
+  --panel: var(--ob-surface);
+  --panel-2: var(--ob-elevated);
+  --panel-3: var(--ob-hover);
+  --line: var(--ob-line);
+  --line-soft: #21262b;
 
-  --text: #e9e7dc;
-  --text-dim: #b9bdae;
-  --muted: #848a78;
+  --text: var(--ob-text);
+  --text-dim: var(--ob-secondary);
+  --muted: var(--ob-muted);
 
-  --amber: #d9ad25;
-  --amber-dim: #4a3c11;
-  --green: #7aa653;
-  --green-dim: #223019;
-  --red: #c4574a;
-  --red-dim: #3a1d18;
-  --blue: #6690ab;
-  --blue-dim: #1b2a33;
-  --gray: #6e7464;
+  /*
+   * `--amber` був і головним акцентом, і попередженням одночасно. У новій
+   * системі це різні речі: дія — мʼятна, увага — жовта. Тут лишається
+   * акцент, а місця, де колір означав «потребує уваги», переведені на
+   * `--ob-warning` поіменно.
+   */
+  --amber: var(--ob-accent);
+  --amber-dim: #18352b;
+  --green: var(--ob-success);
+  --green-dim: var(--ob-success-bg);
+  --red: var(--ob-danger);
+  --red-dim: var(--ob-danger-bg);
+  --blue: var(--ob-info);
+  --blue-dim: var(--ob-info-bg);
+  --gray: #7d8893;
 
-  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
-  --sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: var(--ob-mono);
+  --sans: var(--ob-font);
 
-  --r: 8px;
-  --r-sm: 5px;
-  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.25);
+  --r: var(--ob-radius-md);
+  --r-sm: var(--ob-radius-sm);
+  --shadow: var(--ob-shadow);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --ob-duration-fast: 0ms; --ob-duration-normal: 0ms; }
+}
+
 
 * { box-sizing: border-box; }
 html { font-size: 16px; -webkit-text-size-adjust: 100%; }
@@ -317,11 +397,11 @@ input:focus, select:focus, textarea:focus {
   border-radius: var(--r-sm); font-size: .84rem;
 }
 .offline-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.offline-bar.is-sync { border-color: var(--amber); background: var(--amber-dim); }
+.offline-bar.is-sync { border-color: var(--ob-warning); background: var(--ob-warning-bg); }
 .offline-dot {
   width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex: 0 0 auto;
 }
-.is-sync .offline-dot { background: var(--amber); animation: pulse 1.4s infinite; }
+.is-sync .offline-dot { background: var(--ob-warning); animation: pulse 1.4s infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
 .offline-text { flex: 1 1 auto; min-width: 0; }
 .offline-count {
@@ -367,7 +447,7 @@ input:focus, select:focus, textarea:focus {
 .audit-nums b { color: var(--text); }
 .a-ok b { color: var(--green); }
 .a-miss b { color: var(--red); }
-.a-diff b { color: var(--amber); }
+.a-diff b { color: var(--ob-warning); }
 
 .audit-list { display: flex; flex-direction: column; gap: 6px; }
 .audit-item {
@@ -409,7 +489,7 @@ input:focus, select:focus, textarea:focus {
 /* Історія звірок: рядок відкриває перелік */
 .log-row-click { cursor: pointer; }
 .log-row-click:hover { border-color: var(--line); }
-.audit-open { margin-top: 6px; font-size: .74rem; color: var(--amber); }
+.audit-open { margin-top: 6px; font-size: .74rem; color: var(--ob-warning); }
 
 /* Розбір однієї звірки */
 .audit-sum {
@@ -434,20 +514,20 @@ input:focus, select:focus, textarea:focus {
 .audit-tab b { font-family: var(--mono); }
 .audit-tab.on { background: var(--panel-2); border-color: var(--line); color: var(--text); }
 .audit-tab.a-miss.on { border-color: var(--red); }
-.audit-tab.a-diff.on { border-color: var(--amber); }
+.audit-tab.a-diff.on { border-color: var(--ob-warning); }
 .audit-tab.a-ok.on { border-color: var(--green); }
 
 /* Смужка збоку одразу каже, що з річчю */
 .audit-item[class*="audit-res-"] { border-left-width: 3px; }
 .audit-res-missing { border-left-color: var(--red); }
-.audit-res-diff { border-left-color: var(--amber); }
+.audit-res-diff { border-left-color: var(--ob-warning); }
 .audit-res-ok { border-left-color: var(--green); }
 .audit-res-skip { border-left-color: var(--line); }
 /* Чому речі немає на місці — те саме, що примітка: ця одна фраза і є
    результат обходу. Решта рядка — назва й номер, вони й так відомі. */
 .audit-note {
-  margin-top: 4px; border-left: 2px solid var(--amber); padding-left: 6px;
-  font-size: .78rem; color: var(--amber);
+  margin-top: 4px; border-left: 2px solid var(--ob-warning); padding-left: 6px;
+  font-size: .78rem; color: var(--ob-warning);
 }
 /* А ось «причину не вказали» акценту не отримує: підсвічувати порожнє
    місце означає привчити не помічати підсвітку. */
@@ -668,7 +748,7 @@ input:focus, select:focus, textarea:focus {
 .chip.on { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); font-weight: 600; }
 
 .btn {
-  font-size: 0.85rem; font-weight: 600; background: var(--amber); color: #14170f;
+  font-size: 0.85rem; font-weight: 600; background: var(--amber); color: var(--ob-accent-ink);
   border: none; padding: 10px 18px; border-radius: var(--r-sm); cursor: pointer;
   white-space: nowrap;
 }
@@ -925,7 +1005,7 @@ label {
 .log-add { color: var(--green); }
 .log-del { color: var(--red); }
 .log-restore { color: var(--blue); }
-.log-writeoff { color: var(--amber); }
+.log-writeoff { color: var(--ob-warning); }
 .log-edit { color: var(--muted); }
 .log-target, .log-field { font-size: 0.72rem; color: var(--muted); }
 .log-field { color: var(--text-dim); }
@@ -1082,10 +1162,10 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 .toast-ok { border-left-color: var(--green); }
 .toast-err { border-left-color: var(--red); }
-.toast-warn { border-left-color: var(--amber); }
+.toast-warn { border-left-color: var(--ob-warning); }
 .toast-msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .toast-action {
-  flex: 0 0 auto; background: var(--amber); border: none; color: #14170f;
+  flex: 0 0 auto; background: var(--amber); border: none; color: var(--ob-accent-ink);
   font-size: 0.78rem; font-weight: 700; padding: 6px 12px;
   border-radius: var(--r-sm); cursor: pointer;
 }
@@ -1121,7 +1201,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   flex: 1; padding: 11px; border: none; border-radius: var(--r-sm);
   font-size: 0.85rem; font-weight: 600; cursor: pointer; font-family: var(--sans);
 }
-.btn-save { background: var(--amber); color: #14170f; }
+.btn-save { background: var(--amber); color: var(--ob-accent-ink); }
 .btn-save:hover { filter: brightness(1.08); }
 .btn-cancel { background: transparent; color: var(--muted); border: 1px solid var(--line) !important; }
 .btn-cancel:hover { background: var(--panel-2); color: var(--text-dim); }
@@ -2147,7 +2227,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-mcell-s { font-size: .7rem; color: var(--text-dim); margin-top: 2px; }
 
 /* Число, схоже на описку */
-.h-warn { font-size: .68rem; color: var(--amber); margin-top: 4px; line-height: 1.4; }
+.h-warn { font-size: .68rem; color: var(--ob-warning); margin-top: 4px; line-height: 1.4; }
 
 /* Де саме класти стрічку — підпис поруч із назвою поля */
 .h-where {
@@ -2499,7 +2579,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   overflow-wrap: anywhere;
 }
 .h-med-stat.is-bad { color: var(--red); }
-.h-med-stat.is-warn { color: var(--amber); }
+.h-med-stat.is-warn { color: var(--ob-warning); }
 
 .h-med-big {
   font-family: var(--mono); font-size: 2.1rem; font-weight: 700;
@@ -2566,7 +2646,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .h-dose.is-late { background: var(--red-dim); border-color: var(--red); color: var(--red); }
 .h-dose.is-late .h-dose-t { color: var(--red); opacity: .8; }
 .h-dose.is-sel { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
-.h-dose.is-sel .h-dose-m { background: var(--amber); border-color: var(--amber); color: #181a13; font-weight: 700; }
+.h-dose.is-sel .h-dose-m { background: var(--amber); border-color: var(--amber); color: var(--ob-accent-ink); font-weight: 700; }
 .h-dose.is-sel .h-dose-t { color: var(--amber); opacity: .8; }
 
 /* Тиждень позаду — крапка на кожен прийом */
@@ -2736,7 +2816,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .h-mt-chips > span.is-past { color: var(--text-dim); border-color: var(--line); }
 .h-mt-chips > span.is-now {
-  background: var(--amber); border-color: var(--amber); color: #181a13; font-weight: 700;
+  background: var(--amber); border-color: var(--amber); color: var(--ob-accent-ink); font-weight: 700;
 }
 .h-mt-look-a { display: flex; gap: 10px; justify-content: center; align-items: center; margin-top: 20px; }
 
@@ -2778,10 +2858,10 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .h-sw-v i { font-style: normal; font-size: .68rem; font-weight: 400; color: var(--muted); margin-left: 2px; }
 .h-sw-v.is-down { color: var(--green); }
-.h-sw-v.is-up { color: var(--amber); }
+.h-sw-v.is-up { color: var(--ob-warning); }
 .h-sw-v.is-fast { color: var(--red); }
 .h-sw-v.is-good { color: var(--green); }
-.h-sw-v.is-slow, .h-sw-v.is-flat { color: var(--amber); }
+.h-sw-v.is-slow, .h-sw-v.is-flat { color: var(--ob-warning); }
 .h-sw-s { font-size: .68rem; color: var(--gray); margin-top: 2px; overflow-wrap: anywhere; }
 
 .h-sw-v-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
@@ -2793,7 +2873,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   background: var(--panel-3); border-left: 3px solid var(--line);
 }
 .h-sw-say.is-ok { border-left-color: var(--green); }
-.h-sw-say.is-warn { border-left-color: var(--amber); }
+.h-sw-say.is-warn { border-left-color: var(--ob-warning); }
 .h-sw-say.is-note { border-left-color: var(--blue); }
 
 /* Аналітика: чотири щаблі одним рядком. Смуга показує не «скільки
@@ -2929,7 +3009,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   font-size: .68rem; border-radius: var(--r-sm); position: relative;
   background: var(--panel-2); color: var(--muted); border: 1px solid var(--line-soft);
 }
-.h-mt-grid td.is-now { background: #4a3c11; color: var(--amber); border-color: var(--amber); }
+.h-mt-grid td.is-now { background: var(--ob-accent-bg); color: var(--amber); border-color: var(--amber); }
 .h-mt-grid td.is-known { background: var(--green-dim); color: var(--green); border-color: var(--green); }
 .h-mt-grid td.has-div::after {
   content: ''; position: absolute; top: 3px; right: 3px;
@@ -2944,7 +3024,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   width: 13px; height: 13px; border-radius: 3px; display: inline-block; position: relative;
   background: var(--panel-2); border: 1px solid var(--line-soft);
 }
-.h-mt-leg i.is-now { background: #4a3c11; border-color: var(--amber); }
+.h-mt-leg i.is-now { background: var(--ob-accent-bg); border-color: var(--amber); }
 .h-mt-leg i.is-known { background: var(--green-dim); border-color: var(--green); }
 .h-mt-leg i.has-div::after {
   content: ''; position: absolute; top: 1px; right: 1px;
@@ -3006,7 +3086,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
 }
 .h-mt-medals > span.is-on {
-  background: var(--amber); border-color: var(--amber); color: #181a13;
+  background: var(--amber); border-color: var(--amber); color: var(--ob-accent-ink);
 }
 
 /* Два тижні тренувань крапками */
@@ -3205,7 +3285,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   width: 13px; height: 13px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.dlv-parts-head b.dlv-kg.is-hot { color: var(--amber); }
+.dlv-parts-head b.dlv-kg.is-hot { color: var(--ob-warning); }
 
 .dlv-mv {
   background: var(--panel-2); border: 1px solid var(--line-soft);
@@ -3237,7 +3317,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .sheet-i.sheet-dlv { color: var(--blue); border-color: var(--blue-dim); }
 .sheet-i.sheet-dlv.on { border-color: var(--blue); color: var(--blue); }
 /* Плитка, яка вимагає дії: зібране без водія — це не статистика, а черга */
-.stat-warn .stat-v { color: var(--amber); }
+.stat-warn .stat-v { color: var(--ob-warning); }
 
 /* ─────────────────────────────────────────────────────────────
    Пункт збору — окрема сторінка для того, хто складає посилки.
@@ -3319,7 +3399,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   border: 1px solid var(--line); background: var(--panel-2);
   color: var(--text-dim); font-size: .74rem;
 }
-.z-bag.hot { border-color: var(--amber); color: var(--amber); }
+.z-bag.hot { border-color: var(--ob-warning); color: var(--ob-warning); }
 /* Доїхале приглушене, а не закреслене: воно вже не потребує уваги, але
    лишається в переліку — інакше не видно, з чого посилка складалась. */
 .z-bag.done { border-color: var(--green-dim); color: var(--green); opacity: .75; }
@@ -3488,7 +3568,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 }
 .cd-tag.is-web { border-color: rgba(102,144,171,.4); color: var(--blue); }
 .cd-tag.is-script { border-color: rgba(122,166,83,.4); color: var(--green); }
-.cd-tag.is-base { border-color: rgba(217,173,37,.4); color: var(--amber); }
+.cd-tag.is-base { border-color: var(--ob-accent-dim-line); color: var(--amber); }
 .cd-tag.is-react { border-color: rgba(97,218,251,.4); color: #61dafb; }
 .cd-tag.is-node { border-color: rgba(150,150,150,.4); color: var(--gray); }
 .cd-tag.is-clean { border-color: rgba(122,166,83,.4); color: var(--green); }
@@ -3812,7 +3892,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
 }
 .dy-line code { font-family: var(--mono); font-size: .8rem; color: var(--green); }
-.dy-line.is-broke { color: var(--amber); }
+.dy-line.is-broke { color: var(--ob-warning); }
 .dy-line.is-learn { color: var(--green); }
 
 @media (max-width: 560px) {
@@ -4320,7 +4400,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .nb-kind.is-q { border-color: rgba(102,144,171,.4); color: var(--blue); }
 .nb-kind.is-err { border-color: rgba(196,87,74,.4); color: var(--red); }
 .nb-kind.is-snip { border-color: rgba(122,166,83,.4); color: var(--green); }
-.nb-kind.is-rule { border-color: rgba(217,173,37,.4); color: var(--amber); }
+.nb-kind.is-rule { border-color: var(--ob-accent-dim-line); color: var(--amber); }
 
 .nb-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
 .nb-meta i { font-style: normal; font-size: .72rem; color: var(--muted); }
@@ -4454,7 +4534,7 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
   text-transform: uppercase;
 }
 /* Мовчазна не червона: вона нічого не каже — саме в цьому й річ. */
-.er-kind.is-quiet { border-color: rgba(217,173,37,.4); color: var(--amber); }
+.er-kind.is-quiet { border-color: var(--ob-accent-dim-line); color: var(--amber); }
 
 .er-body {
   padding: 0 12px 12px; display: flex; flex-direction: column; gap: 12px;
@@ -4565,162 +4645,97 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 .ab-go.is-old:hover { border-color: var(--amber); }
 
 /* ========================================================================== */
-/* 2026 visual system — quiet, high-contrast surfaces for operational work.   */
+/* OBLIK / Signal — оболонка застосунку                                        */
 /* ========================================================================== */
-:root {
-  --bg: #f4f6f8;
-  --panel: #ffffff;
-  --panel-2: #f7f9fb;
-  --panel-3: #eef2f6;
-  --line: #d8dee7;
-  --line-soft: #e8ecf1;
-  --text: #172033;
-  --text-dim: #48556a;
-  --muted: #7b8799;
-  --amber: #2563eb;
-  --amber-dim: #e8f0ff;
-  --green: #16845b;
-  --green-dim: #e6f6ef;
-  --red: #dc4c4c;
-  --red-dim: #fff0f0;
-  --blue: #2563eb;
-  --blue-dim: #e8f0ff;
-  --gray: #98a2b3;
-  --r: 14px;
-  --r-sm: 9px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px rgba(16, 24, 40, .07);
-}
+
+/*
+ * Те, що в вересневій версії робив світлий блок: марка, шапка, стрічка
+ * вкладок і показники. Структуру лишаємо — вона була кращою за попередню, —
+ * а кольори й геометрію беремо з токенів Signal. Розмітка в `pages/index.js`
+ * не змінюється: ті самі класи, інший вигляд.
+ */
 
 body {
-  background:
-    radial-gradient(circle at 8% 0, rgba(37, 99, 235, .055), transparent 26rem),
-    var(--bg);
   font-size: .94rem;
   letter-spacing: -.006em;
-  padding: 0 28px 40px;
+  padding: 0 max(20px, env(safe-area-inset-right)) 40px max(20px, env(safe-area-inset-left));
 }
 .wrap { max-width: 1440px; }
 
-/* App bar */
+/* ---- Шапка ---- */
 header {
-  min-height: 78px; padding: 14px 0; margin-bottom: 0;
+  min-height: 76px; padding: 14px 0; margin-bottom: 0;
   border-bottom: 0; gap: 10px;
 }
-.app-brand, .login-brand { display: flex; align-items: center; gap: 12px; }
+.app-brand, .login-brand { display: flex; align-items: center; gap: var(--ob-space-3); }
 .brand-mark {
   width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center;
-  color: white; background: linear-gradient(145deg, #3374f3, #1749b8);
-  border-radius: 12px; font-size: 1.05rem; font-weight: 800;
-  box-shadow: 0 6px 14px rgba(37, 99, 235, .22);
+  color: var(--ob-accent-ink); background: var(--ob-accent);
+  border-radius: var(--ob-radius-md); font-size: 1.05rem; font-weight: 800;
 }
 .app-brand h1 { font-size: .98rem; letter-spacing: -.01em; text-transform: none; }
 h1::before { display: none; }
-.brand-subtitle { display: block; margin-top: 1px; color: var(--muted); font-size: .69rem; }
-.ver { color: var(--blue); background: var(--blue-dim); vertical-align: 1px; }
-.state { margin-left: auto; }
-.build { background: var(--panel); }
-.cmd-open {
-  min-height: 38px; background: var(--panel); border-color: var(--line-soft);
-  color: var(--text-dim); box-shadow: 0 1px 2px rgba(16,24,40,.03);
+.brand-subtitle {
+  display: block; margin-top: 1px; color: var(--ob-muted); font-size: .69rem;
 }
-.cmd-open:hover { color: var(--blue); border-color: #a9c3fa; background: #fbfdff; }
-.cmd-open kbd { color: var(--muted); background: var(--panel-3); }
-.who { padding-left: 10px; border-left: 1px solid var(--line); }
-.who-name { color: var(--text); }
+.ver { color: var(--ob-accent); background: var(--ob-success-bg); vertical-align: 1px; }
+.state { margin-left: auto; }
+.build { background: var(--ob-elevated); }
+.cmd-open {
+  min-height: 38px; background: var(--ob-surface);
+  border-color: var(--ob-control-line); color: var(--ob-secondary);
+}
+.cmd-open:hover {
+  color: var(--ob-accent); border-color: var(--ob-accent); background: var(--ob-hover);
+}
+.cmd-open kbd { color: var(--ob-muted); background: var(--ob-elevated); }
+.who { padding-left: 10px; border-left: 1px solid var(--ob-line); }
+.who-name { color: var(--ob-text); }
 
-/* Primary navigation */
+/* ---- Вкладки ---- */
 .tabs {
-  gap: 3px; padding: 5px; margin-bottom: 24px; overflow-x: auto; flex-wrap: nowrap;
-  background: rgba(255,255,255,.82); border: 1px solid var(--line-soft);
-  border-radius: 12px; box-shadow: 0 1px 3px rgba(16,24,40,.035);
+  gap: 3px; padding: 5px; margin-bottom: var(--ob-space-6);
+  overflow-x: auto; flex-wrap: nowrap;
+  background: var(--ob-surface); border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-lg);
   scrollbar-width: none;
 }
 .tabs::-webkit-scrollbar { display: none; }
-.tab { padding: 8px 13px; border-radius: 8px; font-size: .8rem; }
-.tab:hover { background: var(--panel-2); color: var(--text); }
+.tab {
+  padding: 8px 13px; border-radius: var(--ob-radius-sm); font-size: .8rem;
+  transition: background var(--ob-duration-fast) var(--ob-ease),
+              color var(--ob-duration-fast) var(--ob-ease);
+}
+.tab:hover { background: var(--ob-hover); color: var(--ob-text); }
+/*
+ * Поточна вкладка — мʼятна заливка. Це єдине місце в шапці, де застосовано
+ * акцент: GUIDE прямо просить одну головну дію на екран, а не підсвічувати
+ * акцентом усе підряд.
+ */
 .tab.active {
-  color: #fff; background: var(--blue); border-color: var(--blue);
-  box-shadow: 0 3px 8px rgba(37,99,235,.2);
+  color: var(--ob-accent-ink); background: var(--ob-accent); border-color: var(--ob-accent);
+  font-weight: 600;
 }
 
-/* Content hierarchy */
-.home-hi { color: var(--text-dim); font-size: 1.03rem; margin: 4px 0 18px; }
-.home-hi b { color: var(--text); }
-.stats { gap: 14px; margin-bottom: 24px; }
+/* ---- Показники ---- */
+.home-hi { color: var(--ob-secondary); font-size: 1.03rem; margin: 4px 0 18px; }
+.home-hi b { color: var(--ob-text); }
+.stats { gap: 14px; margin-bottom: var(--ob-space-6); }
 .stat {
-  padding: 19px 20px; border-color: var(--line-soft); box-shadow: 0 1px 3px rgba(16,24,40,.035);
-  position: relative; overflow: hidden;
+  padding: 19px 20px; border-color: var(--ob-line);
+  border-radius: var(--ob-radius-lg);
 }
-.stat::after {
-  content: ''; position: absolute; inset: 0 auto 0 0; width: 3px;
-  background: var(--blue); opacity: .78;
-}
-.stat-ok::after { background: var(--green); }
-.stat-v { font-family: var(--sans); font-size: 2rem; letter-spacing: -.045em; }
-.stat-l { color: var(--text-dim); font-weight: 650; letter-spacing: .045em; }
-.section { margin-bottom: 22px; }
-.sec { color: var(--text); letter-spacing: -.01em; }
-.table-wrap, .card, .audit-item, .audit-sum { box-shadow: 0 1px 3px rgba(16,24,40,.035); }
-.data-table th { color: var(--muted); letter-spacing: .045em; }
-.data-table tbody tr:hover td { background: #f7faff; }
-.data-table .col-id, .data-table td[style*="amber"] { color: var(--blue) !important; }
 
-/* Controls */
-input[type=text], input[type=number], input[type=date], input[type=password], select, textarea {
-  box-shadow: inset 0 1px 1px rgba(16,24,40,.025);
-  transition: border-color .15s, box-shadow .15s, background .15s;
-}
-input:focus, select:focus, textarea:focus {
-  border-color: #6b9af5; box-shadow: 0 0 0 3px rgba(37,99,235,.12);
-}
-.btn {
-  min-height: 40px; color: #fff; background: var(--blue); padding: 10px 18px;
-  box-shadow: 0 2px 5px rgba(37,99,235,.2); transition: transform .12s, box-shadow .12s;
-}
-.btn:hover { filter: none; transform: translateY(-1px); box-shadow: 0 5px 12px rgba(37,99,235,.22); }
-.chip.on, .vtoggle button.on { color: var(--blue); border-color: #a9c3fa; background: var(--blue-dim); }
-.card:hover { border-color: #c9d3e1; box-shadow: var(--shadow); }
-.card.highlight { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-dim); }
-.id-badge, input.id-badge { color: var(--blue); background: var(--blue-dim); }
-
-/* Authentication */
-.login-wrap {
-  min-height: 100vh; margin: 0 -28px -40px; padding: 32px;
-  display: grid; place-items: center;
-  background:
-    radial-gradient(circle at 20% 12%, rgba(79, 131, 246, .17), transparent 25rem),
-    linear-gradient(145deg, #f8faff 0%, #edf2f8 100%);
-}
-.login-box {
-  width: min(100%, 420px); padding: 34px; background: rgba(255,255,255,.94);
-  border: 1px solid rgba(216,222,231,.8); border-radius: 20px;
-  box-shadow: 0 24px 64px rgba(23,32,51,.11), 0 2px 8px rgba(23,32,51,.04);
-}
-.login-brand { padding-bottom: 24px; border-bottom: 1px solid var(--line-soft); }
-.login-brand h1 { text-transform: none; letter-spacing: -.02em; font-size: 1.12rem; }
-.login-brand p { margin: 2px 0 0; color: var(--muted); font-size: .76rem; }
-.login-heading { margin: 25px 0 20px; }
-.login-heading h2 { margin: 0; color: var(--text); font-size: 1.35rem; letter-spacing: -.025em; }
-.login-heading p { margin: 6px 0 0; color: var(--muted); font-size: .84rem; }
-.login-box label { display: block; margin-bottom: 7px; color: var(--text-dim); font-size: .78rem; font-weight: 650; }
-.login-box select, .login-box input { width: 100%; min-height: 44px; background: #fff; }
-.login-submit { width: 100%; margin-top: 18px; }
-
-/* Mobile keeps the same product language, with a floating navigation dock. */
-@media (max-width: 760px) {
-  body { padding: 0 16px calc(96px + env(safe-area-inset-bottom)); }
-  header { min-height: 68px; }
-  .brand-subtitle, .state, .who-till { display: none; }
-  .who { padding-left: 0; border-left: 0; }
-  .bnav {
-    left: 10px; right: 10px; bottom: 10px; border: 1px solid var(--line);
-    border-radius: 16px; padding: 4px 3px max(4px, env(safe-area-inset-bottom));
-    background: rgba(255,255,255,.94); box-shadow: 0 12px 32px rgba(23,32,51,.18);
-    backdrop-filter: blur(16px);
-  }
-  .bnav-b { border-radius: 11px; }
-  .bnav-b.on { color: var(--blue); background: var(--blue-dim); }
-  .bnav-b.accent { color: var(--green); }
-  .login-wrap { margin: 0 -16px calc(-96px - env(safe-area-inset-bottom)); padding: 20px; }
-  .login-box { padding: 26px 22px; }
+/* ---- Фокус ----
+ * Один видимий контур на весь застосунок. Він намальований тінню, а не
+ * `outline`, бо тінь підхоплює радіус елемента; зовнішнє кільце має колір
+ * фону, тож воно читається навіть на межі двох поверхонь. `:focus-visible`,
+ * а не `:focus` — миша кільця не вмикає, клавіатура вмикає завжди.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--ob-focus);
+  border-radius: var(--ob-radius-sm);
+  position: relative;
+  z-index: 1;
 }
