@@ -142,6 +142,40 @@ const IconCheck = ({ size = 20 }) => (
     <path d="M4 10.5 8 14l8-8.5" />
   </svg>
 );
+/* Іконки бічного меню. Один стиль: контур 1.6, квадрат 20, без заливки —
+   щоб у стовпчику вони читались як один набір, а не як збірна солянка. */
+const IconBox = ({ size = 18 }) => (
+  <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
+    stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10 2.6 17 6v8l-7 3.4L3 14V6z" /><path d="M3 6l7 3.4L17 6" /><path d="M10 9.4v8" />
+  </svg>
+);
+const IconTruck = ({ size = 18 }) => (
+  <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
+    stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+    <path d="M1.8 4.5h9.4v8.8H1.8zM11.2 7.6h3.3l3.7 3.1v2.6h-7z" />
+    <circle cx="5.4" cy="15.4" r="1.7" /><circle cx="14.2" cy="15.4" r="1.7" />
+  </svg>
+);
+const IconClock = ({ size = 18 }) => (
+  <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
+    stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+    <circle cx="10" cy="10" r="7.3" /><path d="M10 5.6V10l3 1.8" />
+  </svg>
+);
+const IconGear = ({ size = 18 }) => (
+  <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
+    stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="10" cy="10" r="2.6" />
+    <path d="M10 2.3v2.1M10 15.6v2.1M3.9 3.9l1.5 1.5M14.6 14.6l1.5 1.5M2.3 10h2.1M15.6 10h2.1M3.9 16.1l1.5-1.5M14.6 5.4l1.5-1.5" />
+  </svg>
+);
+const IconLayers = ({ size = 18 }) => (
+  <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
+    stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10 2.8 17.4 7 10 11.2 2.6 7z" /><path d="M2.6 11.4 10 15.6l7.4-4.2" />
+  </svg>
+);
 
 /**
  * На телефоні верхній ряд вкладок доводилося гортати й тягтися вгору.
@@ -289,8 +323,14 @@ function HomeView({ setState, onOpen, me }) {
 
   return (
     <>
-      <div className="home-hi">
-        {me ? <>Вітаю, <b>{me}</b>.</> : 'Вітаю.'} Ось що зараз на обліку.
+      {/* Заголовок сторінки за макетом: надпис, велика фраза, пояснення.
+          Три рядки замість одного — зате з них видно, де ти і що далі. */}
+      <div className="page-head">
+        <div>
+          <div className="eyebrow">Ваш робочий день</div>
+          <h2 className="page-h">{me ? <>Вітаю, {me}.</> : 'Тримайте все під контролем.'}</h2>
+          <p className="page-sub">Ось що зараз на обліку — майно, люди та рух в одному просторі.</p>
+        </div>
       </div>
 
       <div className="stats">
@@ -1265,102 +1305,115 @@ export default function Home({ startView }) {
     );
   }
 
+  /*
+   * Один перелік розділів на дві навігації: бічне меню на широкому екрані
+   * і хлібні крихти вгорі. Доки він був розкладений по JSX двічі, два
+   * списки встигали розʼїхатись — тепер розʼїхатись нема чому.
+   */
+  const nav = [
+    { kind: 'home', label: 'Огляд', icon: <IconHome size={18} />, on: view.kind === 'home' },
+    { kind: 'search', label: 'Пошук', icon: <IconSearch size={18} />, on: view.kind === 'search' },
+    ...sheets.map((s) => ({
+      kind: s.kind, name: s.name, label: s.name, icon: <IconBox />,
+      on: view.name === s.name,
+    })),
+    { kind: 'delivery', label: 'Доставки', icon: <IconTruck />, on: view.kind === 'delivery', dot: true },
+    { kind: 'log', label: 'Журнал', icon: <IconClock />, on: view.kind === 'log' },
+    { kind: 'audit', label: 'Звірка', icon: <IconCheck size={18} />, on: view.kind === 'audit' },
+    ...(me.role === 'admin'
+      ? [{ kind: 'people', label: 'Налаштування', icon: <IconGear />, on: view.kind === 'people' }]
+      : []),
+  ];
+  const here = nav.find((n) => n.on);
+  const initials = (me.callsign || 'О').slice(0, 2).toUpperCase();
+
   return (
     <ToastCtx.Provider value={push}>
       <div className="wrap">
         {/* `push`, а не `toast`: той живе в контексті й доступний лише
             дітям, а ми тут самі той контекст і ставимо */}
         <OfflineBar onSynced={(n) => push(`Надіслано відкладені записи: ${n}`)} />
-        <header>
-          <div className="app-brand">
+        <aside className="side">
+          <div className="side-brand">
             <span className="brand-mark" aria-hidden="true">О</span>
-            <div>
-              <h1>Облік майна<span className="ver">{VERSION}</span></h1>
-              <span className="brand-subtitle">Єдиний простір управління</span>
-            </div>
+            <span className="side-brand-t">облік<i>.</i></span>
           </div>
-          <div className="state">
-            {state}
-            {BUILD && <span className="build" title="Версія збірки">{BUILD}</span>}
-          </div>
-          <button className="cmd-open scan-open" onClick={() => setScan(true)} title="Сканувати QR">
-            <IconQr /><span className="scan-open-t">Сканувати</span>
-          </button>
-          <button className="cmd-open" onClick={() => setPalette(true)} title="Пошук та дії">
-            Пошук та дії<kbd>⌘K</kbd>
-          </button>
-          <div className="who">
-            <span className="who-name" title={me.role === 'admin' ? 'Адміністратор' : 'Користувач'}>
-              {me.callsign || 'спільний вхід'}
-            </span>
-            {me.expires > 0 && (
-              <span className="who-till" title="Сесія діє до цієї години, далі — знову PIN">
-                до {hhmm(me.expires)}
-              </span>
-            )}
-            <button
-              className="who-out"
-              title="Вийти"
-              onClick={async () => {
-                await api('/api/login', { method: 'DELETE' });
-                setAuthed(false);
-                loadMe();
-              }}
-            >
-              вийти
-            </button>
-          </div>
-        </header>
 
-        <div className="tabs">
-          <div
-            className={'tab' + (view.kind === 'home' ? ' active' : '')}
-            onClick={() => setView({ kind: 'home', name: null })}
-          >
-            Головна
-          </div>
-          <div
-            className={'tab' + (view.kind === 'search' ? ' active' : '')}
-            onClick={() => setView({ kind: 'search', name: null })}
-          >
-            Пошук
-          </div>
-          {sheets.map((s) => (
-            <div
-              key={s.name}
-              className={'tab' + (view.name === s.name ? ' active' : '')}
-              onClick={() => setView({ kind: s.kind, name: s.name })}
-            >
-              {s.name}
+          <div className="side-ws">
+            <span className="side-ws-i" aria-hidden="true"><IconLayers /></span>
+            <div className="side-ws-t">
+              <strong>Робочий простір</strong>
+              <small>{me.callsign || 'спільний вхід'}</small>
             </div>
-          ))}
-          <div
-            className={'tab tab-dlv' + (view.kind === 'delivery' ? ' active' : '')}
-            onClick={() => setView({ kind: 'delivery', name: null })}
-          >
-            Доставки
           </div>
-          <div
-            className={'tab' + (view.kind === 'log' ? ' active' : '')}
-            onClick={() => setView({ kind: 'log', name: null })}
-          >
-            Журнал
+
+          <span className="side-label">Робота</span>
+          <nav className="side-nav">
+            {nav.map((n) => (
+              <button
+                key={n.kind + (n.name || '')}
+                className={'nav-item' + (n.on ? ' on' : '')}
+                aria-current={n.on ? 'page' : undefined}
+                onClick={() => setView({ kind: n.kind, name: n.name || null })}
+              >
+                {n.icon}
+                <span>{n.label}</span>
+                {n.dot && <i className="nav-dot" aria-hidden="true" />}
+              </button>
+            ))}
+          </nav>
+
+          <div className="side-foot">
+            <span>SIGNAL / {VERSION}</span>
+            {BUILD && <span title="Версія збірки">{BUILD}</span>}
           </div>
-          <div
-            className={'tab' + (view.kind === 'audit' ? ' active' : '')}
-            onClick={() => setView({ kind: 'audit', name: null })}
-          >
-            Звірка
-          </div>
-          {me.role === 'admin' && (
-            <div
-              className={'tab' + (view.kind === 'people' ? ' active' : '')}
-              onClick={() => setView({ kind: 'people', name: null })}
-            >
-              Налаштування
+        </aside>
+
+        <div className="shell">
+          <div className="topbar">
+            <div className="crumb">
+              <span className="mobile-mark" aria-hidden="true">О</span>
+              <span className="crumb-root">Облік майна</span>
+              <i className="slash" aria-hidden="true">/</i>
+              <strong>{here ? here.label : 'Огляд'}</strong>
             </div>
-          )}
-        </div>
+            <div className="top-acts">
+              <div className="state">
+                {state}
+              </div>
+              <button className="top-search" onClick={() => setPalette(true)} title="Пошук та дії">
+                <IconSearch size={16} />
+                <span className="top-search-t">Знайти в просторі</span>
+                <kbd>⌘K</kbd>
+              </button>
+              <button className="icon-btn" onClick={() => setScan(true)} title="Сканувати QR">
+                <IconQr size={17} />
+              </button>
+              <div className="who">
+                {me.expires > 0 && (
+                  <span className="who-till" title="Сесія діє до цієї години, далі — знову PIN">
+                    до {hhmm(me.expires)}
+                  </span>
+                )}
+                <button
+                  className="who-out"
+                  title="Вийти"
+                  onClick={async () => {
+                    await api('/api/login', { method: 'DELETE' });
+                    setAuthed(false);
+                    loadMe();
+                  }}
+                >
+                  вийти
+                </button>
+                <span className="avatar" title={me.role === 'admin' ? 'Адміністратор' : 'Користувач'}>
+                  {initials}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <main className="shell-main">
 
         {view.kind === 'home' && (
           <HomeView setState={setState} onOpen={setView} me={me.callsign} />
@@ -1395,6 +1448,8 @@ export default function Home({ startView }) {
         {view.kind === 'log' && <LogView key={view.q || ''} setState={setState} initialQuery={view.q} />}
         {view.kind === 'audit' && <AuditView setState={setState} />}
         {view.kind === 'people' && me.role === 'admin' && <PeopleView setState={setState} />}
+          </main>
+        </div>
       </div>
       <BottomNav
         view={view}
@@ -2240,13 +2295,13 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
         ))}
         <div className="spacer" />
         {whoIdx >= 0 && (
-          <button className={'btn btn-group' + (group === 'who' ? ' on' : '')}
+          <button className={'btn btn-2 btn-group' + (group === 'who' ? ' on' : '')}
             onClick={() => setGroup(group === 'who' ? null : 'who')}>
             За людиною
           </button>
         )}
         {whereIdx >= 0 && (
-          <button className={'btn btn-group' + (group === 'where' ? ' on' : '')}
+          <button className={'btn btn-2 btn-group' + (group === 'where' ? ' on' : '')}
             onClick={() => setGroup(group === 'where' ? null : 'where')}>
             За місцем
           </button>
@@ -2257,7 +2312,7 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
             зараз на екрані, разом із фільтром: людина спершу відбирає
             потрібне очима, а вже потім натискає. */}
         <button
-          className="btn"
+          className="btn btn-2"
           title={list.length === items.length
             ? `Зберегти файлом усі записи (${items.length})`
             : `Зберегти файлом те, що зараз відібрано: ${list.length} з ${items.length}`}

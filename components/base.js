@@ -344,9 +344,12 @@ export function QrScanner({ title = 'Наведіть на QR-код', hint, onC
 /* ---------- Головна: що є, що робилось, на що глянути ---------- */
 export function Stat({ label, value, sub, tone }) {
   return (
+    /* Підпис зверху, число під ним: око спершу читає, про що картка, і
+       лише тоді бачить величину. У макетах Signal картки показників
+       побудовані саме так. */
     <div className={'stat' + (tone ? ' stat-' + tone : '')}>
-      <div className="stat-v">{value}</div>
       <div className="stat-l">{label}</div>
+      <div className="stat-v">{value}</div>
       {sub && <div className="stat-s">{sub}</div>}
     </div>
   );
