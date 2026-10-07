@@ -4649,81 +4649,233 @@ textarea.ghost:focus { border-color: var(--amber); background: var(--panel-3); o
 /* ========================================================================== */
 
 /*
- * Те, що в вересневій версії робив світлий блок: марка, шапка, стрічка
- * вкладок і показники. Структуру лишаємо — вона була кращою за попередню, —
- * а кольори й геометрію беремо з токенів Signal. Розмітка в `pages/index.js`
- * не змінюється: ті самі класи, інший вигляд.
+ * Макет із комплекту: бічне меню ліворуч, вузька смуга зверху, вміст у
+ * колонці з полями. Стрічку вкладок прибрано — на широкому екрані вона
+ * з'їдала рядок по горизонталі й усе одно не вміщала всі розділи, а
+ * стовпчик вміщає їх усі й лишає місце для лічильників.
+ *
+ * На телефоні бічного меню немає: там працює нижня навігація, яка вже є.
  */
 
 body {
   font-size: .94rem;
   letter-spacing: -.006em;
-  padding: 0 max(20px, env(safe-area-inset-right)) 40px max(20px, env(safe-area-inset-left));
+  padding: 0;
 }
-.wrap { max-width: 1440px; }
+.wrap { max-width: none; margin: 0; padding: 0; }
 
-/* ---- Шапка ---- */
-header {
-  min-height: 76px; padding: 14px 0; margin-bottom: 0;
-  border-bottom: 0; gap: 10px;
-}
-.app-brand, .login-brand { display: flex; align-items: center; gap: var(--ob-space-3); }
+/* ---- Бічне меню ---- */
+.side { display: none; }
+.side-brand { display: flex; align-items: center; gap: 11px; padding-left: 2px; }
 .brand-mark {
-  width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center;
+  width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center;
   color: var(--ob-accent-ink); background: var(--ob-accent);
-  border-radius: var(--ob-radius-md); font-size: 1.05rem; font-weight: 800;
+  border-radius: var(--ob-radius-md); font-size: 1rem; font-weight: 800;
 }
-.app-brand h1 { font-size: .98rem; letter-spacing: -.01em; text-transform: none; }
-h1::before { display: none; }
-.brand-subtitle {
-  display: block; margin-top: 1px; color: var(--ob-muted); font-size: .69rem;
+.side-brand-t {
+  font-size: 1.6rem; font-weight: 700; letter-spacing: -.055em; line-height: 1;
 }
-.ver { color: var(--ob-accent); background: var(--ob-success-bg); vertical-align: 1px; }
-.state { margin-left: auto; }
-.build { background: var(--ob-elevated); }
-.cmd-open {
-  min-height: 38px; background: var(--ob-surface);
-  border-color: var(--ob-control-line); color: var(--ob-secondary);
-}
-.cmd-open:hover {
-  color: var(--ob-accent); border-color: var(--ob-accent); background: var(--ob-hover);
-}
-.cmd-open kbd { color: var(--ob-muted); background: var(--ob-elevated); }
-.who { padding-left: 10px; border-left: 1px solid var(--ob-line); }
-.who-name { color: var(--ob-text); }
+.side-brand-t i { color: var(--ob-accent); font-style: normal; }
 
-/* ---- Вкладки ---- */
-.tabs {
-  gap: 3px; padding: 5px; margin-bottom: var(--ob-space-6);
-  overflow-x: auto; flex-wrap: nowrap;
+.side-ws {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 10px; margin: 26px 0 24px;
   background: var(--ob-surface); border: 1px solid var(--ob-line);
-  border-radius: var(--ob-radius-lg);
-  scrollbar-width: none;
+  border-radius: var(--ob-radius-md);
 }
-.tabs::-webkit-scrollbar { display: none; }
-.tab {
-  padding: 8px 13px; border-radius: var(--ob-radius-sm); font-size: .8rem;
+.side-ws-i {
+  width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center;
+  background: var(--ob-elevated); border-radius: 7px; color: var(--ob-secondary);
+}
+.side-ws-t { min-width: 0; }
+.side-ws-t strong { display: block; font-size: .72rem; font-weight: 600; }
+.side-ws-t small {
+  display: block; margin-top: 2px; font-size: .66rem; color: var(--ob-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.side-label {
+  display: block; margin: 0 12px 10px;
+  font-size: .62rem; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ob-muted);
+}
+.side-nav { display: grid; gap: 4px; }
+.nav-item {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  min-height: 44px; padding: 0 12px;
+  background: none; border: 0; border-radius: var(--ob-radius-sm);
+  color: var(--ob-secondary); font: inherit; font-size: .86rem; text-align: left;
+  cursor: pointer;
   transition: background var(--ob-duration-fast) var(--ob-ease),
               color var(--ob-duration-fast) var(--ob-ease);
 }
-.tab:hover { background: var(--ob-hover); color: var(--ob-text); }
+.nav-item .ico { flex: 0 0 auto; }
+.nav-item > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-item:hover { background: var(--ob-elevated); color: var(--ob-text); }
 /*
- * Поточна вкладка — мʼятна заливка. Це єдине місце в шапці, де застосовано
- * акцент: GUIDE прямо просить одну головну дію на екран, а не підсвічувати
- * акцентом усе підряд.
+ * Поточний розділ — приглушена мʼятна плашка, а не повна заливка акцентом:
+ * акцент у макеті лишається за головною дією на сторінці, і меню з ним
+ * не змагається.
  */
-.tab.active {
-  color: var(--ob-accent-ink); background: var(--ob-accent); border-color: var(--ob-accent);
-  font-weight: 600;
+.nav-item.on { background: var(--ob-accent-bg); color: var(--ob-accent); }
+.nav-dot {
+  width: 5px; height: 5px; flex: 0 0 5px; margin-left: auto;
+  background: var(--ob-accent); border-radius: 50%;
 }
 
+.side-foot {
+  margin-top: auto; padding: 16px 10px 0;
+  border-top: 1px solid var(--ob-line);
+  display: flex; justify-content: space-between; gap: 8px;
+  font-family: var(--ob-mono); font-size: .6rem; letter-spacing: .05em;
+  color: var(--ob-muted);
+}
+
+/* ---- Верхня смуга ---- */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 18px;
+  min-height: 64px; padding: 10px 16px;
+  border-bottom: 1px solid var(--ob-line);
+}
+.crumb {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  font-size: .76rem; color: var(--ob-muted);
+}
+.crumb strong {
+  font-weight: 500; color: var(--ob-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.crumb-root { display: none; }
+.slash { color: #606871; font-style: normal; }
+.mobile-mark {
+  width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center;
+  background: var(--ob-accent); color: var(--ob-accent-ink);
+  border-radius: 8px; font-size: .8rem; font-weight: 800;
+}
+.top-acts { display: flex; align-items: center; gap: 10px; }
+.topbar .state { margin: 0; }
+.top-search {
+  display: none; align-items: center; gap: 9px; min-height: 44px;
+  padding: 0 4px; background: none; border: 0; cursor: pointer;
+  color: var(--ob-muted); font: inherit; font-size: .76rem;
+}
+.top-search:hover { color: var(--ob-text); }
+.top-search kbd {
+  margin-left: 10px; padding: 1px 5px; font-size: .62rem;
+  border: 1px solid var(--ob-line); border-radius: 4px; color: inherit;
+}
+.icon-btn {
+  width: 44px; height: 44px; flex: 0 0 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid transparent; border-radius: var(--ob-radius-md);
+  color: var(--ob-secondary); cursor: pointer;
+  transition: background var(--ob-duration-fast) var(--ob-ease),
+              color var(--ob-duration-fast) var(--ob-ease);
+}
+.icon-btn:hover { background: var(--ob-hover); color: var(--ob-text); }
+.who { display: flex; align-items: center; gap: 10px; }
+.avatar {
+  width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center;
+  border-radius: 50%; background: var(--ob-elevated); color: var(--ob-secondary);
+  font-size: .68rem; font-weight: 600; letter-spacing: .02em;
+  box-shadow: 0 0 0 3px var(--ob-surface);
+}
+
+/* ---- Вміст ---- */
+.shell-main {
+  max-width: 1680px; margin: 0 auto;
+  padding: 24px max(16px, env(safe-area-inset-right)) 40px max(16px, env(safe-area-inset-left));
+}
+
+/* ---- Кнопки ----
+ * Одна головна дія на екран. Решта — вторинні: та сама висота й геометрія,
+ * але поверхня замість акценту. Доки «Експорт» і «Додати запис» були
+ * обидві мʼятні, екран не підказував, яку з них натискають частіше.
+ */
+.btn {
+  min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px; padding: 0 17px; border-radius: var(--ob-radius-md);
+  border: 1px solid transparent; font-size: .79rem;
+  transition: background var(--ob-duration-fast) var(--ob-ease);
+}
+.btn:hover { filter: none; background: var(--ob-accent-hover); }
+.btn-2 {
+  background: var(--ob-elevated); border-color: var(--ob-control-line); color: var(--ob-text);
+}
+.btn-2:hover { background: var(--ob-hover); }
+.btn-group.on {
+  background: var(--ob-accent-bg); border-color: var(--ob-accent); color: var(--ob-accent);
+}
+
+/* ---- Заголовок сторінки ---- */
+.page-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 24px; flex-wrap: wrap; margin: 2px 0 24px;
+}
+.eyebrow {
+  font-size: .6rem; font-weight: 600; letter-spacing: .17em; text-transform: uppercase;
+  color: var(--ob-muted); margin-bottom: 11px;
+}
+.page-h { margin: 0; font-size: 1.75rem; font-weight: 600; letter-spacing: -.035em; }
+.page-sub { margin: 10px 0 0; font-size: .78rem; color: var(--ob-muted); }
+
 /* ---- Показники ---- */
-.home-hi { color: var(--ob-secondary); font-size: 1.03rem; margin: 4px 0 18px; }
+.home-hi { color: var(--ob-secondary); font-size: 1.03rem; margin: 2px 0 20px; }
 .home-hi b { color: var(--ob-text); }
+
+/* ---- Таблиці ----
+ * У макеті шапка таблиці — тихий сірий підпис, а не акцент: підсвічувати
+ * треба дані, а не назви стовпчиків, які щоразу ті самі.
+ */
+.data-table th {
+  font-family: var(--ob-font); font-size: .73rem; font-weight: 500;
+  letter-spacing: 0; text-transform: none; color: var(--ob-muted);
+  background: var(--ob-surface); border-bottom-color: var(--ob-line);
+}
+.table-wrap, .tbl-wrap {
+  border-radius: var(--ob-radius-lg); border-color: var(--ob-line);
+}
+.data-table .col-id { color: var(--ob-secondary); font-weight: 600; }
 .stats { gap: 14px; margin-bottom: var(--ob-space-6); }
 .stat {
-  padding: 19px 20px; border-color: var(--ob-line);
-  border-radius: var(--ob-radius-lg);
+  padding: 20px 21px 17px; border-color: var(--ob-line);
+  border-radius: var(--ob-radius-lg); background: var(--ob-surface);
+}
+/* Підпис, число, виноска — у тому порядку, у якому їх читають. */
+.stat-l {
+  margin: 0; font-size: .76rem; letter-spacing: 0; text-transform: none;
+  color: var(--ob-secondary);
+}
+.stat-v {
+  margin: 20px 0 0; font-family: var(--ob-font); font-size: 2.4rem;
+  line-height: 1; letter-spacing: -.03em; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.stat-s { margin-top: 16px; font-size: .7rem; color: var(--ob-muted); opacity: 1; }
+.stat-ok .stat-v { color: var(--ob-accent); }
+
+/* ---- Широкий екран: меню стає стовпчиком ліворуч ---- */
+@media (min-width: 1000px) {
+  .side {
+    position: fixed; inset: 0 auto 0 0; width: 240px; z-index: 20;
+    display: flex; flex-direction: column;
+    padding: 28px 18px 20px;
+    background: #131618; border-right: 1px solid var(--ob-line);
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+  .shell { margin-left: 240px; }
+  .topbar { padding: 10px 28px; min-height: 72px; }
+  .crumb-root { display: inline; }
+  .mobile-mark { display: none; }
+  .top-search { display: inline-flex; }
+  .shell-main { padding: 32px 28px 48px; }
+}
+
+/* На телефоні верхня смуга коротка: марка, розділ, пошук, скан, вихід. */
+@media (max-width: 999px) {
+  .topbar { position: sticky; top: 0; z-index: 15; background: var(--ob-bg); }
+  .topbar .state { display: none; }
+  .who-till { display: none; }
 }
 
 /* ---- Фокус ----
