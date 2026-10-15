@@ -15,6 +15,7 @@ import {
   DataTable, Totals, countBy, Combo, SearchBox, useNewRecordHotkey, useGrow,
   bagWord, dayWord,
 } from '../components/base';
+import { SheetIcon, IconBoxes, IconShelf } from '../components/icons';
 import { OfflineBar } from '../components/offline-bar';
 import { toCsv, csvName, BOM } from '../lib/csv';
 import { AuditView } from '../components/reviziya';
@@ -144,12 +145,6 @@ const IconCheck = ({ size = 20 }) => (
 );
 /* Іконки бічного меню. Один стиль: контур 1.6, квадрат 20, без заливки —
    щоб у стовпчику вони читались як один набір, а не як збірна солянка. */
-const IconBox = ({ size = 18 }) => (
-  <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
-    stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
-    <path d="M10 2.6 17 6v8l-7 3.4L3 14V6z" /><path d="M3 6l7 3.4L17 6" /><path d="M10 9.4v8" />
-  </svg>
-);
 const IconTruck = ({ size = 18 }) => (
   <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
     stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
@@ -361,7 +356,9 @@ function HomeView({ setState, onOpen, me }) {
             <tbody>
               {d.items.perSheet.filter((s) => s.count > 0).map((s) => (
                 <tr key={s.name} onClick={() => onOpen({ kind: 'items', name: s.name })}>
-                  <td className="col-name">{s.name}</td>
+                  <td className="col-name">
+                    <span className="cat"><i className="cat-i"><SheetIcon name={s.name} size={17} /></i>{s.name}</span>
+                  </td>
                   <td className="col-num col-strong">{s.count}</td>
                   <td className="col-num" style={{ color: 'var(--green)' }}>{s.available}</td>
                   <td className="col-num">{s.issued}</td>
@@ -375,7 +372,9 @@ function HomeView({ setState, onOpen, me }) {
                 </tr>
               ))}
               <tr>
-                <td className="col-name">Склад — ящики</td>
+                <td className="col-name">
+                  <span className="cat"><i className="cat-i"><IconBoxes size={17} /></i>Склад — ящики</span>
+                </td>
                 <td className="col-num col-strong">{d.warehouse.total}</td>
                 <td className="col-num">—</td>
                 <td className="col-num">—</td>
@@ -388,7 +387,9 @@ function HomeView({ setState, onOpen, me }) {
                 </td>
               </tr>
               <tr>
-                <td className="col-name">Майно Рибаківки</td>
+                <td className="col-name">
+                  <span className="cat"><i className="cat-i"><IconShelf size={17} /></i>Майно Рибаківки</span>
+                </td>
                 <td className="col-num col-strong">{d.stock.positions}</td>
                 <td className="col-num" style={{ color: 'var(--green)' }}>{d.stock.remainder}</td>
                 <td className="col-num">—</td>
@@ -1314,7 +1315,7 @@ export default function Home({ startView }) {
     { kind: 'home', label: 'Огляд', icon: <IconHome size={18} />, on: view.kind === 'home' },
     { kind: 'search', label: 'Пошук', icon: <IconSearch size={18} />, on: view.kind === 'search' },
     ...sheets.map((s) => ({
-      kind: s.kind, name: s.name, label: s.name, icon: <IconBox />,
+      kind: s.kind, name: s.name, label: s.name, icon: <SheetIcon name={s.name} />,
       on: view.name === s.name,
     })),
     { kind: 'delivery', label: 'Доставки', icon: <IconTruck />, on: view.kind === 'delivery', dot: true },
