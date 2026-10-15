@@ -4892,6 +4892,79 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
   .who-till { display: none; }
 }
 
+/* ---- Вхід ----
+ * Розмітку екрана входу додали разом із вереснем, а стилі до неї лежали
+ * у вересневому блоці, який Signal замінив. Тому форма й розʼїхалась:
+ * марка з рискою від загального `h1`, вузький список, кнопка поруч із
+ * полем замість повної ширини. Пишемо стилі заново — у токенах Signal.
+ */
+.login-wrap {
+  min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+  padding: 24px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left));
+}
+.login-box {
+  width: 390px; max-width: 100%; padding: 32px;
+  background: var(--ob-surface); border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-xl); box-shadow: var(--ob-shadow);
+}
+
+.login-brand { display: flex; align-items: center; gap: var(--ob-space-3); }
+/* Загальний `h1` у застосунку — це назва розділу: великими літерами й з
+   мʼятною рискою попереду. Тут він назва продукту, тож ні того, ні того. */
+.login-brand h1 {
+  margin: 0; font-size: 1.45rem; font-weight: 700;
+  letter-spacing: -.045em; text-transform: none;
+}
+.login-brand h1::before { display: none; }
+.login-brand p { margin: 2px 0 0; font-size: .74rem; color: var(--ob-muted); }
+
+.login-heading { margin: 28px 0 22px; }
+.login-heading h2 {
+  margin: 0; font-size: 1.15rem; font-weight: 600; letter-spacing: -.03em;
+}
+.login-heading p { margin: 8px 0 0; font-size: .78rem; color: var(--ob-muted); line-height: 1.5; }
+
+/* Поля на весь блок і заввишки з палець — як просить руководство */
+.login-box label {
+  display: block; margin-bottom: 7px;
+  font-size: .74rem; font-weight: 500; color: var(--ob-secondary);
+}
+.login-box input,
+.login-box select {
+  width: 100%; min-height: 44px; padding: 0 13px;
+  background: var(--ob-elevated); border: 1px solid var(--ob-control-line);
+  border-radius: var(--ob-radius-md); color: var(--ob-text); font-size: .9rem;
+}
+.login-box select { cursor: pointer; }
+/* Кільце фокуса вже є в загальному правилі; друга мʼятна рамка поверх
+   нього читається як подвійний контур. Лишаємо тільки підсвітку тла. */
+.login-box input:focus,
+.login-box select:focus { border-color: var(--ob-control-line); background: var(--ob-hover); }
+
+.login-field + .login-field { margin-top: 16px; }
+
+/* Сесія завершилась — це попередження, а не акцент і не помилка */
+.login-note {
+  color: var(--ob-secondary); font-size: .78rem; line-height: 1.55;
+  padding: 12px 14px; margin-bottom: 20px;
+  border: 0; border-left: 2px solid var(--ob-warning);
+  background: var(--ob-warning-bg); border-radius: var(--ob-radius-sm);
+}
+
+.login-submit { width: 100%; margin-top: 22px; }
+.login-box .err {
+  margin-top: 12px; padding: 10px 12px;
+  color: var(--ob-danger); background: var(--ob-danger-bg);
+  border-radius: var(--ob-radius-sm); font-size: .8rem;
+}
+/* Другий спосіб входу — не кнопка-суперниця, а тихий рядок під нею */
+.login-alt {
+  width: 100%; min-height: 44px; margin-top: 10px;
+  background: none; border: 0; cursor: pointer;
+  color: var(--ob-muted); font-size: .78rem; text-decoration: none;
+}
+.login-alt:hover { color: var(--ob-text); text-decoration: underline; }
+
 /* ---- Фокус ----
  * Один видимий контур на весь застосунок. Він намальований тінню, а не
  * `outline`, бо тінь підхоплює радіус елемента; зовнішнє кільце має колір
@@ -4901,7 +4974,6 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: none;
   box-shadow: var(--ob-focus);
-  border-radius: var(--ob-radius-sm);
   position: relative;
   z-index: 1;
 }

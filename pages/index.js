@@ -78,11 +78,13 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
 
           {mode === 'pin' ? (
             <>
-              <label htmlFor="login-callsign">Позивний</label>
-              <select id="login-callsign" value={callsign} onChange={(e) => setCallsign(e.target.value)}>
-                {callsigns.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <div style={{ marginTop: 12 }}>
+              <div className="login-field">
+                <label htmlFor="login-callsign">Позивний</label>
+                <select id="login-callsign" value={callsign} onChange={(e) => setCallsign(e.target.value)}>
+                  {callsigns.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="login-field">
                 <label htmlFor="login-pin">PIN</label>
                 <input
                   id="login-pin" type="password" inputMode="numeric" autoComplete="off"
@@ -93,7 +95,7 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
               </div>
             </>
           ) : (
-            <>
+            <div className="login-field">
               <label htmlFor="login-password">Спільний пароль</label>
               <input
                 id="login-password" type="password"
@@ -101,7 +103,7 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
                 onChange={(e) => setPw(e.target.value)}
                 autoFocus
               />
-            </>
+            </div>
           )}
 
           <button type="submit" className="btn login-submit" disabled={busy}>
