@@ -1,5 +1,5 @@
 import { withAuth } from '../../lib/auth';
-import { SHEET_CONFIGS, readSheet, findColumns } from '../../lib/sheets';
+import { SHEET_CONFIGS, readSheet, readSheets, findColumns } from '../../lib/sheets';
 import { readStock } from '../../lib/stock';
 import { readLog } from '../../lib/log';
 import { readActs } from '../../lib/acts';
@@ -50,13 +50,22 @@ async function itemsSummary() {
   let issued = 0;
   let booked = 0;
 
-  await Promise.all(targets.map(async (cfg) => {
-    let values;
-    try {
-      values = await readSheet(cfg.name);
-    } catch {
-      return;
-    }
+  /*
+   * Шість листів однією відповіддю, а не шістьма запитами. Квота Google —
+   * шістдесят читань на хвилину на користувача, і саме ця функція з'їдала
+   * її найшвидше: кілька відкриттів головної поспіль, і сервіс відповідав
+   * «Quota exceeded» замість даних.
+   */
+  let all;
+  try {
+    all = await readSheets(targets.map((c) => c.name));
+  } catch {
+    all = targets.map(() => []);
+  }
+
+  targets.forEach((cfg, ti) => {
+    const values = all[ti] || [];
+    if (!values.length) return;
     const headers = values[0] || [];
     const cols = findColumns(headers);
     const idIdx = cols.id >= 0 && cols.id !== cols.name ? cols.id : -1;
@@ -88,7 +97,7 @@ async function itemsSummary() {
     available += s.available;
     issued += s.issued;
     booked += s.booked;
-  }));
+  });
 
   perSheet.sort((a, b) => b.count - a.count);
   return {
