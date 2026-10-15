@@ -4823,6 +4823,20 @@ body {
 .home-hi { color: var(--ob-secondary); font-size: 1.03rem; margin: 2px 0 20px; }
 .home-hi b { color: var(--ob-text); }
 
+/* ---- Категорія з іконкою ----
+ * Плитка під малюнком відділяє його від тексту і не дає рядку
+ * «посивіти»: іконка лишається читабельною навіть там, де назва
+ * набрана тонким.
+ */
+.cat { display: inline-flex; align-items: center; gap: 11px; }
+.cat-i {
+  width: 32px; height: 32px; flex: 0 0 32px;
+  display: grid; place-items: center;
+  background: var(--ob-elevated); border: 1px solid var(--ob-line);
+  border-radius: 9px; color: var(--ob-secondary);
+}
+tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-dim-line); }
+
 /* ---- Таблиці ----
  * У макеті шапка таблиці — тихий сірий підпис, а не акцент: підсвічувати
  * треба дані, а не назви стовпчиків, які щоразу ті самі.
