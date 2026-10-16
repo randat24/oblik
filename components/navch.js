@@ -22,6 +22,10 @@ import {
   lessonProgress, partProgress, unlockedLessons,
   buildSession, partQueue, applyResults,
 } from '../lib/mult';
+/* Очки й серія — окремо від правил навчання: ціну відповіді видно в тесті */
+import {
+  step as scoreStep, heatOf, tierOf, nextTier, roundSummary,
+} from '../lib/arcade';
 import { CODE_LESSONS, TRACKS, openUpTo, courseStats, nextLink } from '../lib/code';
 import { TOOL_LESSONS, toolById, toolStats } from '../lib/tools';
 // DAY_SIZE тут своє — у множення воно теж є, і означає інше число
@@ -173,12 +177,17 @@ export function MultTab({ data, reload, toast }) {
   if (view.s === 'arcade') {
     return (
       <MultArcade
-        prog={prog} best={num(data.goals?.arcadeBest)}
+        prog={prog}
+        best={num(data.goals?.arcadeBest)}
+        bestScore={num(data.goals?.arcadeScore)}
         onBack={() => setView({ s: 'lessons' })}
-        onDone={async (results, level) => {
+        onDone={async (results, level, score) => {
+          /* Два рекорди, бо вони про різне: рівень — як далеко зайшли,
+             очки — наскільки чисто й швидко грали дорогою туди. */
           await save(results, {
             ...(data.goals || {}),
             arcadeBest: Math.max(num(data.goals?.arcadeBest), level),
+            arcadeScore: Math.max(num(data.goals?.arcadeScore), num(score)),
           });
           setView({ s: 'lessons' });
         }}
@@ -352,7 +361,7 @@ export function MultTab({ data, reload, toast }) {
           <span>🎮 Рівні</span>
           <span className="h-mt-quiz-b">
             {num(data.goals?.arcadeBest)
-              ? `дійшли до ${num(data.goals.arcadeBest)}-го · лише вивчене, чистий рівень відкриває складніше`
+              ? `${num(data.goals.arcadeBest)}-й рівень · рекорд ${num(data.goals?.arcadeScore)} очок`
               : 'лише вивчене · чистий рівень відкриває складніше'}
           </span>
         </button>
@@ -924,18 +933,33 @@ function answerLabel(q) {
   return q.answer;
 }
 
-function AskBox({ q, state, typed, opts, onAnswer, disabled, quad }) {
+/**
+ * Питання й варіанти відповіді.
+ *
+ * `only` розділяє їх, не розмножуючи саму розмітку. Аркаді це потрібно
+ * тому, що там приклад стоїть усередині кільця годинника, а кнопки — під
+ * ним: одним шматком такого не скласти, а два окремі компоненти
+ * розійшлися б при першій же правці формату питання.
+ */
+function AskBox({ q, state, typed, opts, onAnswer, disabled, quad, only }) {
+  const showQ = only !== 'opts';
+  const showA = only !== 'q';
+
   if (q.kind === 'tf') {
     return (
       <>
-        <div className={'h-mt-qbox' + (state ? ' is-' + state : '')}>
-          <div className="h-mt-tf-q">{q.shown}</div>
-          <div className="h-mt-tf-c">Це правда?</div>
-        </div>
-        <div className="h-mt-tf">
-          <button className="h-mt-tf-b is-no" onClick={() => onAnswer(false)} disabled={disabled}>✗</button>
-          <button className="h-mt-tf-b is-yes" onClick={() => onAnswer(true)} disabled={disabled}>✓</button>
-        </div>
+        {showQ && (
+          <div className={'h-mt-qbox' + (state ? ' is-' + state : '')}>
+            <div className="h-mt-tf-q">{q.shown}</div>
+            <div className="h-mt-tf-c">Це правда?</div>
+          </div>
+        )}
+        {showA && (
+          <div className="h-mt-tf">
+            <button className="h-mt-tf-b is-no" onClick={() => onAnswer(false)} disabled={disabled}>✗</button>
+            <button className="h-mt-tf-b is-yes" onClick={() => onAnswer(true)} disabled={disabled}>✓</button>
+          </div>
+        )}
       </>
     );
   }
@@ -943,24 +967,30 @@ function AskBox({ q, state, typed, opts, onAnswer, disabled, quad }) {
   if (q.kind === 'cmp') {
     return (
       <>
-        <div className={'h-mt-qbox' + (state ? ' is-' + state : '')}>
-          <div className="h-mt-tf-c">Що більше?</div>
-        </div>
-        <div className="h-mt-opts">
-          <button className="h-mt-opt" onClick={() => onAnswer('left')} disabled={disabled}>{q.left}</button>
-          <button className="h-mt-opt is-eq" onClick={() => onAnswer('eq')} disabled={disabled}>порівну</button>
-          <button className="h-mt-opt" onClick={() => onAnswer('right')} disabled={disabled}>{q.right}</button>
-        </div>
+        {showQ && (
+          <div className={'h-mt-qbox' + (state ? ' is-' + state : '')}>
+            <div className="h-mt-tf-c">Що більше?</div>
+          </div>
+        )}
+        {showA && (
+          <div className="h-mt-opts">
+            <button className="h-mt-opt" onClick={() => onAnswer('left')} disabled={disabled}>{q.left}</button>
+            <button className="h-mt-opt is-eq" onClick={() => onAnswer('eq')} disabled={disabled}>порівну</button>
+            <button className="h-mt-opt" onClick={() => onAnswer('right')} disabled={disabled}>{q.right}</button>
+          </div>
+        )}
       </>
     );
   }
 
   return (
     <>
-      <div className={'h-mt-qbox' + (state ? ' is-' + state : '')}>
-        <QLine q={q} shown={typed} state={state === 'right' ? 'ok' : state === 'wrong' ? 'bad' : ''} />
-      </div>
-      {opts && (
+      {showQ && (
+        <div className={'h-mt-qbox' + (state ? ' is-' + state : '')}>
+          <QLine q={q} shown={typed} state={state === 'right' ? 'ok' : state === 'wrong' ? 'bad' : ''} />
+        </div>
+      )}
+      {showA && opts && (
         // чотири варіанти йдуть сіткою 2×2: так кнопки вдвічі більші й обидві
         // колонки дістаються великим пальцем, не переставляючи телефон
         <div className={'h-mt-opts' + (quad ? ' is-quad' : '')}>
@@ -1236,11 +1266,19 @@ function MultQuick({ tile, onBack, onDone }) {
  * промаху, — і теж лише з відкритих уроків: кидати 8×8 тому, хто дійшов до
  * п'ятірки, нечесно.
  */
-function MultArcade({ prog, best, onBack, onDone }) {
+function MultArcade({ prog, best, bestScore, onBack, onDone }) {
   const [lvl, setLvl] = useState(1);
   const [idx, setIdx] = useState(0);          // питань на цьому рівні
   const [lives, setLives] = useState(ARCADE_LIVES);
-  const [score, setScore] = useState(0);
+  /*
+   * Рахунок живе одним об'єктом, а не трьома станами. Очки, серія і
+   * найдовша серія міняються завжди разом, однією відповіддю, — розвести
+   * їх по окремих `useState` означало б тримати в голові, що всі три
+   * оновлення встигли до наступного малювання.
+   */
+  const [sc, setSc] = useState({ score: 0, combo: 0, bestCombo: 0 });
+  const [gain, setGain] = useState(null);     // скільки щойно нарахували
+  const [tier, setTier] = useState(null);     // щойно взятий поріг серії
   const [q, setQ] = useState(() => arcadeNext(prog, 1, 0, false));
   const [opts, setOpts] = useState([]);
   const [typed, setTyped] = useState('');
@@ -1309,6 +1347,10 @@ function MultArcade({ prog, best, onBack, onDone }) {
     if (dead.current) return;
     record(false);
     clean.current = false;
+    // серія рветься і на помилці, і на вичерпаному годиннику
+    setSc((x) => scoreStep(x, { right: false }));
+    setGain(null);
+    setTier(null);
     setTyped(v === null ? '' : String(v));
     setState('wrong');
     const rest = lives - 1;
@@ -1318,7 +1360,14 @@ function MultArcade({ prog, best, onBack, onDone }) {
 
   function hit() {
     record(true);
-    setScore((x) => x + 1);
+    /*
+     * `left` — скільки лишалось на годиннику в мить відповіді. Саме з
+     * нього береться ціна: згадав одразу — втричі дорожче, ніж на межі.
+     */
+    const got = scoreStep(sc, { right: true, secondsLeft: left, seconds: q.seconds });
+    setSc(got);
+    setGain(got.gained);
+    setTier(got.tier);
     setState('right');
     const n = idx + 1;
     setTimeout(() => {
@@ -1368,18 +1417,37 @@ function MultArcade({ prog, best, onBack, onDone }) {
   };
 
   if (state === 'over') {
-    const better = lvl > best;
+    /*
+     * Підсумок рахує чиста функція: тут легко помилитись — точність від
+     * нуля відповідей дає NaN, а він на екрані читається як поломка.
+     */
+    const sum = roundSummary({
+      score: sc.score, best: bestScore, bestCombo: sc.bestCombo,
+      level: lvl, results: resRef.current,
+    });
     return (
-      <div className="h-mt-win">
-        <div className="h-mt-cup">{better ? '🏆' : '🎮'}</div>
-        <h2>Рівень {lvl}</h2>
+      <div className="h-mt-win h-mt-over">
+        <div className="h-mt-cup">{sum.record ? '🏆' : '🎮'}</div>
+        <h2>{sum.score} {plur(sum.score, ['очко', 'очки', 'очок'])}</h2>
         <p>
-          {score} {plur(score, ['правильна', 'правильні', 'правильних'])} поспіль.{' '}
-          {better
-            ? `Новий рекорд — до цього був ${best || 0}.`
-            : `Рекорд ${best}. До нього ${best - lvl + 1} ${plur(best - lvl + 1, ['рівень', 'рівні', 'рівнів'])}.`}
+          {sum.record
+            ? `Новий рекорд — до цього було ${bestScore || 0}.`
+            : `Рекорд ${bestScore}. До нього ${bestScore - sum.score} ${plur(bestScore - sum.score, ['очко', 'очки', 'очок'])}.`}
         </p>
-        <button className="h-add" onClick={() => onDone(resRef.current, lvl)}>Зберегти й вийти</button>
+
+        {/* Три числа, які справді щось кажуть про раунд. Рівень і серія —
+            про те, як далеко зайшли; швидкість пригадування — про те,
+            заради чого все це. */}
+        <div className="h-mt-sum">
+          <span><i>{sum.level}</i>рівень</span>
+          <span><i>{sum.bestCombo}</i>поспіль</span>
+          {sum.accuracy !== null && <span><i>{sum.accuracy}%</i>влучно</span>}
+          {sum.recall !== null && <span className="is-key"><i>{sum.recall} с</i>на згадку</span>}
+        </div>
+
+        <button className="h-add" onClick={() => onDone(resRef.current, lvl, sum.score)}>
+          Зберегти й вийти
+        </button>
       </div>
     );
   }
@@ -1405,8 +1473,16 @@ function MultArcade({ prog, best, onBack, onDone }) {
     );
   }
 
+  /* Частка годинника, що лишилась, — і для кільця, і для кольору */
+  const frac = Math.max(0, Math.min(1, left / q.seconds));
+  const hot = frac <= 0.3;
+  const R = 54;                       // радіус кільця у його власних координатах
+  const ring = 2 * Math.PI * R;
+  const now = tierOf(sc.combo);
+  const soon = nextTier(sc.combo);
+
   return (
-    <div className="h-mt-drill">
+    <div className={'h-mt-drill h-mt-arc is-heat-' + heatOf(sc.combo)}>
       <div className="h-mt-drill-h">
         <button className="h-link" onClick={onBack}>← Вийти</button>
         <span className="h-mt-arc-l">
@@ -1414,19 +1490,63 @@ function MultArcade({ prog, best, onBack, onDone }) {
             <i key={k} className={k < lives ? 'is-on' : ''}>♥</i>
           ))}
         </span>
-        <span className="h-mt-where">рівень {lvl} · {score}</span>
+        {/* Рекорд поруч із рахунком: мета видно, доки граєш, а не лише в кінці */}
+        <span className="h-mt-pts">
+          <b><i>рекорд</i>{Math.max(bestScore, sc.score)}</b>
+          <b className="is-now"><i>очки</i>{sc.score}</b>
+        </span>
       </div>
 
-      <div className="h-mt-bar">
-        <i className={left <= q.seconds * 0.3 ? 'is-hot' : ''}
-          style={{ width: Math.max(0, (left / q.seconds) * 100) + '%', transition: 'none' }} />
-      </div>
-      <div className="h-mt-arc-n">
-        {idx + (state === 'right' ? 1 : 0)} / {ARCADE_PER_LEVEL}
-        {q.fresh && <b> · новий</b>}
+      {/*
+        Кільце замість смуги. Смуга відповідала на питання «скільки
+        лишилось», але стояла осторонь від прикладу — очі бігали між ними.
+        Кільце обводить сам приклад, і залишок часу видно, не відводячи
+        погляду.
+      */}
+      <div className="h-mt-ring">
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+          <circle className="h-mt-ring-bg" cx="60" cy="60" r={R} />
+          <circle
+            className={'h-mt-ring-v' + (hot ? ' is-hot' : '')}
+            cx="60" cy="60" r={R}
+            strokeDasharray={ring}
+            strokeDashoffset={ring * (1 - frac)}
+          />
+        </svg>
+        <span className={'h-mt-ring-s' + (hot ? ' is-hot' : '')}>{Math.max(0, Math.ceil(left))}s</span>
+        <div className="h-mt-ring-in">
+          <AskBox q={q} only="q"
+            state={state === 'right' ? 'right' : state === 'wrong' ? 'wrong' : ''}
+            typed={state === 'wrong' && !typed ? '—' : typed} />
+          {/* Нарахування спливає під прикладом — там, куди людина дивиться */}
+          {state === 'right' && gain > 0 && (
+            <span className="h-mt-gain" key={idx}>+{gain}</span>
+          )}
+          <div className="h-mt-arc-n">
+            {idx + (state === 'right' ? 1 : 0)} / {ARCADE_PER_LEVEL}
+            {q.fresh && <b> · новий</b>}
+          </div>
+        </div>
       </div>
 
-      <AskBox q={q} state={state === 'right' ? 'right' : state === 'wrong' ? 'wrong' : ''}
+      {/* Плашка порога — раз, у мить переходу. Поза нею тихо показуємо,
+          скільки правильних лишилось до наступного імені. */}
+      {state === 'right' && tier ? (
+        <div className="h-mt-combo is-new">
+          <b>{tier.name}</b> {sc.combo} поспіль <span>×{tier.mult}</span>
+        </div>
+      ) : now ? (
+        <div className="h-mt-combo">
+          <b>{now.name}</b> {sc.combo} поспіль <span>×{now.mult}</span>
+        </div>
+      ) : soon && sc.combo > 0 ? (
+        <div className="h-mt-combo is-soft">
+          ще {soon.at - sc.combo} до «{soon.name}»
+        </div>
+      ) : null}
+
+      <AskBox q={q} only="opts"
+        state={state === 'right' ? 'right' : state === 'wrong' ? 'wrong' : ''}
         typed={state === 'wrong' && !typed ? '—' : typed}
         opts={q.kind === 'pick' && !q.typed ? opts : null}
         onAnswer={answer} disabled={state !== 'ask'} />

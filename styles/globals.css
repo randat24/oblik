@@ -4977,3 +4977,154 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
   position: relative;
   z-index: 1;
 }
+
+/* ========================================================================== */
+/* Аркада: очки, серія, кільце годинника                                       */
+/* ========================================================================== */
+
+/*
+ * Аркада — єдине місце в застосунку, якому дозволено бути гучним. Решта
+ * екранів веде облік, а цей тримає за руку того, хто вчить таблицю, і
+ * нагорода тут мусить бути видною. Тому власний фон, кільце замість
+ * смуги й числа, що спливають.
+ *
+ * Гучність росте тільки від серії. Розжарення нічого не змінює в грі:
+ * складність лишається такою самою, яскравішає лише екран.
+ */
+.h-mt-arc {
+  position: relative;
+  /* Тло розжарення тягнеться на всю ширину, а вміст лишається в полях:
+     інакше очки впираються в край екрана й обрізаються */
+  padding: 12px 12px 16px;
+  border-radius: var(--ob-radius-lg);
+  transition: background var(--ob-duration-normal) var(--ob-ease);
+}
+/* Шапка аркади вміщає вихід, життя й два числа — на вузькому екрані вона
+   має стискатися, а не виштовхувати очки за край */
+.h-mt-arc .h-mt-drill-h { gap: 10px; flex-wrap: wrap; }
+.h-mt-arc.is-heat-0 { background: transparent; }
+.h-mt-arc.is-heat-1 { background: radial-gradient(120% 70% at 50% 0%, #15233a 0%, transparent 70%); }
+.h-mt-arc.is-heat-2 { background: radial-gradient(120% 75% at 50% 0%, #241d44 0%, transparent 72%); }
+.h-mt-arc.is-heat-3 { background: radial-gradient(130% 80% at 50% 0%, #3b1d3f 0%, transparent 74%); }
+
+/* ---- Рекорд і очки ---- */
+.h-mt-pts {
+  margin-left: auto; display: flex; align-items: flex-end; gap: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.h-mt-pts b {
+  display: grid; gap: 2px; justify-items: end;
+  font-size: 1.05rem; font-weight: 700; color: var(--ob-secondary);
+}
+.h-mt-pts b.is-now { color: var(--ob-text); }
+.h-mt-pts i {
+  font-style: normal; font-size: .56rem; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--ob-muted);
+}
+
+/* ---- Кільце годинника ----
+ * Смуга відповідала на питання «скільки лишилось», але стояла осторонь
+ * від прикладу — очі бігали між ними. Кільце обводить сам приклад.
+ */
+.h-mt-ring { position: relative; display: grid; place-items: center; padding: 10px 0 4px; }
+.h-mt-ring svg {
+  width: min(270px, 72vw); height: min(270px, 72vw);
+  transform: rotate(-90deg);   /* нуль згори, щоб час танув за годинниковою */
+}
+.h-mt-ring circle { fill: none; stroke-width: 2; }
+.h-mt-ring-bg { stroke: var(--ob-line); }
+.h-mt-ring-v {
+  stroke: var(--ob-accent); stroke-linecap: round;
+  transition: stroke var(--ob-duration-normal) var(--ob-ease);
+}
+.h-mt-ring-v.is-hot { stroke: var(--ob-danger); }
+/* Секунди в пілюлі на самому кільці — як мітка, а не як ще одне число збоку */
+.h-mt-ring-s {
+  position: absolute; top: 2px; left: 50%; transform: translateX(-50%);
+  padding: 2px 9px; border-radius: 999px;
+  background: var(--ob-bg); color: var(--ob-secondary);
+  font-family: var(--ob-mono); font-size: .7rem; font-weight: 700;
+}
+.h-mt-ring-s.is-hot { color: var(--ob-danger); }
+.h-mt-ring-in {
+  position: absolute; inset: 0; display: grid; align-content: center; justify-items: center;
+  gap: 6px; padding: 0 12%;
+}
+/* Усередині кільця приклад стоїть сам по собі: рамка й тло тут зайві —
+   рамкою вже працює саме кільце */
+.h-mt-ring-in .h-mt-qbox {
+  background: none; border: 0; padding: 0;
+}
+.h-mt-ring-in .h-mt-q2 { gap: 8px; }
+.h-mt-ring-in .h-mt-nums { font-size: clamp(1.7rem, 9vw, 2.5rem); }
+.h-mt-ring-in .h-mt-blank {
+  min-width: auto; height: auto; border: 0; background: none;
+  font-size: clamp(1.7rem, 9vw, 2.5rem);
+}
+/* Порожній пропуск усередині кільця не має рамки, тож без знака питання
+   приклад обривався б на «=» і виглядав недомальованим */
+.h-mt-ring-in .h-mt-blank:empty::before { content: '?'; color: var(--ob-muted); }
+
+/* Варіанти під кільцем нижчі за звичайні: кільце вже зайняло висоту,
+   і три кнопки по шістдесят два пікселі не вміщались у телефон */
+.h-mt-arc .h-mt-opt { min-height: 54px; font-size: 1.3rem; }
+.h-mt-ring-in .h-mt-arc-n { margin: 0; }
+
+/* Нарахування спливає під прикладом — там, куди вже дивиться око */
+.h-mt-gain {
+  font-family: var(--ob-mono); font-size: 1.05rem; font-weight: 700;
+  color: var(--ob-accent);
+  animation: mt-gain 520ms var(--ob-ease);
+}
+@keyframes mt-gain {
+  from { opacity: 0; transform: translateY(8px); }
+  60% { opacity: 1; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .h-mt-gain { animation: none; } }
+
+/* ---- Серія ---- */
+.h-mt-combo {
+  justify-self: center; margin: 0 auto; padding: 8px 14px;
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--ob-line); border-radius: 999px;
+  background: var(--ob-surface);
+  font-size: .78rem; color: var(--ob-secondary);
+}
+.h-mt-combo b { color: var(--ob-text); font-weight: 700; }
+.h-mt-combo span {
+  padding: 1px 8px; border-radius: 999px;
+  background: var(--ob-accent); color: var(--ob-accent-ink);
+  font-weight: 700; font-size: .72rem;
+}
+/* У мить, коли поріг узяли, плашка спалахує — один раз, а не на кожній
+   наступній відповіді: інакше спалах перестає щось означати */
+.h-mt-combo.is-new {
+  border-color: var(--ob-accent); color: var(--ob-text);
+  animation: mt-combo 420ms var(--ob-ease);
+}
+@keyframes mt-combo {
+  from { transform: scale(.9); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .h-mt-combo.is-new { animation: none; } }
+.h-mt-combo.is-soft { border-style: dashed; color: var(--ob-muted); }
+
+/* ---- Підсумок раунду ---- */
+.h-mt-sum {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;
+  margin: 0 0 24px;
+}
+.h-mt-sum span {
+  display: grid; gap: 4px; min-width: 84px; padding: 12px 14px;
+  background: var(--ob-surface); border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-lg);
+  font-size: .64rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ob-muted);
+}
+.h-mt-sum i {
+  font-style: normal; font-size: 1.3rem; font-weight: 600; letter-spacing: -.02em;
+  color: var(--ob-text); text-transform: none;
+}
+/* Швидкість пригадування — те, заради чого все це; їй і акцент */
+.h-mt-sum .is-key { border-color: var(--ob-accent-dim-line); }
+.h-mt-sum .is-key i { color: var(--ob-accent); }
