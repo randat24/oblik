@@ -5007,6 +5007,41 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 .h-mt-arc.is-heat-2 { background: radial-gradient(120% 75% at 50% 0%, #241d44 0%, transparent 72%); }
 .h-mt-arc.is-heat-3 { background: radial-gradient(130% 80% at 50% 0%, #3b1d3f 0%, transparent 74%); }
 
+/* ---- Знаки за таблиці ----
+ * Колекція, а не лічильник: закритий знак видно так само добре, як
+ * здобутий, — інакше незрозуміло, скільки ще попереду.
+ */
+.medals { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+.medals.is-compact { gap: 5px; justify-content: center; margin: 10px 0 2px; }
+.medal {
+  position: relative; display: inline-grid; place-items: center;
+  color: var(--ob-line);
+  transition: color var(--ob-duration-normal) var(--ob-ease);
+}
+.medal svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.4; }
+.medal i {
+  position: absolute; font-style: normal;
+  font-family: var(--ob-mono); font-size: .72rem; font-weight: 700;
+  color: var(--ob-muted);
+}
+.is-compact .medal i { font-size: .6rem; }
+/* Здобутий знак залитий мʼятним: у колекції має бути видно, що вже твоє */
+.medal.is-on { color: var(--ob-accent); }
+.medal.is-on svg { fill: var(--ob-accent-bg); }
+.medal.is-on i { color: var(--ob-accent); }
+/*
+ * «Звідси зараз питання» — крапка під знаком, а не ще одна заливка.
+ * Заливка означає «здобуто», і якщо позначати нею ж поточну таблицю,
+ * то ще не відкрита виглядала б здобутою.
+ */
+.medal { padding-bottom: 7px; }
+.medal.is-now::after {
+  content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 50%; background: var(--ob-accent);
+}
+.medal.is-now:not(.is-on) { color: var(--ob-secondary); }
+.medal.is-now:not(.is-on) i { color: var(--ob-secondary); }
+
 /* ---- Рекорд і очки ---- */
 .h-mt-pts {
   margin-left: auto; display: flex; align-items: flex-end; gap: 14px;
@@ -5082,6 +5117,13 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
   to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) { .h-mt-gain { animation: none; } }
+
+/* Обіцянка подвійної ціни — до відповіді, а не сюрпризом у підсумку */
+.h-mt-hard {
+  padding: 2px 9px; border-radius: 999px;
+  background: var(--ob-warning-bg); color: var(--ob-warning);
+  font-size: .62rem; font-weight: 600; letter-spacing: .04em;
+}
 
 /* ---- Серія ---- */
 .h-mt-combo {
