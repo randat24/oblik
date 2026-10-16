@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BASE, TIERS, tierOf, nextTier, comboMult, speedStep, pointsFor,
+  BASE, HARD_MULT, TIERS, tierOf, nextTier, comboMult, speedStep, pointsFor,
   step, heatOf, isRecord, recallSpeed, roundSummary,
 } from '../lib/arcade.js';
 
@@ -197,4 +197,42 @@ test('новий рекорд видно в підсумку', () => {
 
 test('базова ціна лишається круглою — на неї спирається вся таблиця', () => {
   assert.equal(BASE, 10);
+});
+
+/* ---------- Недороблене коштує вдвічі ---------- */
+
+test('приклад, не доведений до автоматизму, коштує вдвічі', () => {
+  const easy = pointsFor({ right: true, secondsLeft: 8, seconds: 9, combo: 0 });
+  const hard = pointsFor({ right: true, secondsLeft: 8, seconds: 9, combo: 0, hard: true });
+  assert.equal(easy, 30);
+  assert.equal(hard, 60);
+});
+
+test('подвоєння множиться на серію, а не замість неї', () => {
+  // найдорожча відповідь у грі: швидко, у «Супері», на недоробленому
+  assert.equal(pointsFor({ right: true, secondsLeft: 9, seconds: 9, combo: 9, hard: true }), 240);
+});
+
+test('повільна відповідь на складному дорожча за швидку на легкому', () => {
+  // саме цього ми й хочемо: доробляти недороблене вигідніше, ніж
+  // ганяти вже відполіроване
+  const slowHard = pointsFor({ right: true, secondsLeft: 0.5, seconds: 9, combo: 0, hard: true });
+  const fastEasy = pointsFor({ right: true, secondsLeft: 8, seconds: 9, combo: 0 });
+  assert.equal(slowHard, 20);
+  assert.equal(fastEasy, 30);
+  assert.ok(slowHard < fastEasy, 'швидкість усе одно важить більше за позначку складності');
+});
+
+test('помилка на складному теж не коштує нічого', () => {
+  assert.equal(pointsFor({ right: false, secondsLeft: 9, seconds: 9, combo: 9, hard: true }), 0);
+});
+
+test('хід гри пропускає позначку складності до ціни', () => {
+  const s = step({ score: 0, combo: 0 }, { right: true, secondsLeft: 8, seconds: 9, hard: true });
+  assert.equal(s.gained, 60);
+  assert.equal(s.score, 60);
+});
+
+test('подвоєння лишається подвоєнням — на нього спирається пояснення в грі', () => {
+  assert.equal(HARD_MULT, 2);
 });

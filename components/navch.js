@@ -22,6 +22,7 @@ import {
   lessonProgress, partProgress, unlockedLessons,
   buildSession, partQueue, applyResults,
 } from '../lib/mult';
+import { MedalRow, tablesOf } from './medals';
 /* Очки й серія — окремо від правил навчання: ціну відповіді видно в тесті */
 import {
   step as scoreStep, heatOf, tierOf, nextTier, roundSummary,
@@ -197,13 +198,9 @@ export function MultTab({ data, reload, toast }) {
 
   return (
     <>
-      {/* Вісім медалей за вісім таблиць. Кубок у кінці уроку зникає, а це
+      {/* Вісім знаків за вісім таблиць. Кубок у кінці уроку зникає, а це
           лишається — видно і скільки пройдено, і скільки попереду. */}
-      <div className="h-mt-medals">
-        {LESSONS.filter((l) => l.kind === 'table').map((l) => (
-          <span key={l.key} className={lessonProgress(l, prog) >= 1 ? 'is-on' : ''}>{l.table}</span>
-        ))}
-      </div>
+      <MedalRow prog={prog} />
 
       <div className="h-mt-top">
         <div className="h-cap">Вивчено прикладів</div>
@@ -1364,7 +1361,7 @@ function MultArcade({ prog, best, bestScore, onBack, onDone }) {
      * `left` — скільки лишалось на годиннику в мить відповіді. Саме з
      * нього береться ціна: згадав одразу — втричі дорожче, ніж на межі.
      */
-    const got = scoreStep(sc, { right: true, secondsLeft: left, seconds: q.seconds });
+    const got = scoreStep(sc, { right: true, secondsLeft: left, seconds: q.seconds, hard: q.hard });
     setSc(got);
     setGain(got.gained);
     setTier(got.tier);
@@ -1497,6 +1494,10 @@ function MultArcade({ prog, best, bestScore, onBack, onDone }) {
         </span>
       </div>
 
+      {/* Той самий ряд знаків, що й на головній, тільки дрібніший: під час
+          гри видно, з яких таблиць прийшов приклад і скільки ще не здобуто */}
+      <MedalRow prog={prog} active={tablesOf(q)} compact />
+
       {/*
         Кільце замість смуги. Смуга відповідала на питання «скільки
         лишилось», але стояла осторонь від прикладу — очі бігали між ними.
@@ -1526,6 +1527,9 @@ function MultArcade({ prog, best, bestScore, onBack, onDone }) {
             {idx + (state === 'right' ? 1 : 0)} / {ARCADE_PER_LEVEL}
             {q.fresh && <b> · новий</b>}
           </div>
+          {/* Позначка стоїть до відповіді, а не після: подвійна ціна має
+              бути обіцянкою, а не сюрпризом у підсумку */}
+          {q.hard && !q.fresh && <span className="h-mt-hard">недороблений ×2</span>}
         </div>
       </div>
 
