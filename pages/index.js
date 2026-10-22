@@ -18,6 +18,7 @@ import {
 import { SheetIcon, IconBoxes, IconShelf } from '../components/icons';
 import { OfflineBar } from '../components/offline-bar';
 import { toCsv, csvName, BOM } from '../lib/csv';
+import { headTags, accountingCol } from '../lib/cards';
 import { AuditView } from '../components/reviziya';
 import { DeliveryView } from '../components/dostavka';
 
@@ -1952,34 +1953,6 @@ function bodyCols(headers, cols, snIdx, idIdx, tagCols = []) {
  */
 const nameOf = (cols) => (cols?.name >= 0 ? cols.name : 0);
 
-/** Колонка «Оф облік»: числиться річ за документами чи ні */
-function accountingCol(headers) {
-  return headers.findIndex((h) => {
-    const s = (h || '').toString().toLowerCase();
-    return s.includes('облік') && !s.includes('не облік');
-  });
-}
-
-/**
- * Короткі теги під назвою замість окремих рядків. Однакові значення
- * показуємо один раз: «Де: КСП» поруч зі статусом «КСП» нічого не додає.
- */
-function headTags(values, cols, accIdx) {
-  const out = [];
-  const seen = new Set([(values[cols.status] || '').toString().trim().toLowerCase()]);
-  const add = (text, cls) => {
-    const v = (text || '').toString().trim();
-    const key = v.toLowerCase();
-    if (!v || seen.has(key)) return;
-    seen.add(key);
-    out.push({ v, cls });
-  };
-  add(values[accIdx], 'tag-acc');
-  add(cols.type >= 0 ? values[cols.type] : '', 'tag-type');
-  add(cols.where > 0 ? values[cols.where] : '', 'tag-where');
-  return out;
-}
-
 /** Плавно підводить до потрібного рядка після перемикання на картки */
 function scrollToRow(row) {
   setTimeout(() => {
@@ -2031,14 +2004,27 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
 
   if (!data) return <div className="loading">Завантаження…</div>;
 
-  const { headers, items, cols, statusOptions, typeOptions, maskCols, noIssue, hideStatus } = data;
+  const {
+    headers, items, cols, statusOptions, typeOptions, whereOptions,
+    suggestions = {}, maskCols, noIssue, hideStatus,
+  } = data;
   // у шапці картки: власний номер речі бейджем, назва, серійник виробника під нею
   const nameIdx = nameOf(cols);
   const idIdx = cols.id >= 0 && cols.id !== nameIdx ? cols.id : -1;
   const snIdx = cols.snCols?.find((i) => i !== nameIdx && i !== idIdx) ?? -1;
   // облік, тип і місце йдуть тегами під назвою, а не окремими рядками
   const accIdx = accountingCol(headers);
-  const tagCols = [accIdx, cols.type, cols.where > 0 ? cols.where : -1];
+
+  /* Що пропонувати в тезі. Тип і місце мають власні переліки, решта
+     бере вже вжите в цьому листі — тим самим довідником, яким
+     користується форма додавання. */
+  const tagOptions = (ci) => {
+    if (ci === cols.type) return typeOptions || [];
+    if (ci === cols.where) return whereOptions || [];
+    return suggestions[ci] || [];
+  };
+  /* Коротка назва колонки для порожнього тега: «Тип», «Де», «Оф облік» */
+  const tagLabel = (ci) => (headers[ci] || '').toString().trim() || 'Поле';
 
   const save = async (row, colIdx, value, prev) => {
     setState('збереження…');
@@ -2057,7 +2043,9 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
     (notes[it.row] !== undefined ? notes[it.row] : it.values[cols.note]) || '';
 
   /** Картка запису — одна й та сама у звичайному списку і в групуванні */
-  const renderCard = (it) => (
+  const renderCard = (it) => {
+    const tags = headTags(it.values, cols, accIdx);
+    return (
     <div className={'card' + (it.row === highlightRow ? ' highlight' : '')} key={it.row} id={'item-row-' + it.row}>
       <div className="card-head">
         <div className="card-title">
@@ -2107,18 +2095,53 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
         )}
       </div>
 
-      {headTags(it.values, cols, accIdx).length > 0 && (
+      {tags.shown.length > 0 && (
         <div className="card-tags">
-          {headTags(it.values, cols, accIdx).map((t) => (
-            <span className={'tag ' + t.cls} key={t.v}>{t.v}</span>
-          ))}
+          {tags.shown.map((t) => {
+            const opts = tagOptions(t.ci);
+            return (
+              <span className={'tag ' + t.cls + (t.v ? '' : ' is-empty')} key={t.ci}>
+                {opts.length ? (
+                  /*
+                   * Ширину чипа задає напис, а сам `select` лежить поверх
+                   * прозорим. Інакше чип розтягується під найдовший
+                   * варіант у переліку: «не на обліку» розсовує тег, у
+                   * якому написано «пбд».
+                   */
+                  <>
+                    <b className="tag-v">{t.v || tagLabel(t.ci)}</b>
+                    <select
+                      className="tag-pick is-over"
+                      defaultValue={t.v}
+                      title={tagLabel(t.ci)}
+                      onChange={(e) => save(it.row, t.ci, e.target.value, t.v)}
+                    >
+                      <option value="">{tagLabel(t.ci)}</option>
+                      {t.v && !opts.includes(t.v) && <option value={t.v}>{t.v}</option>}
+                      {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </>
+                ) : (
+                  <input
+                    className="tag-pick"
+                    type="text"
+                    defaultValue={t.v}
+                    placeholder={tagLabel(t.ci)}
+                    title={tagLabel(t.ci)}
+                    size={Math.max(4, (t.v || tagLabel(t.ci)).length)}
+                    onBlur={(e) => e.target.value !== t.v && save(it.row, t.ci, e.target.value, t.v)}
+                  />
+                )}
+              </span>
+            );
+          })}
         </div>
       )}
 
       <div className="card-body">
-        {bodyCols(headers, cols, snIdx, idIdx, tagCols).map((ci) => (
+        {bodyCols(headers, cols, snIdx, idIdx, tags.shown.map((t) => t.ci)).map((ci) => (
           <div className="drow" key={ci}>
-            <span className="drow-k">{headers[ci] || 'Поле ' + (ci + 1)}</span>
+            <span className="drow-k">{(headers[ci] || '').toString().trim() || 'Поле ' + (ci + 1)}</span>
             <span className="drow-v">
               {ci === cols.type ? (
                 <select
@@ -2228,7 +2251,8 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
         </button>
       </div>
     </div>
-  );
+    );
+  };
 
   const cell = (it, i) => (i >= 0 ? (it.values[i] || '').toString().trim() : '');
   const whoIdx = cols.who >= 0 ? cols.who : -1;
