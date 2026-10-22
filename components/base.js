@@ -94,13 +94,15 @@ export const IconSearch = ({ size = 15 }) => (
   </svg>
 );
 
+/* Семантика станів, а не просто палітра: видано — усе гаразд, втрачено —
+   небезпека, КСП і склад — довідка, списано — поза обліком, решта — увага */
 export function statusColor(s) {
   const v = (s || '').toLowerCase();
-  if (v.includes('видан') || v.includes('выдан')) return 'var(--green)';
-  if (v.includes('втрач') || v.includes('утер')) return 'var(--red)';
-  if (v.includes('ксп') || v.includes('склад')) return 'var(--blue)';
-  if (v.includes('спис')) return 'var(--gray)';
-  return 'var(--amber)';
+  if (v.includes('видан') || v.includes('выдан')) return 'var(--ob-success)';
+  if (v.includes('втрач') || v.includes('утер')) return 'var(--ob-danger)';
+  if (v.includes('ксп') || v.includes('склад')) return 'var(--ob-info)';
+  if (v.includes('спис')) return 'var(--ob-muted)';
+  return 'var(--ob-warning)';
 }
 
 /** Зовнішнє посилання лишаємо як є, приватне фото віддає наш маршрут */
@@ -342,9 +344,12 @@ export function QrScanner({ title = 'Наведіть на QR-код', hint, onC
 /* ---------- Головна: що є, що робилось, на що глянути ---------- */
 export function Stat({ label, value, sub, tone }) {
   return (
+    /* Підпис зверху, число під ним: око спершу читає, про що картка, і
+       лише тоді бачить величину. У макетах Signal картки показників
+       побудовані саме так. */
     <div className={'stat' + (tone ? ' stat-' + tone : '')}>
-      <div className="stat-v">{value}</div>
       <div className="stat-l">{label}</div>
+      <div className="stat-v">{value}</div>
       {sub && <div className="stat-s">{sub}</div>}
     </div>
   );
