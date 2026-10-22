@@ -273,6 +273,24 @@ function HomeView({ setState, onOpen, me }) {
       run: () => onOpen({ kind: 'search', name: null, q: 'Втрачено' }),
     });
   }
+  /*
+   * Одна річ на двох обліках. Це не описка в клітинці, а розходження
+   * між листами, і виправляти його доведеться рішенням — де їй бути, —
+   * тому рядок веде в пошук за серійником: там одразу видно обидві
+   * картки поруч.
+   */
+  if (d.items.cross?.length) {
+    const first = d.items.cross[0];
+    attention.push({
+      key: 'cross',
+      tone: 'bad',
+      text: `Один серійник у різних листах: ${d.items.cross.length} — `
+        + `${d.items.cross.slice(0, 3).map((x) => `${x.sn} (${x.sheets.join(' + ')})`).join(', ')}`
+        + `${d.items.cross.length > 3 ? '…' : ''}`,
+      action: 'Показати',
+      run: () => onOpen({ kind: 'search', name: null, q: first.sn }),
+    });
+  }
   if (d.stock.unmarked) {
     attention.push({
       key: 'unmarked',

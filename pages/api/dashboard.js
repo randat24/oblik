@@ -1,5 +1,6 @@
 import { withAuth } from '../../lib/auth';
 import { SHEET_CONFIGS, readSheet, readSheets, findColumns } from '../../lib/sheets';
+import { crossDupes } from '../../lib/dupes';
 import { readStock } from '../../lib/stock';
 import { readLog } from '../../lib/log';
 import { readActs } from '../../lib/acts';
@@ -63,6 +64,12 @@ async function itemsSummary() {
     all = targets.map(() => []);
   }
 
+  /*
+   * Листи для пошуку повторів між ними. Збираємо тут же, з того самого
+   * `batchGet`: окремого читання це не коштує жодного.
+   */
+  const forCross = [];
+
   targets.forEach((cfg, ti) => {
     const values = all[ti] || [];
     if (!values.length) return;
@@ -92,6 +99,12 @@ async function itemsSummary() {
       }
     });
 
+    forCross.push({
+      name: cfg.name,
+      cols,
+      items: rows.map((r, i) => ({ row: i + 2, values: r })),
+    });
+
     perSheet.push(s);
     total += rows.length;
     available += s.available;
@@ -105,6 +118,8 @@ async function itemsSummary() {
     perSheet,
     byStatus: [...byStatus.entries()].sort((a, b) => b[1] - a[1]),
     lost,
+    // той самий серійник у двох різних листах — одна річ на двох обліках
+    cross: crossDupes(forCross).slice(0, 20),
   };
 }
 
