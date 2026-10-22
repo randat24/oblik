@@ -5041,6 +5041,19 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 .h-mt-arc.is-heat-2 { background: radial-gradient(120% 75% at 50% 0%, #241d44 0%, transparent 72%); }
 .h-mt-arc.is-heat-3 { background: radial-gradient(130% 80% at 50% 0%, #3b1d3f 0%, transparent 74%); }
 
+/* ---- Повтори в листі ----
+ * Картка-повтор не кричить червоним: це не поломка, а робота, яку треба
+ * зробити. Жовта смужка збоку й рядок із причиною — видно, що саме
+ * збіглося і з чим, щоб не гадати, яку з двох карток лишити.
+ */
+.card.is-dup { border-color: var(--ob-warning-bg); }
+.card-dup {
+  margin-top: 8px; padding: 6px 10px;
+  border-left: 2px solid var(--ob-warning);
+  background: var(--ob-warning-bg); border-radius: var(--ob-radius-sm);
+  font-family: var(--ob-mono); font-size: .68rem; color: var(--ob-warning);
+}
+
 /* ---- Знаки за таблиці ----
  * Колекція, а не лічильник: закритий знак видно так само добре, як
  * здобутий, — інакше незрозуміло, скільки ще попереду.

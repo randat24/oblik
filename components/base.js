@@ -155,23 +155,28 @@ export function useToasts() {
 }
 
 /** «1 мішок», «2 мішки», «5 мішків» — інакше лічильник читається як помилка */
+/**
+ * Українське число: «один рядок», «два рядки», «пʼять рядків».
+ *
+ * Одна функція на всі слова. До неї тут лежали дві однакові — для мішків
+ * і для діб, — і кожне нове слово додавало б третю.
+ */
+export function plural(n, [one, few, many]) {
+  const t = Math.abs(n) % 100;
+  const o = Math.abs(n) % 10;
+  if (t >= 11 && t <= 14) return many;
+  if (o === 1) return one;
+  if (o >= 2 && o <= 4) return few;
+  return many;
+}
+
 export function bagWord(n) {
-  const t = n % 100;
-  const o = n % 10;
-  if (t >= 11 && t <= 14) return 'мішків';
-  if (o === 1) return 'мішок';
-  if (o >= 2 && o <= 4) return 'мішки';
-  return 'мішків';
+  return plural(n, ['мішок', 'мішки', 'мішків']);
 }
 
 /** «1 добу», «2 доби», «5 діб» — за останньою цифрою, крім підлітків */
 export function dayWord(n) {
-  const t = n % 100;
-  const o = n % 10;
-  if (t >= 11 && t <= 14) return 'діб';
-  if (o === 1) return 'добу';
-  if (o >= 2 && o <= 4) return 'доби';
-  return 'діб';
+  return plural(n, ['добу', 'доби', 'діб']);
 }
 
 /* ---------- Сканування QR камерою ---------- */

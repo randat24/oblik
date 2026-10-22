@@ -7,18 +7,19 @@
  * Тут лишилось те, що тримає сторінку разом: хто увійшов, яка вкладка
  * відкрита і яка в неї адреса.
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   api, setOnUnauthed, saveFailed, todayStr, statusColor, photoSrc,
   ToastCtx, useToast, ToastHost, useToasts, IconSearch, IconQr, parseCode, hhmm,
   QrScanner, Stat, Modal, PhotoField, useViewMode, ViewToggle, TableWrap,
   DataTable, Totals, countBy, Combo, SearchBox, useNewRecordHotkey, useGrow,
-  bagWord, dayWord,
+  bagWord, dayWord, plural,
 } from '../components/base';
 import { SheetIcon, IconBoxes, IconShelf } from '../components/icons';
 import { OfflineBar } from '../components/offline-bar';
 import { toCsv, csvName, BOM } from '../lib/csv';
 import { headTags, accountingCol } from '../lib/cards';
+import { findDupes, dupeCount, dupeLabel, sameSn, sameId } from '../lib/dupes';
 import { AuditView } from '../components/reviziya';
 import { DeliveryView } from '../components/dostavka';
 
@@ -1966,6 +1967,7 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
   const [who, setWho] = useState(null);
   const [where, setWhere] = useState(null);
   const [group, setGroup] = useState(null); // 'who' | 'where'
+  const [dupOnly, setDupOnly] = useState(false);
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
   const [issuing, setIssuing] = useState(null);
@@ -1978,6 +1980,23 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
   const grow = useGrow();
 
   useNewRecordHotkey(useCallback(() => setAdding(true), []));
+
+  /*
+   * Повтори рахуємо з того, що вже в руках, — жодного зайвого читання
+   * таблиці. Квоту Google ми щойно лагодили, і платити за наведення ладу
+   * ще однією дюжиною запитів було б дивно.
+   *
+   * Лічильник стоїть тут, вище за `if (!data)`, а не там, де він
+   * потрібен: гуки мають викликатись у тому самому порядку щоразу, а
+   * нижче на сторінці вже є ранній вихід. Лінтер це й упіймав.
+   */
+  const dupes = useMemo(() => (data ? findDupes(data.items, data.cols) : []), [data]);
+  const dupBy = useMemo(() => {
+    const m = new Map();
+    dupes.forEach((g) => g.rows.forEach((r) => m.set(r, g)));
+    return m;
+  }, [dupes]);
+  const extra = dupeCount(dupes);
 
   const load = useCallback(async () => {
     setState('завантаження…');
@@ -2026,6 +2045,20 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
   /* Коротка назва колонки для порожнього тега: «Тип», «Де», «Оф облік» */
   const tagLabel = (ci) => (headers[ci] || '').toString().trim() || 'Поле';
 
+
+  /*
+   * Попереджаємо, але не забороняємо. Людина може правити саме для того,
+   * щоб звести два записи в один, або бачити річ, якої в таблиці ще
+   * немає. Заборона тут зупинила б роботу, а попередження — лише
+   * нагадує подивитись.
+   */
+  const warnSame = (found, what) => {
+    if (!found.length) return;
+    const where = found.slice(0, 3).map((x) => x.row).join(', ');
+    toast(`Такий ${what} уже є — ${plural(found.length, ['рядок', 'рядки', 'рядків'])} ${where}`,
+      { type: 'warn' });
+  };
+
   const save = async (row, colIdx, value, prev) => {
     setState('збереження…');
     try {
@@ -2045,8 +2078,12 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
   /** Картка запису — одна й та сама у звичайному списку і в групуванні */
   const renderCard = (it) => {
     const tags = headTags(it.values, cols, accIdx);
+    const dup = dupBy.get(it.row);
     return (
-    <div className={'card' + (it.row === highlightRow ? ' highlight' : '')} key={it.row} id={'item-row-' + it.row}>
+    <div
+      className={'card' + (it.row === highlightRow ? ' highlight' : '') + (dup ? ' is-dup' : '')}
+      key={it.row} id={'item-row-' + it.row}
+    >
       <div className="card-head">
         <div className="card-title">
           <div className="title-line">
@@ -2057,7 +2094,11 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
                 defaultValue={it.values[idIdx]}
                 title={headers[idIdx] || 'Номер'}
                 size={Math.max(2, String(it.values[idIdx] || '').length)}
-                onBlur={(e) => e.target.value !== it.values[idIdx] && save(it.row, idIdx, e.target.value, it.values[idIdx])}
+                onBlur={(e) => {
+                  if (e.target.value === it.values[idIdx]) return;
+                  warnSame(sameId(items, cols, e.target.value, it.row), headers[idIdx] || 'Номер');
+                  save(it.row, idIdx, e.target.value, it.values[idIdx]);
+                }}
               />
             ) : (
               <span className="id-badge" title={'Рядок у таблиці: ' + it.row}>{it.row}</span>
@@ -2076,7 +2117,11 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
               type="text"
               defaultValue={it.values[snIdx]}
               placeholder={headers[snIdx] || 'S/N'}
-              onBlur={(e) => e.target.value !== it.values[snIdx] && save(it.row, snIdx, e.target.value, it.values[snIdx])}
+              onBlur={(e) => {
+                if (e.target.value === it.values[snIdx]) return;
+                warnSame(sameSn(items, cols, e.target.value, it.row), headers[snIdx] || 'S/N');
+                save(it.row, snIdx, e.target.value, it.values[snIdx]);
+              }}
             />
           )}
         </div>
@@ -2094,6 +2139,13 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
           </select>
         )}
       </div>
+
+      {dup && (
+        <div className="card-dup">
+          Повтор: {dupeLabel(dup)} · {plural(dup.rows.length, ['рядок', 'рядки', 'рядків'])}{' '}
+          {dup.rows.join(', ')}
+        </div>
+      )}
 
       {tags.shown.length > 0 && (
         <div className="card-tags">
@@ -2259,6 +2311,7 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
   const whereIdx = cols.where > 0 ? cols.where : -1;
 
   let list = items;
+  if (dupOnly) list = list.filter((it) => dupBy.has(it.row));
   if (chip !== null && cols.status >= 0) list = list.filter((it) => it.values[cols.status] === chip);
   if (who) list = list.filter((it) => cell(it, whoIdx) === who);
   if (where) list = list.filter((it) => cell(it, whereIdx) === where);
@@ -2369,14 +2422,36 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
           cuts={cuts}
           audit={data.audit}
           scope={name}
-          attn={lost.length ? [{
-            bad: true,
-            text: <>Втрачено або списано: <b>{lost.length}</b>{' '}
-              <span className="sd-empty">{lost.slice(0, 4).map((it) => cell(it, nameIdx) || cell(it, idIdx)).join(', ')}{lost.length > 4 ? '…' : ''}</span></>,
-            action: { label: 'Показати', run: () => setChip(cell(lost[0], cols.status)) },
-          }] : []}
+          attn={[
+            ...(extra ? [{
+              bad: true,
+              text: <>Повтори: <b>{extra}</b> {plural(extra, ['зайвий рядок', 'зайві рядки', 'зайвих рядків'])}{' '}
+                <span className="sd-empty">
+                  {dupes.slice(0, 3).map(dupeLabel).join(', ')}{dupes.length > 3 ? '…' : ''}
+                </span></>,
+              action: { label: 'Розібрати', run: () => { setDupOnly(true); setChip(null); setQ(''); } },
+            }] : []),
+            ...(lost.length ? [{
+              bad: true,
+              text: <>Втрачено або списано: <b>{lost.length}</b>{' '}
+                <span className="sd-empty">{lost.slice(0, 4).map((it) => cell(it, nameIdx) || cell(it, idIdx)).join(', ')}{lost.length > 4 ? '…' : ''}</span></>,
+              action: { label: 'Показати', run: () => setChip(cell(lost[0], cols.status)) },
+            }] : []),
+          ]}
           onOpen={onOpen}
         />
+      )}
+
+      {dupOnly && (
+        <div className="scan-banner">
+          <span>
+            Показано лише повтори — <b>{dupes.length}</b>{' '}
+            {plural(dupes.length, ['група', 'групи', 'груп'])}, <b>{extra}</b>{' '}
+            {plural(extra, ['зайвий рядок', 'зайві рядки', 'зайвих рядків'])}.{' '}
+            Зайве видаляйте кнопкою в картці — видалення можна скасувати.
+          </span>
+          <button className="act-btn" onClick={() => setDupOnly(false)}>Показати всіх</button>
+        </div>
       )}
 
       {(who || where) && (
