@@ -5041,6 +5041,34 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 .h-mt-arc.is-heat-2 { background: radial-gradient(120% 75% at 50% 0%, #241d44 0%, transparent 72%); }
 .h-mt-arc.is-heat-3 { background: radial-gradient(130% 80% at 50% 0%, #3b1d3f 0%, transparent 74%); }
 
+/* ---- Рядок фільтрів ----
+ * Чипи категорій окремим рядком, а не в загальній панелі: у панелі вони
+ * стають між пошуком і кнопками дій, і щоразу доводиться шукати очима,
+ * де закінчився фільтр і почалась дія.
+ */
+.filters {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  margin: 0 0 12px;
+}
+.filters-k {
+  font-size: .62rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ob-muted); margin-right: 4px;
+}
+/* Лічильник у чипі — щоб вибирати категорію, не відкриваючи її */
+.filters .chip b {
+  margin-left: 7px; font-family: var(--ob-mono); font-size: .68rem; font-weight: 700;
+  color: var(--ob-muted);
+}
+.filters .chip.on b { color: inherit; }
+.filters-n { font-family: var(--ob-mono); font-size: .72rem; color: var(--ob-muted); }
+.filters-n b { color: var(--ob-text); }
+/* «Скинути все» — не ще один фільтр, тому пунктиром і без заливки */
+.chip.is-clear {
+  border-style: dashed; color: var(--ob-muted); background: none;
+  font: inherit; font-size: .72rem; cursor: pointer;
+}
+.chip.is-clear:hover { color: var(--ob-text); border-style: solid; }
+
 /* ---- Повтори в листі ----
  * Картка-повтор не кричить червоним: це не поломка, а робота, яку треба
  * зробити. Жовта смужка збоку й рядок із причиною — видно, що саме
