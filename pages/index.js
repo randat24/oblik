@@ -1510,6 +1510,8 @@ export default function Home({ startView }) {
 
 /* ---------- Пошук і акти на одній вкладці ---------- */
 function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
+  // яку категорію лишити на екрані; null — усі
+  const [onlySheet, setOnlySheet] = useState(null);
   const [q, setQ] = useState(initialQuery || '');
   const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -1579,6 +1581,8 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
     const id = ++reqId.current;
     setBusy(true);
     setState('пошук…');
+    // новий запит — нові категорії; старий чип сховав би все знайдене
+    setOnlySheet(null);
     const t = setTimeout(async () => {
       try {
         const d = await api('/api/search?q=' + encodeURIComponent(query));
@@ -1595,11 +1599,19 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
     return () => clearTimeout(t);
   }, [q, tick, setState]);
 
+  /*
+   * Категорії рахуємо до того, як відсіяти: інакше, обравши «Радейки»,
+   * решта чипів зникла б, і повернутись до «Кропиви» стало б ніде.
+   */
+  const allHits = res ? [...res.serial, ...res.assigned, ...res.other] : [];
+  const sheetChips = countBy(allHits, (r) => r.sheet);
+  const keep = (data) => (onlySheet ? data.filter((r) => r.sheet === onlySheet) : data);
+
   const groups = res
     ? [
-        { title: 'Знайдено за номером', cls: 'primary', data: res.serial },
-        { title: 'Рахується за', cls: 'primary', data: res.assigned },
-        { title: 'Інші згадки', cls: 'sec', data: res.other },
+        { title: 'Знайдено за номером', cls: 'primary', data: keep(res.serial) },
+        { title: 'Рахується за', cls: 'primary', data: keep(res.assigned) },
+        { title: 'Інші згадки', cls: 'sec', data: keep(res.other) },
       ].filter((g) => g.data.length)
     : [];
 
@@ -1645,6 +1657,27 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
         <button className="btn btn-accept" onClick={() => openAct('accept')}>Прийняти</button>
         <button className="btn" onClick={() => openAct('issue')}>Видати</button>
       </div>
+
+      {/*
+        Знайшлося в кількох листах — звужуємо до потрібного одним дотиком.
+        Чипи зʼявляються тільки тоді, коли листів справді більше одного:
+        єдиний чип не фільтрує нічого, а рядок займає.
+      */}
+      {sheetChips.length > 1 && (
+        <div className="filters">
+          <span className="filters-k">Категорія</span>
+          <div className={'chip' + (onlySheet === null ? ' on' : '')}
+            onClick={() => setOnlySheet(null)}>
+            усі<b>{allHits.length}</b>
+          </div>
+          {sheetChips.map(([sh, n]) => (
+            <div key={sh} className={'chip' + (onlySheet === sh ? ' on' : '')}
+              onClick={() => setOnlySheet(onlySheet === sh ? null : sh)}>
+              {sh}<b>{n}</b>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Totals parts={totalsParts} />
 
@@ -1986,6 +2019,8 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
   const [where, setWhere] = useState(null);
   const [group, setGroup] = useState(null); // 'who' | 'where'
   const [dupOnly, setDupOnly] = useState(false);
+  // фільтр за значенням тегової колонки: { [індекс колонки]: значення }
+  const [tagF, setTagF] = useState({});
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
   const [issuing, setIssuing] = useState(null);
@@ -2330,6 +2365,9 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
 
   let list = items;
   if (dupOnly) list = list.filter((it) => dupBy.has(it.row));
+  Object.entries(tagF).forEach(([ci, v]) => {
+    if (v) list = list.filter((it) => cell(it, Number(ci)) === v);
+  });
   if (chip !== null && cols.status >= 0) list = list.filter((it) => it.values[cols.status] === chip);
   if (who) list = list.filter((it) => cell(it, whoIdx) === who);
   if (where) list = list.filter((it) => cell(it, whereIdx) === where);
@@ -2350,6 +2388,24 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
     return a.startsWith('на облік') || a.startsWith('облікове')
       || cell(it, cols.type).toLowerCase().startsWith('учт');
   }).length;
+
+  /*
+   * Значення тегових колонок як фільтри. Рахуємо по всьому листу, а не
+   * по відібраному: інакше, обравши «Списан», решта значень зникла б і
+   * перемкнутись на «Учт.» стало б ніде.
+   */
+  const tagFilters = [accIdx, cols.type]
+    .filter((ci) => ci >= 0)
+    .map((ci) => ({ ci, label: tagLabel(ci), values: countBy(items, (it) => cell(it, ci)) }))
+    // одне-єдине значення нічого не ділить, а рядок на екрані займає
+    .filter((f) => f.values.length > 1);
+
+  const anyFilter = !!(chip || who || where || dupOnly || q.trim()
+    || Object.values(tagF).some(Boolean));
+  const clearFilters = () => {
+    setChip(null); setWho(null); setWhere(null);
+    setDupOnly(false); setQ(''); setTagF({});
+  };
 
   const cuts = [];
   if (whoIdx >= 0) {
@@ -2382,6 +2438,34 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
 
   return (
     <>
+      {/*
+        Фільтри окремим рядком над панеллю дій.
+        Статус тут був завжди, а тип і облік не фільтрувались ніяк: їх
+        винесли в чипи під назвою речі, і відібрати «усе списане» було
+        можна хіба що очима. Тепер кожна тегова колонка — свій рядок
+        значень, і поруч із кожним стоїть, скільки їх.
+      */}
+      {tagFilters.map((f) => (
+        <div className="filters" key={f.ci}>
+          <span className="filters-k">{f.label}</span>
+          {f.values.map(([v, n]) => (
+            <div key={v}
+              className={'chip' + (tagF[f.ci] === v ? ' on' : '')}
+              onClick={() => setTagF((p) => ({ ...p, [f.ci]: p[f.ci] === v ? null : v }))}>
+              {v}<b>{n}</b>
+            </div>
+          ))}
+        </div>
+      ))}
+
+      {anyFilter && (
+        <div className="filters">
+          <span className="filters-k">Відібрано</span>
+          <span className="filters-n"><b>{list.length}</b> з {items.length}</span>
+          <button className="chip is-clear" onClick={clearFilters}>скинути все</button>
+        </div>
+      )}
+
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Пошук..." />
         {/* фільтри за статусом — лише там, де статус узагалі є: у листі без
