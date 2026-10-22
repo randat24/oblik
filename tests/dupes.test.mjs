@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeSn, findDupes, dupeCount, sameSn, sameId, snOf, dupeLabel,
+  normalizeSn, findDupes, dupeCount, sameSn, sameId, snOf, dupeLabel, crossDupes,
 } from '../lib/dupes.js';
 
 /* Лист, схожий на справжній: №, назва, S/N, статус, у кого, дата, примітка */
@@ -207,4 +207,83 @@ test('підпис групи зрозумілий без коду', () => {
   assert.equal(dupeLabel({ kind: 'sn', value: 'LT-0042' }), 'S/N LT-0042');
   assert.equal(dupeLabel({ kind: 'id', value: '84' }), '№ 84');
   assert.equal(dupeLabel(null), '');
+});
+
+/* ---------- Повтори між листами ---------- */
+
+const sheet = (name, rows) => ({
+  name, cols: COLS,
+  items: rows.map((values, i) => ({ row: i + 2, values })),
+});
+
+test('той самий серійник у двох листах — повтор між листами', () => {
+  const out = crossDupes([
+    sheet('Радейки', [['1', 'DP4400e', 'LT-0042', 'КСП', '', '', '']]),
+    sheet('Кропива', [['1', 'DP4400e', 'lt 0042', 'Видано', 'Максим Д.', '', '']]),
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].sn, 'LT-0042');
+  assert.deepEqual(out[0].sheets, ['Радейки', 'Кропива']);
+  assert.deepEqual(out[0].places.map((p) => p.row), [2, 2]);
+});
+
+test('власний номер між листами повтором не вважаємо', () => {
+  // нумерація в кожному листі своя: «№ 1» у радейках і «№ 1» у ПНВ —
+  // це різні речі
+  const out = crossDupes([
+    sheet('Радейки', [['1', 'DP4400e', 'LT-0042', 'КСП', '', '', '']]),
+    sheet('ПНВ', [['1', 'PVS-14', 'NV-0007', 'КСП', '', '', '']]),
+  ]);
+  assert.deepEqual(out, []);
+});
+
+test('два рядки в одному листі сюди не потрапляють', () => {
+  // це звичайний повтор, і його видно на сторінці самого листа
+  const out = crossDupes([
+    sheet('Радейки', [
+      ['1', 'DP4400e', 'LT-0042', 'КСП', '', '', ''],
+      ['2', 'DP4400e', 'LT-0042', 'КСП', '', '', ''],
+    ]),
+  ]);
+  assert.deepEqual(out, []);
+});
+
+test('кирилиця-двійник ловиться й між листами', () => {
+  const out = crossDupes([
+    sheet('Радейки', [['1', 'Motorola', 'MT-0099', 'КСП', '', '', '']]),
+    sheet('Кропива', [['1', 'Моторола', 'МТ-0099', 'КСП', '', '', '']]),
+  ]);
+  assert.equal(out.length, 1);
+});
+
+test('що розповзлося ширше — показуємо першим', () => {
+  const out = crossDupes([
+    sheet('А', [['1', 'X', 'AA-1', '', '', '', ''], ['2', 'Y', 'BB-2', '', '', '', '']]),
+    sheet('Б', [['1', 'X', 'AA-1', '', '', '', ''], ['2', 'Y', 'BB-2', '', '', '', '']]),
+    sheet('В', [['1', 'X', 'AA-1', '', '', '', '']]),
+  ]);
+  assert.equal(out[0].sn, 'AA-1');
+  assert.equal(out[0].sheets.length, 3);
+  assert.equal(out[1].sheets.length, 2);
+});
+
+test('порожній серійник не зводить різні листи докупи', () => {
+  const out = crossDupes([
+    sheet('Радейки', [['1', 'Ліхтар', '', 'КСП', '', '', '']]),
+    sheet('Кропива', [['1', 'Ніж', '', 'КСП', '', '', '']]),
+  ]);
+  assert.deepEqual(out, []);
+});
+
+test('лист без колонки серійника просто пропускаємо', () => {
+  const out = crossDupes([
+    { name: 'Без номерів', cols: { id: 0, name: 1, snCols: [0] }, items: [{ row: 2, values: ['1', 'X'] }] },
+    sheet('Радейки', [['1', 'X', 'LT-0042', '', '', '', '']]),
+  ]);
+  assert.deepEqual(out, []);
+});
+
+test('порожній перелік листів не ламає пошук', () => {
+  assert.deepEqual(crossDupes([]), []);
+  assert.deepEqual(crossDupes(undefined), []);
 });
