@@ -162,11 +162,26 @@ test('стаж — шість різних номерів підряд', () => {
   assert.equal(new Set(OPENING_MEMBERS.map((m) => m.id)).size, 6, 'ідентифікатори різні');
 });
 
-test('усі шестеро в складі з дня відкриття й без відпусток', () => {
+test('усі в складі з дня відкриття, без відпусток; Денис — до 20.10', () => {
   OPENING_MEMBERS.forEach((m) => {
-    assert.deepEqual(m.periods, [{ start: OPENING_DATE }], m.name);
+    const want = m.id === 'denis' ? [{ start: OPENING_DATE, end: '2026-10-20' }] : [{ start: OPENING_DATE }];
+    assert.deepEqual(m.periods, want, m.name);
     assert.deepEqual(m.vacations, [], m.name);
   });
+});
+
+test('після 20.10 витрати на Дениса не діляться, його борг лишається 2920', () => {
+  const ops = [
+    { id: 'a', type: 'expense', date: '2026-10-19', amount: kop('600'), category: 'var', payer: 'petya', mode: 'auto', status: 'active' },
+    { id: 'b', type: 'expense', date: '2026-10-20', amount: kop('500'), category: 'var', payer: 'petya', mode: 'auto', status: 'active' },
+    { id: 'c', type: 'expense', date: '2026-10-27', amount: kop('500'), category: 'home', payer: 'fess', mode: 'auto', status: 'active' },
+  ];
+  const cfg = { openingCash: OPENING_CASH, openingDiff: OPENING_DIFF };
+  const s19 = compute(OPENING_MEMBERS, ops, cfg, { until: '2026-10-19' });
+  const s27 = compute(OPENING_MEMBERS, ops, cfg);
+  assert.equal(s19.bal.denis, kop('-2920') - kop('100'), '19.10 ще ділиться на шістьох');
+  assert.equal(s27.bal.denis, s19.bal.denis, 'з 20.10 нічого не додається');
+  assert.ok(invariantOk(s27, cfg));
 });
 
 test('початкові рядки читаються назад без втрат', () => {
