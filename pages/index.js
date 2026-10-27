@@ -169,6 +169,16 @@ const IconGear = ({ size = 18 }) => (
     <path d="M10 2.3v2.1M10 15.6v2.1M3.9 3.9l1.5 1.5M14.6 14.6l1.5 1.5M2.3 10h2.1M15.6 10h2.1M3.9 16.1l1.5-1.5M14.6 5.4l1.5-1.5" />
   </svg>
 );
+/* Гаманець для спільного фонду: купюра з монетою — не ящик і не коробка,
+   щоб у меню він не зливався з категоріями майна */
+const IconWallet = ({ size = 18 }) => (
+  <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
+    stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2.8 6.2a1.6 1.6 0 0 1 1.6-1.6h10.2a1.6 1.6 0 0 1 1.6 1.6v8.2a1.6 1.6 0 0 1-1.6 1.6H4.4a1.6 1.6 0 0 1-1.6-1.6z" />
+    <path d="M13.4 9.4h3.8v3h-3.8a1.5 1.5 0 0 1 0-3z" />
+    <path d="M2.8 7.6h10" />
+  </svg>
+);
 const IconLayers = ({ size = 18 }) => (
   <svg className="ico" viewBox="0 0 20 20" width={size} height={size} fill="none"
     stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
@@ -1347,6 +1357,9 @@ export default function Home({ startView }) {
       ? [{ kind: 'people', label: 'Налаштування', icon: <IconGear />, on: view.kind === 'people' }]
       : []),
   ];
+  /* Фонд живе окремою адресою, бо відкритий без входу: вести його
+     вкладкою всередині застосунку означало б тягнути туди й сесію. */
+  const FUND_HREF = '/fond';
   const here = nav.find((n) => n.on);
   const initials = (me.callsign || 'О').slice(0, 2).toUpperCase();
 
@@ -1385,6 +1398,11 @@ export default function Home({ startView }) {
               </button>
             ))}
           </nav>
+
+          <a className="nav-item" href={FUND_HREF}>
+            <IconWallet />
+            <span>Спільний фонд</span>
+          </a>
 
           <div className="side-foot">
             <span>SIGNAL / {VERSION}</span>
