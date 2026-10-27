@@ -364,3 +364,45 @@ test('каса не міняється від витрати, яку оплат�
   assert.equal(after.cash, before.cash, 'готівка в касі та сама');
   assert.ok(after.bal.petya > before.bal.petya - 1, 'платник у плюсі більше, ніж був');
 });
+
+/* ---------- Правка складу ---------- */
+import { leaveGroup, rejoinGroup, addVacation, openPeriod } from '../lib/fund.js';
+
+const P = { id: 'p', name: 'П', order: 1, opening: 0, periods: [{ start: '2000-01-01' }], vacations: [] };
+
+test('вихід закриває відкритий період, баланс не чіпає', () => {
+  const r = leaveGroup(P, '2026-10-20');
+  assert.deepEqual(r.periods, [{ start: '2000-01-01', end: '2026-10-20' }]);
+  const left = { ...P, periods: r.periods };
+  assert.equal(statusOn(left, '2026-10-19'), 'in');
+  assert.equal(statusOn(left, '2026-10-20'), 'out');
+  assert.equal(openPeriod(left), undefined);
+});
+
+test('вийти вдруге або раніше вступу не можна', () => {
+  assert.ok(leaveGroup(P, '1999-01-01').error);
+  assert.ok(leaveGroup(P, '').error);
+  const left = { ...P, periods: leaveGroup(P, '2026-10-20').periods };
+  assert.ok(leaveGroup(left, '2026-11-01').error);
+});
+
+test('повернення додає новий період не раніше виходу', () => {
+  const left = { ...P, periods: leaveGroup(P, '2026-10-20').periods };
+  assert.ok(rejoinGroup(left, '2026-10-10').error);
+  const r = rejoinGroup(left, '2026-11-01');
+  assert.equal(r.periods.length, 2);
+  const back = { ...P, periods: r.periods };
+  assert.equal(statusOn(back, '2026-10-25'), 'out');
+  assert.equal(statusOn(back, '2026-11-02'), 'in');
+  assert.ok(rejoinGroup(back, '2026-12-01').error, 'уже в групі');
+});
+
+test('відпустка: перевірки дат і перетину', () => {
+  assert.ok(addVacation(P, '2026-10-10', '2026-10-05').error);
+  assert.ok(addVacation(P, '', '2026-10-05').error);
+  const r = addVacation(P, '2026-10-10', '2026-10-20');
+  assert.deepEqual(r.vacations, [{ start: '2026-10-10', end: '2026-10-20' }]);
+  const v = { ...P, vacations: r.vacations };
+  assert.ok(addVacation(v, '2026-10-20', '2026-10-25').error, 'перетин по останньому дню');
+  assert.equal(addVacation(v, '2026-10-21', '2026-10-25').vacations.length, 2);
+});
