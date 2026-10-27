@@ -1,5 +1,5 @@
 import { withAuth, currentActor, isGuest, session } from '../../lib/auth';
-import { readFund, addOp, cancelOp, saveMember, seedFund } from '../../lib/fund-store';
+import { readFund, addOp, cancelOp, saveMember, seedFund, setConfig } from '../../lib/fund-store';
 import { kop, compute, invariantOk, categoryOf } from '../../lib/fund';
 import { logChange } from '../../lib/log';
 
@@ -110,6 +110,18 @@ export default withAuth(async (req, res) => {
     await logChange({
       sheet: 'Фонд', action: 'Змінено учасника', field: next.name,
       after: `періодів ${next.periods.length}, відпусток ${next.vacations.length}`,
+    });
+    return res.json({ ok: true });
+  }
+
+  /* ---------- Кого не рахуємо у нових витратах ---------- */
+  if (action === 'excluded') {
+    const { members } = await readFund();
+    const ids = (Array.isArray(req.body.ids) ? req.body.ids : [])
+      .filter((id) => members.some((m) => m.id === id));
+    await setConfig('excluded', [...new Set(ids)].join(','));
+    await logChange({
+      sheet: 'Фонд', action: 'Не рахуємо', after: ids.join(', ') || 'нікого',
     });
     return res.json({ ok: true });
   }
