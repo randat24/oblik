@@ -5426,3 +5426,8 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 .fund-tabs { overflow-x: auto; flex-wrap: nowrap !important; padding-bottom: 2px; scrollbar-width: none; }
 .fund-tabs::-webkit-scrollbar { display: none; }
 .fund-tabs .chip { flex: none; }
+
+.fund-edit { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.fund-edit-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.fund-edit-row input[type="date"] { flex: 1; min-width: 130px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--ob-control-line); border-radius: var(--ob-radius-md); background: var(--ob-bg); color: var(--ob-text); font: inherit; }
+.fund-edit-row .act-btn { flex: none; min-height: 40px; padding: 0 14px; white-space: nowrap; }
