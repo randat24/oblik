@@ -19,6 +19,7 @@ import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
   byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk, shortReport,
 } from '../lib/fund';
+import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
 
 const OFF_KEY = 'fund-off';
 
@@ -27,6 +28,7 @@ const TABS = [
   ['add', 'Витрата'],
   ['cash', 'Каса'],
   ['log', 'Журнал'],
+  ['rep', 'Звіти'],
   ['people', 'Учасники'],
 ];
 
@@ -119,6 +121,7 @@ function Fund() {
           <Journal ops={ops} members={members} nameOf={nameOf} canEdit={canEdit}
             onDone={load} toast={toast} />
         )}
+        {tab === 'rep' && !!members.length && <Reports members={members} ops={ops} config={config} nameOf={nameOf} />}
         {tab === 'people' && <People members={members} state={state} ops={ops} />}
       </div>
     </div>
@@ -227,6 +230,109 @@ function Summary({ state, members, config }) {
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/* ---------- Звіти ---------- */
+
+const MONTHS = ['січень', 'лютий', 'березень', 'квітень', 'травень', 'червень',
+  'липень', 'серпень', 'вересень', 'жовтень', 'листопад', 'грудень'];
+const monthName = (ym) => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(0, 4)}`;
+
+function Reports({ members, ops, config, nameOf }) {
+  const months = useMemo(() => monthsOf(ops, todayIso()), [ops]);
+  const [ym, setYm] = useState(months[0]);
+  const [who, setWho] = useState('');
+  const ms = byOrder(members);
+  const r = useMemo(() => monthReport(members, ops, config, ym), [members, ops, config, ym]);
+  const st = useMemo(() => (who ? memberStatement(members, ops, who) : null), [members, ops, who]);
+  const cats = CATEGORIES.filter((c) => r.cats[c.id].count);
+
+  return (
+    <>
+      <div className="fund-card">
+        <h2 className="fund-h2">Звіт за місяць</h2>
+        <div className="fund-seg">
+          {months.map((m) => (
+            <button key={m} type="button" className={'chip' + (m === ym ? ' on' : '')} onClick={() => setYm(m)}>
+              {monthName(m)}
+            </button>
+          ))}
+        </div>
+
+        <div className="fund-rows">
+          <div className="fund-row"><span className="fund-who">Витрати<i>{r.total.count} шт.</i></span><b className="fund-v">{money(r.total.spent)}</b></div>
+          <div className="fund-row"><span className="fund-who">Внесено в касу</span><b className="fund-v is-pos">{money(r.total.deposits)}</b></div>
+          <div className="fund-row"><span className="fund-who">Видано з каси</span><b className="fund-v">{money(r.total.reimbursed)}</b></div>
+          <div className="fund-row"><span className="fund-who">Витрачено готівкою з каси</span><b className="fund-v">{money(r.total.fromCash)}</b></div>
+          {!!r.total.adjusted && (
+            <div className="fund-row"><span className="fund-who">Коригування</span><b className="fund-v">{signed(r.total.adjusted)}</b></div>
+          )}
+          <div className="fund-row"><span className="fund-who">Каса на початок</span><b className="fund-v">{money(r.cash.start)}</b></div>
+          <div className="fund-row"><span className="fund-who">Каса на кінець</span><b className="fund-v">{money(r.cash.end)}</b></div>
+        </div>
+        {!r.ops && <div className="empty">У цьому місяці операцій не було.</div>}
+      </div>
+
+      {!!cats.length && (
+        <div className="fund-card">
+          <h2 className="fund-h2">За категоріями</h2>
+          <div className="fund-rows">
+            {cats.map((c) => (
+              <div className="fund-row" key={c.id}>
+                <span className="fund-who">{c.name}<i>{r.cats[c.id].count} шт.</i></span>
+                <b className="fund-v">{money(r.cats[c.id].sum)}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="fund-card">
+        <h2 className="fund-h2">По учасниках</h2>
+        <div className="fund-rows">
+          {ms.map((m) => {
+            const e = r.each[m.id];
+            return (
+              <button type="button" className={'fund-row fund-pick' + (who === m.id ? ' is-on' : '')}
+                key={m.id} onClick={() => setWho(who === m.id ? '' : m.id)}>
+                <span className="fund-who">
+                  {m.name}
+                  <i>частка {money(e.share)} · заплатив {money(e.paid)}{e.deposited ? ` · вніс ${money(e.deposited)}` : ''}</i>
+                </span>
+                <b className="fund-v">
+                  <small>{signed(e.start)} →</small> {signed(e.end)}
+                </b>
+              </button>
+            );
+          })}
+        </div>
+        <span className="fund-hint">Натисніть на людину, щоб побачити всю виписку.</span>
+      </div>
+
+      {st && (
+        <div className="fund-card">
+          <h2 className="fund-h2">Виписка: {nameOf(who)}</h2>
+          <div className="fund-row">
+            <span className="fund-who">Початковий баланс</span>
+            <b className="fund-v">{signed(st.opening)}</b>
+          </div>
+          {!st.rows.length && <div className="empty">Операцій, що зачепили баланс, ще немає.</div>}
+          {st.rows.map(({ op, delta, balance }) => (
+            <div className="fund-row" key={op.id || op.row}>
+              <span className="fund-who">{opTitle(op, nameOf)}<i>{dmy(op.date)}</i></span>
+              <b className={'fund-v ' + (delta < 0 ? 'is-neg' : 'is-pos')}>
+                {signed(delta)}<small> → {signed(balance)}</small>
+              </b>
+            </div>
+          ))}
+          <div className="fund-row">
+            <span className="fund-who">Зараз</span>
+            <b className="fund-v">{signed(st.closing)}</b>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 /* ---------- Витрата ---------- */
 
