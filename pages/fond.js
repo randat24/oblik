@@ -31,6 +31,9 @@ const TABS = [
   ['people', 'Учасники'],
 ];
 
+// вкладки, які щось записують: без входу їх не показуємо взагалі
+const EDIT_TABS = ['add', 'cash'];
+
 const dmy = (d) => (d ? d.split('-').reverse().join('.') : '');
 
 export default function FundPage() {
@@ -91,7 +94,7 @@ function Fund() {
         </header>
 
         <nav className="fund-tabs">
-          {TABS.map(([k, label]) => (
+          {TABS.filter(([k]) => canEdit || !EDIT_TABS.includes(k)).map(([k, label]) => (
             <button key={k} className={'chip' + (tab === k ? ' on' : '')} onClick={() => setTab(k)}>
               {label}
             </button>
