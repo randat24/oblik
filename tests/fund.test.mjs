@@ -406,3 +406,50 @@ test('відпустка: перевірки дат і перетину', () => 
   assert.ok(addVacation(v, '2026-10-20', '2026-10-25').error, 'перетин по останньому дню');
   assert.equal(addVacation(v, '2026-10-21', '2026-10-25').vacations.length, 2);
 });
+
+/* ---------- Кого не рахуємо, ручна каса ---------- */
+import { newExpenseParts, cashAdjustment } from '../lib/fund.js';
+import { parseConfig as cfgParse } from '../lib/fund-store.js';
+
+test('налаштування «не рахуємо» знімає людей зі нових витрат', () => {
+  const ids = (x) => x;
+  const base = newExpenseParts(MEMBERS, 'var', '2026-10-27');
+  assert.equal(base.length, 6);
+  const less = newExpenseParts(MEMBERS, 'var', '2026-10-27', ['denis', 'petya']);
+  assert.deepEqual(ids(less), base.filter((id) => id !== 'denis' && id !== 'petya'));
+});
+
+test('разова зміна повертає людину або прибирає ще одну', () => {
+  const ex = ['denis'];
+  assert.ok(newExpenseParts(MEMBERS, 'var', '2026-10-27', ex, ['denis']).includes('denis'));
+  assert.ok(!newExpenseParts(MEMBERS, 'var', '2026-10-27', ex, ['vanya']).includes('vanya'));
+});
+
+test('той, хто поза групою, не з’являється сам, але його можна додати разово', () => {
+  const left = MEMBERS.map((m) => (m.id === 'denis' ? { ...m, periods: [{ start: '2000-01-01', end: '2026-10-20' }] } : m));
+  assert.ok(!newExpenseParts(left, 'var', '2026-10-21').includes('denis'));
+  assert.ok(newExpenseParts(left, 'var', '2026-10-21', [], ['denis']).includes('denis'));
+});
+
+test('ручна сума каси дає коригування з правильним знаком', () => {
+  assert.deepEqual(cashAdjustment(kop('19699'), kop('13199')), { amount: kop('6500'), sign: -1 });
+  assert.deepEqual(cashAdjustment(kop('100'), kop('150.50')), { amount: kop('50.50'), sign: 1 });
+  assert.equal(cashAdjustment(kop('100'), kop('100')), null);
+  assert.equal(cashAdjustment(kop('100'), NaN), null);
+});
+
+test('після ручної суми каса дорівнює вказаній, а інваріант тримається', () => {
+  const cfg = { openingCash: kop('13199'), openingDiff: kop('2') };
+  const ops = [{ id: 'a', type: 'deposit', date: '2026-10-17', amount: kop('2200'), member: 'walter', status: 'active', createdAt: 'a' }];
+  const now = compute(MEMBERS, ops, cfg);
+  const fix = cashAdjustment(now.cash, kop('13199'));
+  const after = compute(MEMBERS, [...ops, { id: 'b', type: 'adjust', date: '2026-10-27', amount: fix.amount, sign: fix.sign, note: 'x', status: 'active', createdAt: 'b' }], cfg);
+  assert.equal(after.cash, kop('13199'));
+  assert.ok(invariantOk(after, cfg));
+});
+
+test('налаштування «не рахуємо» читається зі списку через кому', () => {
+  const c = cfgParse([['Ключ', 'Значення'], ['excluded', 'denis, petya'], ['openingCash', '10']]);
+  assert.deepEqual(c.excluded, ['denis', 'petya']);
+  assert.deepEqual(cfgParse([]).excluded, []);
+});
