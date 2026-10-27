@@ -5361,3 +5361,7 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 
 .fund-short { margin: 0 0 10px; font: 600 16px/1.6 var(--ob-font, inherit); white-space: pre-wrap; color: var(--ob-text, inherit); }
 .fund-copy { margin-bottom: 8px; padding: 6px 12px; border: 1px solid var(--ob-line, #444); border-radius: 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+
+.fund-pick { width: 100%; background: transparent; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.fund-pick.is-on { background: var(--ob-surface-2, rgba(127,127,127,.12)); border-radius: 8px; }
+.fund-v small { opacity: .6; font-weight: 400; }
