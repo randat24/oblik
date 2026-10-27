@@ -1,6 +1,6 @@
 import { withAuth } from '../../lib/auth';
 import { SHEET_CONFIGS, readSheet, readSheets, findColumns } from '../../lib/sheets';
-import { crossDupes } from '../../lib/dupes';
+import { crossDupes, dismissedKeys, withoutDismissed } from '../../lib/dupes';
 import { readStock } from '../../lib/stock';
 import { readLog } from '../../lib/log';
 import { readActs } from '../../lib/acts';
@@ -99,10 +99,12 @@ async function itemsSummary() {
       }
     });
 
+    // номери рядків — за позицією в листі, а не у відфільтрованому списку:
+    // за ними потім видаляють, і порожній рядок посеред листа їх не зсуне
     forCross.push({
       name: cfg.name,
       cols,
-      items: rows.map((r, i) => ({ row: i + 2, values: r })),
+      items: values.slice(1).map((r, i) => ({ row: i + 2, values: r || [] })),
     });
 
     perSheet.push(s);
@@ -113,13 +115,16 @@ async function itemsSummary() {
   });
 
   perSheet.sort((a, b) => b.count - a.count);
+  // рішення «це різні речі» — з окремого листа; його немає, доки ніхто не натиснув
+  let dismissed = new Set();
+  try { dismissed = dismissedKeys(await readSheet('Повтори — не повтор')); } catch { /* листа ще немає */ }
   return {
     total, available, issued, booked,
     perSheet,
     byStatus: [...byStatus.entries()].sort((a, b) => b[1] - a[1]),
     lost,
     // той самий серійник у двох різних листах — одна річ на двох обліках
-    cross: crossDupes(forCross).slice(0, 20),
+    cross: withoutDismissed(crossDupes(forCross), dismissed).slice(0, 20),
   };
 }
 
