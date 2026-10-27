@@ -17,8 +17,10 @@ import {
 } from '../components/base';
 import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
-  byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk,
+  byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk, shortReport,
 } from '../lib/fund';
+
+const OFF_KEY = 'fund-off';
 
 const TABS = [
   ['sum', 'Зведення'],
@@ -180,23 +182,24 @@ const LoginHint = ({ what }) => (
 
 function Summary({ state, members, config }) {
   const ms = byOrder(members);
-  const owe = ms.filter((m) => state.bal[m.id] < 0);
-  const cred = ms.filter((m) => state.bal[m.id] > 0);
-  const even = ms.filter((m) => !state.bal[m.id]);
   const base = config.openingDiff || 0;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(shortReport(state, members)); }
+    catch { /* без буфера користувач виділить текст сам */ }
+  };
 
   return (
     <>
       <div className="fund-card">
-        <div className="fund-cash">
-          <span className="fund-k">Готівка в касі</span>
-          <b className="fund-big">{money(state.cash)} грн</b>
-        </div>
+        <pre className="fund-short">{shortReport(state, members)}</pre>
+        <button type="button" className="fund-copy" onClick={copy}>Копіювати</button>
         <div className="fund-note">
-          Каса мінус сума балансів: <b>{signed(state.diff)}</b> грн.{' '}
-          {state.adjusted
-            ? <>З них початкове розходження {money(base)} і коригування {signed(state.adjusted)}.</>
-            : <>Це початкове розходження {money(base)} грн — воно ні на кого не розподілене.</>}
+          Каса — окрема цифра: вона міняється лише від внесків у касу й виплат з неї.
+          Плюс у людини — це її гроші наперед, з нього віднімаються її частки наступних витрат.
+          {state.diff !== base + state.adjusted || state.diff
+            ? <> Каса мінус сума балансів: {signed(state.diff)} грн
+              {state.adjusted ? <> (початкове {money(base)}, коригування {signed(state.adjusted)})</> : <> — початкове розходження, воно ні на кого не розподілене</>}.</>
+            : null}
         </div>
       </div>
 
@@ -219,22 +222,6 @@ function Summary({ state, members, config }) {
         </div>
       </div>
 
-      {(owe.length > 0 || cred.length > 0) && (
-        <div className="fund-card">
-          <h2 className="fund-h2">Коротко</h2>
-          {owe.length > 0 && (
-            <p className="fund-p">
-              <b>Винні фондові:</b> {owe.map((m) => `${m.name} ${money(-state.bal[m.id])}`).join(', ')}
-            </p>
-          )}
-          {cred.length > 0 && (
-            <p className="fund-p">
-              <b>Фонд винен:</b> {cred.map((m) => `${m.name} ${money(state.bal[m.id])}`).join(', ')}
-            </p>
-          )}
-          {even.length > 0 && <p className="fund-p"><b>У розрахунку:</b> {even.map((m) => m.name).join(', ')}</p>}
-        </div>
-      )}
     </>
   );
 }
@@ -250,13 +237,29 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
   const [category, setCategory] = useState('var');
   const [date, setDate] = useState(todayIso());
   const [payer, setPayer] = useState(ms[0]?.id || '');
-  const [manual, setManual] = useState(false);
-  const [picked, setPicked] = useState([]);
   const [busy, setBusy] = useState(false);
+  // знята галочка живе, доки її не поставлять знову: між витратами й між візитами
+  const [off, setOff] = useState([]);
+  // позначені понад правила (наприклад, той, хто у відпустці) — лише на цю витрату
+  const [extra, setExtra] = useState([]);
+  useEffect(() => {
+    try { setOff(JSON.parse(localStorage.getItem(OFF_KEY) || '[]')); } catch { /* без пам'яті */ }
+  }, []);
+  const saveOff = (next) => {
+    setOff(next);
+    try { localStorage.setItem(OFF_KEY, JSON.stringify(next)); } catch { /* приватне вікно */ }
+  };
 
   const auto = useMemo(() => eligible(members, category, date), [members, category, date]);
-  const parts = manual ? picked : auto;
-  useEffect(() => { if (!manual) setPicked(auto); }, [manual, auto]);
+  const parts = [...auto.filter((id) => !off.includes(id)), ...extra.filter((id) => !auto.includes(id))];
+  const manual = parts.length !== auto.length || parts.some((id) => !auto.includes(id));
+  const toggle = (id) => {
+    if (parts.includes(id)) {
+      if (auto.includes(id)) saveOff([...off, id]);
+      else setExtra(extra.filter((x) => x !== id));
+    } else if (off.includes(id)) saveOff(off.filter((x) => x !== id));
+    else setExtra([...extra, id]);
+  };
 
   const sum = kop(amount);
   const draft = {
@@ -313,8 +316,11 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
       <div className="fund-f">
         <span>На кого ділимо</span>
         <div className="fund-seg">
-          <button type="button" className={'chip' + (!manual ? ' on' : '')} onClick={() => setManual(false)}>За правилами</button>
-          <button type="button" className={'chip' + (manual ? ' on' : '')} onClick={() => setManual(true)}>Обрати вручну</button>
+          {off.length > 0 && (
+            <button type="button" className="chip is-clear" onClick={() => { saveOff([]); setExtra([]); }}>
+              Повернути всіх
+            </button>
+          )}
         </div>
         <div className="fund-parts">
           {ms.map((m) => {
@@ -322,16 +328,15 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
             const st = statusOn(m, date);
             return (
               <label key={m.id} className={'chip' + (on ? ' on' : '')}>
-                <input type="checkbox" checked={on} disabled={!manual}
-                  onChange={() => setPicked((p) => (p.includes(m.id) ? p.filter((x) => x !== m.id) : [...p, m.id]))} />
+                <input type="checkbox" checked={on} onChange={() => toggle(m.id)} />
                 {m.name}{st !== 'in' && <i> · {st === 'vac' ? 'відпустка' : 'не в групі'}</i>}
               </label>
             );
           })}
         </div>
         <span className="fund-hint">
-          {manual
-            ? 'Відмічені ділять витрату порівну. Цей список не міняється при перерахунках.'
+          {off.length > 0
+            ? 'Знята галочка запам’ятовується: поки ви не поставите її знову, людина в витратах не бере участі.'
             : categoryOf(category).hint}
         </span>
       </div>
