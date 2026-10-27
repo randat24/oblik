@@ -110,7 +110,7 @@ function Fund() {
           <Empty canSeed={data.canSeed} onDone={load} toast={toast} />
         )}
 
-        {tab === 'sum' && !!members.length && <Summary state={state} members={members} config={config} />}
+        {tab === 'sum' && !!members.length && <Summary state={state} members={members} config={config} ops={ops} nameOf={nameOf} />}
         {tab === 'add' && (canEdit
           ? <ExpenseForm members={members} ops={ops} config={config} onDone={load} toast={toast} />
           : <LoginHint what="записувати витрати" />)}
@@ -183,48 +183,113 @@ const LoginHint = ({ what }) => (
 
 /* ---------- Зведення ---------- */
 
-function Summary({ state, members, config }) {
+const HUES = [152, 28, 262, 205, 340, 48];
+const hueOf = (m, i) => HUES[(m.order ? m.order - 1 : i) % HUES.length];
+const longDate = (d) => {
+  const [y, mo, da] = d.split('-').map(Number);
+  return `${da} ${['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня',
+    'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'][mo - 1]} ${y}`;
+};
+
+/** Знак операції для стрічки: що вона зробила з касою й людьми */
+const OP_MARK = { expense: '−', deposit: '＋', reimburse: '↗', transfer: '⇄', adjust: '±' };
+
+function Person({ m, i, bal, max, today }) {
+  const st = statusOn(m, today);
+  const w = max ? Math.max(4, Math.round((Math.abs(bal) / max) * 100)) : 0;
+  return (
+    <div className={'fund-person' + (bal < 0 ? ' is-owe' : bal > 0 ? ' is-save' : '')}>
+      <span className="fund-ava" style={{ '--h': hueOf(m, i) }}>{m.name.slice(0, 1)}</span>
+      <div className="fund-pbody">
+        <div className="fund-ptop">
+          <b>{m.name}</b>
+          <span className="fund-pv">{bal ? signed(bal) : '0,00'}</span>
+        </div>
+        <div className="fund-bar"><i style={{ width: `${w}%` }} /></div>
+        <span className="fund-pnote">
+          {balanceWord(bal)}{st !== 'in' && (st === 'vac' ? ' · у відпустці' : ' · не в групі')}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Summary({ state, members, config, ops, nameOf }) {
+  const toast = useToast();
   const ms = byOrder(members);
   const base = config.openingDiff || 0;
+  const today = todayIso();
+  const text = shortReport(state, members);
+  const max = Math.max(1, ...ms.map((m) => Math.abs(state.bal[m.id] || 0)));
+  const owe = ms.filter((m) => (state.bal[m.id] || 0) < 0);
+  const save = ms.filter((m) => (state.bal[m.id] || 0) > 0);
+  const even = ms.filter((m) => !(state.bal[m.id] || 0));
+  const recent = livedOps(ops).slice(-5).reverse();
+
   const copy = async () => {
-    try { await navigator.clipboard.writeText(shortReport(state, members)); }
-    catch { /* без буфера користувач виділить текст сам */ }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Скопійовано — можна вставляти в месенджер');
+    } catch {
+      toast('Не вдалося скопіювати — виділіть текст вручну', { type: 'err' });
+    }
   };
+
+  const group = (title, list, tone) => !!list.length && (
+    <section className="fund-group" key={title}>
+      <h2 className={'fund-gh ' + tone}>{title}<span>{list.length}</span></h2>
+      <div className="fund-people">
+        {list.map((m) => (
+          <Person key={m.id} m={m} i={ms.indexOf(m)} bal={state.bal[m.id] || 0} max={max} today={today} />
+        ))}
+      </div>
+    </section>
+  );
 
   return (
     <>
-      <div className="fund-card">
-        <pre className="fund-short">{shortReport(state, members)}</pre>
-        <button type="button" className="fund-copy" onClick={copy}>Копіювати</button>
-        <div className="fund-note">
-          Каса — окрема цифра: вона міняється лише від внесків у касу й виплат з неї.
-          Плюс у людини — це її гроші наперед, з нього віднімаються її частки наступних витрат.
-          {state.diff !== base + state.adjusted || state.diff
-            ? <> Каса мінус сума балансів: {signed(state.diff)} грн
-              {state.adjusted ? <> (початкове {money(base)}, коригування {signed(state.adjusted)})</> : <> — початкове розходження, воно ні на кого не розподілене</>}.</>
-            : null}
+      <section className="fund-hero">
+        <span className="fund-hero-k">У касі · {longDate(today)}</span>
+        <b className="fund-hero-v">{money(state.cash)}<small> грн</small></b>
+        <div className="fund-hero-row">
+          <span><i>Борг у касу</i><b className="is-neg">{money(-owe.reduce((a, m) => a + state.bal[m.id], 0))}</b></span>
+          <span><i>Накопичено</i><b className="is-pos">{money(save.reduce((a, m) => a + state.bal[m.id], 0))}</b></span>
         </div>
-      </div>
+      </section>
 
-      <div className="fund-card">
-        <h2 className="fund-h2">Баланси</h2>
-        <div className="fund-rows">
-          {ms.map((m) => {
-            const b = state.bal[m.id] || 0;
-            const st = statusOn(m, todayIso());
-            return (
-              <div className="fund-row" key={m.id}>
-                <span className="fund-who">
-                  {m.name}
-                  <i>{balanceWord(b)}{st !== 'in' && (st === 'vac' ? ' · у відпустці' : ' · не в групі')}</i>
-                </span>
-                <b className={'fund-v ' + (b < 0 ? 'is-neg' : b > 0 ? 'is-pos' : '')}>{signed(b)}</b>
+      {group('Борг у касу', owe, 'is-neg')}
+      {group('Накопичено в касі', save, 'is-pos')}
+      {group('У розрахунку', even, '')}
+
+      <section className="fund-msg">
+        <div className="fund-msg-head">
+          <h2 className="fund-gh">Повідомлення для чату</h2>
+          <button type="button" className="fund-copy" onClick={copy}>Копіювати</button>
+        </div>
+        <pre className="fund-bubble">{text}</pre>
+      </section>
+
+      {!!recent.length && (
+        <section className="fund-group">
+          <h2 className="fund-gh">Останні операції</h2>
+          <div className="fund-feed">
+            {recent.map((op) => (
+              <div className="fund-feed-i" key={op.id || op.row}>
+                <span className={'fund-mark t-' + op.type}>{OP_MARK[op.type] || '·'}</span>
+                <span className="fund-who">{opTitle(op, nameOf)}<i>{dmy(op.date)}</i></span>
+                <b className="fund-v">{money(op.amount)}</b>
               </div>
-            );
-          })}
-        </div>
-      </div>
+            ))}
+          </div>
+        </section>
+      )}
 
+      <p className="fund-foot">
+        Каса — окрема цифра: вона міняється лише від внесків у касу й виплат з неї.
+        Плюс у людини — її гроші наперед, з нього віднімаються частки наступних витрат.
+        {(state.diff || state.adjusted) ? <> Каса мінус сума балансів: {signed(state.diff)} грн
+          {state.adjusted ? <> (початкове {money(base)}, коригування {signed(state.adjusted)})</> : <> — початкове розходження, воно ні на кого не розподілене</>}.</> : null}
+      </p>
     </>
   );
 }
