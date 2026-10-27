@@ -287,3 +287,33 @@ test('порожній перелік листів не ламає пошук', 
   assert.deepEqual(crossDupes([]), []);
   assert.deepEqual(crossDupes(undefined), []);
 });
+
+/* ---------- Рішення «це різні речі» ---------- */
+import { dismissedKeys, withoutDismissed } from '../lib/dupes.js';
+
+test('розглянуті ключі читаються з першої колонки, заголовок пропускається', () => {
+  const keys = dismissedKeys([['Ключ', 'Серійник'], ['ABC123', 'abc-123'], [''], ['XYZ9', 'x']]);
+  assert.deepEqual([...keys].sort(), ['ABC123', 'XYZ9']);
+  assert.equal(dismissedKeys([]).size, 0);
+  assert.equal(dismissedKeys(null).size, 0);
+});
+
+test('розглянута група зникає зі списку, решта лишається', () => {
+  const groups = [{ key: 'A1' }, { key: 'B2' }];
+  assert.deepEqual(withoutDismissed(groups, new Set(['A1'])), [{ key: 'B2' }]);
+  assert.equal(withoutDismissed(groups, new Set()).length, 2);
+  assert.equal(withoutDismissed(groups, null).length, 2);
+});
+
+test('порожній рядок посеред листа не зсуває номери в повторах між листами', () => {
+  const mk = (name, rows) => ({
+    name, cols: { name: 0, snCols: [1] },
+    items: rows.map((r, i) => ({ row: i + 2, values: r })),
+  });
+  const g = crossDupes([
+    mk('А', [['a', 'S1'], ['', ''], ['c', 'S2']]),
+    mk('Б', [['x', 'S2']]),
+  ]);
+  assert.equal(g.length, 1);
+  assert.deepEqual(g[0].places.map((p) => [p.sheet, p.row]), [['А', 4], ['Б', 2]]);
+});
