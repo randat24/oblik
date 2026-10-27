@@ -254,12 +254,12 @@ function Summary({ state, members, config, ops, nameOf }) {
         <b className="fund-hero-v">{money(state.cash)}<small> грн</small></b>
         <div className="fund-hero-row">
           <span><i>Борг у касу</i><b className="is-neg">{money(-owe.reduce((a, m) => a + state.bal[m.id], 0))}</b></span>
-          <span><i>Накопичено</i><b className="is-pos">{money(save.reduce((a, m) => a + state.bal[m.id], 0))}</b></span>
+          <span><i>У плюсі (свої)</i><b className="is-pos">{money(save.reduce((a, m) => a + state.bal[m.id], 0))}</b></span>
         </div>
       </section>
 
       {group('Борг у касу', owe, 'is-neg')}
-      {group('Накопичено в касі', save, 'is-pos')}
+      {group('У плюсі — витратили свої', save, 'is-pos')}
       {group('У розрахунку', even, '')}
 
       <section className="fund-msg">
@@ -287,7 +287,7 @@ function Summary({ state, members, config, ops, nameOf }) {
 
       <p className="fund-foot">
         Каса — окрема цифра: вона міняється лише від внесків у касу й виплат з неї.
-        Плюс у людини — її гроші наперед, з нього віднімаються частки наступних витрат.
+        Плюс у людини — це не гроші в касі: вона витратила свої, і з цього плюса віднімаються її частки наступних витрат.
         {(state.diff || state.adjusted) ? <> Каса мінус сума балансів: {signed(state.diff)} грн
           {state.adjusted ? <> (початкове {money(base)}, коригування {signed(state.adjusted)})</> : <> — початкове розходження, воно ні на кого не розподілене</>}.</> : null}
       </p>
