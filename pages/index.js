@@ -21,6 +21,7 @@ import { toCsv, csvName, BOM } from '../lib/csv';
 import { headTags, accountingCol } from '../lib/cards';
 import { findDupes, dupeCount, dupeLabel, sameSn, sameId } from '../lib/dupes';
 import { AuditView } from '../components/reviziya';
+import { DupesView } from '../components/dupes-view';
 import { DeliveryView } from '../components/dostavka';
 
 const VERSION = 'v2.0';
@@ -199,7 +200,7 @@ function BottomNav({ view, sheets, onOpen, onScan, extra = [] }) {
     { key: 'search', label: 'Пошук', icon: <IconSearch size={20} />, on: is('search'), run: () => onOpen({ kind: 'search', name: null }) },
     { key: 'scan', label: 'Скан', icon: <IconQr size={20} />, on: false, run: onScan, accent: true },
     { key: 'audit', label: 'Звірка', icon: <IconCheck />, on: is('audit'), run: () => onOpen({ kind: 'audit', name: null }) },
-    { key: 'more', label: 'Ще', icon: <IconList />, on: ['items', 'ledger', 'stock', 'warehouse', 'log', 'people', 'delivery'].includes(view.kind), run: () => setMore(true) },
+    { key: 'more', label: 'Ще', icon: <IconList />, on: ['items', 'ledger', 'stock', 'warehouse', 'log', 'people', 'delivery', 'dupes'].includes(view.kind), run: () => setMore(true) },
   ];
 
   return (
@@ -290,15 +291,14 @@ function HomeView({ setState, onOpen, me }) {
    * картки поруч.
    */
   if (d.items.cross?.length) {
-    const first = d.items.cross[0];
     attention.push({
       key: 'cross',
       tone: 'bad',
       text: `Один серійник у різних листах: ${d.items.cross.length} — `
         + `${d.items.cross.slice(0, 3).map((x) => `${x.sn} (${x.sheets.join(' + ')})`).join(', ')}`
         + `${d.items.cross.length > 3 ? '…' : ''}`,
-      action: 'Показати',
-      run: () => onOpen({ kind: 'search', name: null, q: first.sn }),
+      action: 'Розібрати',
+      run: () => onOpen({ kind: 'dupes', name: null }),
     });
   }
   if (d.stock.unmarked) {
@@ -1322,6 +1322,7 @@ export default function Home({ startView }) {
     { label: 'Звірка', hint: 'екран', run: () => setView({ kind: 'audit', name: null }) },
     { label: 'Доставки', hint: 'екран', run: () => setView({ kind: 'delivery', name: null }) },
     { label: 'Журнал змін', hint: 'екран', run: () => setView({ kind: 'log', name: null }) },
+    { label: 'Повтори між листами', hint: 'екран', run: () => setView({ kind: 'dupes', name: null }) },
     // цей рядок не показується сам по собі — він стає «Шукати: …», коли є текст
     { query: true, label: 'Шукати', hint: 'пошук', run: (q) => setView({ kind: 'search', name: null, q }) },
   ];
@@ -1353,6 +1354,7 @@ export default function Home({ startView }) {
     { kind: 'delivery', label: 'Доставки', icon: <IconTruck />, on: view.kind === 'delivery', dot: true },
     { kind: 'log', label: 'Журнал', icon: <IconClock />, on: view.kind === 'log' },
     { kind: 'audit', label: 'Звірка', icon: <IconCheck size={18} />, on: view.kind === 'audit' },
+    { kind: 'dupes', label: 'Повтори', icon: <IconList size={18} />, on: view.kind === 'dupes' },
     ...(me.role === 'admin'
       ? [{ kind: 'people', label: 'Налаштування', icon: <IconGear />, on: view.kind === 'people' }]
       : []),
@@ -1488,6 +1490,7 @@ export default function Home({ startView }) {
         )}
         {view.kind === 'log' && <LogView key={view.q || ''} setState={setState} initialQuery={view.q} />}
         {view.kind === 'audit' && <AuditView setState={setState} />}
+        {view.kind === 'dupes' && <DupesView setState={setState} onOpen={setView} />}
         {view.kind === 'people' && me.role === 'admin' && <PeopleView setState={setState} />}
           </main>
         </div>
