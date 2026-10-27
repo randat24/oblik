@@ -1,5 +1,5 @@
-import { withAuth, currentActor, isGuest } from '../../lib/auth';
-import { readFund, addOp, cancelOp, saveMember } from '../../lib/fund-store';
+import { withAuth, currentActor, isGuest, session } from '../../lib/auth';
+import { readFund, addOp, cancelOp, saveMember, seedFund } from '../../lib/fund-store';
 import { kop, compute, invariantOk, categoryOf } from '../../lib/fund';
 import { logChange } from '../../lib/log';
 
@@ -32,6 +32,9 @@ export default withAuth(async (req, res) => {
       ...data,
       // гість бачить усе, але кнопок запису не отримує
       canEdit: !isGuest(),
+      // початковий стан вписує лише адміністратор: це єдине місце, де
+      // числа беруться не з операцій, і повторний запуск подвоїв би їх
+      canSeed: !isGuest() && session(req)?.role === 'admin',
       actor: isGuest() ? '' : currentActor(),
       // перевірку показуємо поруч із даними: якщо вона не зійшлась,
       // людина має побачити це, а не довідатись від бухгалтера
@@ -48,6 +51,24 @@ export default withAuth(async (req, res) => {
 
   const who = currentActor();
   const { action } = req.body || {};
+
+  /* ---------- Початковий стан ---------- */
+  if (action === 'seed') {
+    if (session(req)?.role !== 'admin') {
+      return res.status(403).json({ error: 'Початковий стан вписує адміністратор' });
+    }
+    try {
+      const done = await seedFund();
+      await logChange({
+        sheet: 'Фонд', action: 'Початковий стан',
+        after: `учасників ${done.members}`,
+      });
+      return res.json({ ok: true, ...done });
+    } catch (e) {
+      if (e.already) return res.status(400).json({ error: e.message });
+      throw e;
+    }
+  }
 
   /* ---------- Скасування ---------- */
   if (action === 'cancel') {

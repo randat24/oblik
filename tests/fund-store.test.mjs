@@ -4,7 +4,10 @@ import {
   parseRanges, rangesText, parseMembers, parseOps, parseConfig,
   opRow, memberRow, MEMBER_HEADERS, OP_HEADERS,
 } from '../lib/fund-store.js';
-import { kop } from '../lib/fund.js';
+import { kop, compute, invariantOk } from '../lib/fund.js';
+import {
+  OPENING_MEMBERS, OPENING_CASH, OPENING_DIFF, OPENING_DATE, openingConfigRows,
+} from '../lib/fund-seed.js';
 
 /* ---------- Періоди одним рядком ---------- */
 
@@ -142,4 +145,48 @@ test('порожній лист налаштувань не валить сто�
   const c = parseConfig([]);
   assert.equal(c.openingCash, 0);
   assert.equal(c.openingDiff, 0);
+});
+
+/* ---------- Початковий стан ---------- */
+
+test('початковий стан збігається зі специфікацією', () => {
+  const sum = OPENING_MEMBERS.reduce((a, m) => a + m.opening, 0);
+  assert.equal(sum, kop('13197'), 'сума балансів');
+  assert.equal(OPENING_CASH, kop('13199'), 'готівка');
+  assert.equal(OPENING_DIFF, kop('2'), 'розбіжність');
+});
+
+test('стаж — шість різних номерів підряд', () => {
+  const ranks = OPENING_MEMBERS.map((m) => m.order).sort((a, b) => a - b);
+  assert.deepEqual(ranks, [1, 2, 3, 4, 5, 6]);
+  assert.equal(new Set(OPENING_MEMBERS.map((m) => m.id)).size, 6, 'ідентифікатори різні');
+});
+
+test('усі шестеро в складі з дня відкриття й без відпусток', () => {
+  OPENING_MEMBERS.forEach((m) => {
+    assert.deepEqual(m.periods, [{ start: OPENING_DATE }], m.name);
+    assert.deepEqual(m.vacations, [], m.name);
+  });
+});
+
+test('початкові рядки читаються назад без втрат', () => {
+  const back = parseMembers([MEMBER_HEADERS, ...OPENING_MEMBERS.map(memberRow)]);
+  assert.equal(back.length, 6);
+  assert.deepEqual(back.map((m) => m.opening), OPENING_MEMBERS.map((m) => m.opening));
+  assert.deepEqual(back.map((m) => m.name), OPENING_MEMBERS.map((m) => m.name));
+});
+
+test('налаштування початкового стану — три пари', () => {
+  const c = parseConfig([['Ключ', 'Значення'], ...openingConfigRows()]);
+  assert.equal(c.openingCash, kop('13199'));
+  assert.equal(c.openingDiff, kop('2'));
+  assert.equal(c.openingDate, OPENING_DATE);
+});
+
+test('порожній фонд дає рівно той стан, що в специфікації', () => {
+  const state = compute(OPENING_MEMBERS, [], { openingCash: OPENING_CASH, openingDiff: OPENING_DIFF });
+  assert.equal(state.sum, kop('13197'));
+  assert.equal(state.cash, kop('13199'));
+  assert.equal(state.diff, kop('2'));
+  assert.ok(invariantOk(state, { openingDiff: OPENING_DIFF }));
 });
