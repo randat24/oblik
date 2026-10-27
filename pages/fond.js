@@ -18,11 +18,9 @@ import {
 import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
   byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk, shortReport,
-  openPeriod, leaveGroup, rejoinGroup, addVacation,
+  openPeriod, leaveGroup, rejoinGroup, addVacation, newExpenseParts, cashAdjustment,
 } from '../lib/fund';
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
-
-const OFF_KEY = 'fund-off';
 
 const TABS = [
   ['sum', 'Зведення'],
@@ -123,7 +121,7 @@ function Fund() {
             onDone={load} toast={toast} />
         )}
         {tab === 'rep' && !!members.length && <Reports members={members} ops={ops} config={config} nameOf={nameOf} />}
-        {tab === 'people' && <People members={members} state={state} ops={ops} canEdit={canEdit} onDone={load} toast={toast} />}
+        {tab === 'people' && <People members={members} state={state} ops={ops} config={config} canEdit={canEdit} onDone={load} toast={toast} />}
       </div>
     </div>
   );
@@ -407,28 +405,16 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
   const [date, setDate] = useState(todayIso());
   const [payer, setPayer] = useState(ms[0]?.id || '');
   const [busy, setBusy] = useState(false);
-  // знята галочка живе, доки її не поставлять знову: між витратами й між візитами
-  const [off, setOff] = useState([]);
-  // позначені понад правила (наприклад, той, хто у відпустці) — лише на цю витрату
-  const [extra, setExtra] = useState([]);
-  useEffect(() => {
-    try { setOff(JSON.parse(localStorage.getItem(OFF_KEY) || '[]')); } catch { /* без пам'яті */ }
-  }, []);
-  const saveOff = (next) => {
-    setOff(next);
-    try { localStorage.setItem(OFF_KEY, JSON.stringify(next)); } catch { /* приватне вікно */ }
-  };
-
+  // кого не рахуємо — спільне налаштування з вкладки «Учасники»; тут лише разові зміни
+  const excluded = useMemo(() => config.excluded || [], [config.excluded]);
+  const [flips, setFlips] = useState([]);
   const auto = useMemo(() => eligible(members, category, date), [members, category, date]);
-  const parts = [...auto.filter((id) => !off.includes(id)), ...extra.filter((id) => !auto.includes(id))];
+  const parts = useMemo(
+    () => newExpenseParts(members, category, date, excluded, flips),
+    [members, category, date, excluded, flips],
+  );
   const manual = parts.length !== auto.length || parts.some((id) => !auto.includes(id));
-  const toggle = (id) => {
-    if (parts.includes(id)) {
-      if (auto.includes(id)) saveOff([...off, id]);
-      else setExtra(extra.filter((x) => x !== id));
-    } else if (off.includes(id)) saveOff(off.filter((x) => x !== id));
-    else setExtra([...extra, id]);
-  };
+  const toggle = (id) => setFlips((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]));
 
   const sum = kop(amount);
   const draft = {
@@ -450,7 +436,7 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
         body: { action: 'expense', amount, desc, category, date, payer, mode: manual ? 'manual' : 'auto', participants: parts },
       });
       toast(`Записано: ${money(sum)} грн`);
-      setAmount(''); setDesc('');
+      setAmount(''); setDesc(''); setFlips([]);
       onDone();
     } catch (ex) { saveFailed(toast, ex); } finally { setBusy(false); }
   };
@@ -485,9 +471,9 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
       <div className="fund-f">
         <span>На кого ділимо</span>
         <div className="fund-seg">
-          {off.length > 0 && (
-            <button type="button" className="chip is-clear" onClick={() => { saveOff([]); setExtra([]); }}>
-              Повернути всіх
+          {flips.length > 0 && (
+            <button type="button" className="chip is-clear" onClick={() => setFlips([])}>
+              Як за налаштуванням
             </button>
           )}
         </div>
@@ -498,14 +484,16 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
             return (
               <label key={m.id} className={'chip' + (on ? ' on' : '')}>
                 <input type="checkbox" checked={on} onChange={() => toggle(m.id)} />
-                {m.name}{st !== 'in' && <i> · {st === 'vac' ? 'відпустка' : 'не в групі'}</i>}
+                {m.name}
+                {st !== 'in' && <i> · {st === 'vac' ? 'відпустка' : 'не в групі'}</i>}
+                {st === 'in' && excluded.includes(m.id) && <i> · не рахуємо</i>}
               </label>
             );
           })}
         </div>
         <span className="fund-hint">
-          {off.length > 0
-            ? 'Знята галочка запам’ятовується: поки ви не поставите її знову, людина в витратах не бере участі.'
+          {excluded.length > 0
+            ? 'Хто в «Не рахуємо» — знятий за замовчуванням. Назавжди міняється на вкладці «Учасники»; галочка тут діє лише на цю витрату.'
             : categoryOf(category).hint}
         </span>
       </div>
@@ -537,6 +525,7 @@ const CASH_KINDS = [
   ['deposit', 'Учасник вніс готівку в касу'],
   ['reimburse', 'З каси видали гроші учаснику'],
   ['transfer', 'Один учасник віддав гроші іншому'],
+  ['setcash', 'Вказати суму в касі вручну'],
   ['adjust', 'Перерахували касу: коригування'],
 ];
 
@@ -554,11 +543,31 @@ function CashForm({ members, ops, config, onDone, toast }) {
   const sum = kop(amount);
   const now = compute(members, ops, config);
   const draft = { type, amount: sum, member, to, sign: Number(sign) };
-  const preview = Number.isFinite(sum) && sum > 0 ? effect(draft, members) : null;
+  const isSet = type === 'setcash';
+  const fix = isSet && Number.isFinite(sum) ? cashAdjustment(now.cash, sum) : null;
+  const preview = !isSet && Number.isFinite(sum) && sum > 0 ? effect(draft, members) : null;
 
   const send = async (e) => {
     e.preventDefault();
     if (busy) return;
+    if (isSet) {
+      if (!Number.isFinite(sum) || sum < 0) return toast('Вкажіть, скільки зараз у касі', { type: 'err' });
+      if (!fix) return toast('У касі вже стільки, нічого міняти не треба', { type: 'err' });
+      setBusy(true);
+      try {
+        await api('/api/fund', {
+          method: 'POST', label: 'сума каси',
+          body: {
+            action: 'adjust', amount: money(fix.amount).replace(/\s/g, ''), date, sign: fix.sign,
+            note: `Сума в касі вказана вручну: було ${money(now.cash)}, стало ${money(sum)}${note.trim() ? ` · ${note.trim()}` : ''}`,
+          },
+        });
+        toast(`Каса тепер ${money(sum)}`);
+        setAmount(''); setNote('');
+        onDone();
+      } catch (ex) { saveFailed(toast, ex); } finally { setBusy(false); }
+      return;
+    }
     if (!Number.isFinite(sum) || sum <= 0) return toast('Вкажіть суму більшу за нуль', { type: 'err' });
     if (type === 'transfer' && member === to) return toast('Віддати й отримати мають різні люди', { type: 'err' });
     if (type === 'adjust' && !note.trim()) return toast('Напишіть причину коригування', { type: 'err' });
@@ -583,7 +592,7 @@ function CashForm({ members, ops, config, onDone, toast }) {
         </select>
       </label>
 
-      {type !== 'adjust' && (
+      {type !== 'adjust' && !isSet && (
         <div className="fund-two">
           <label className="fund-f">
             {type === 'transfer' ? 'Хто віддав' : type === 'reimburse' ? 'Кому видали' : 'Хто вніс'}
@@ -611,7 +620,7 @@ function CashForm({ members, ops, config, onDone, toast }) {
       )}
 
       <div className="fund-two">
-        <label className="fund-f">Сума, грн
+        <label className="fund-f">{isSet ? 'Скільки зараз у касі, грн' : 'Сума, грн'}
           <input className="fund-amount" inputMode="decimal" value={amount}
             onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
         </label>
@@ -619,6 +628,19 @@ function CashForm({ members, ops, config, onDone, toast }) {
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
       </div>
+
+      {isSet && (
+        <div className="fund-prev">
+          <div className="fund-row">
+            <span>Каса за журналом</span><b className="fund-v">{money(now.cash)}</b>
+          </div>
+          <div className="fund-row">
+            <span>Різниця</span>
+            <b className="fund-v">{fix ? signed(fix.amount * fix.sign) : 'немає'}</b>
+          </div>
+          <span className="fund-hint">У журнал запишеться коригування з цією різницею й причиною — баланси людей не змінюються.</span>
+        </div>
+      )}
 
       <label className="fund-f">{type === 'adjust' ? 'Причина (обовʼязково)' : 'Коментар'}
         <input value={note} onChange={(e) => setNote(e.target.value)}
@@ -780,9 +802,44 @@ function MemberEdit({ m, onDone, toast }) {
   );
 }
 
-function People({ members, state, ops, canEdit, onDone, toast }) {
+/** Кого не рахуємо у нових витратах — одне налаштування для всіх пристроїв */
+function ExcludeCard({ members, config, canEdit, onDone, toast }) {
+  const [busy, setBusy] = useState(false);
+  const off = config.excluded || [];
+  const flip = async (id) => {
+    if (!canEdit || busy) return;
+    const next = off.includes(id) ? off.filter((x) => x !== id) : [...off, id];
+    setBusy(true);
+    try {
+      await api('/api/fund', { method: 'POST', label: 'налаштування', body: { action: 'excluded', ids: next } });
+      toast(next.includes(id) ? 'Тепер не рахуємо' : 'Знову рахуємо');
+      onDone();
+    } catch (e) { saveFailed(toast, e); } finally { setBusy(false); }
+  };
+  return (
+    <div className="fund-card">
+      <h2 className="fund-h2">Кого не рахуємо</h2>
+      <div className="fund-parts">
+        {byOrder(members).map((m) => (
+          <button key={m.id} type="button" disabled={!canEdit || busy}
+            className={'chip' + (off.includes(m.id) ? ' on' : '')} onClick={() => flip(m.id)}>
+            {off.includes(m.id) ? '✕ ' : ''}{m.name}
+          </button>
+        ))}
+      </div>
+      <span className="fund-hint">
+        Позначені не потрапляють у нові витрати за замовчуванням, але їхній баланс лишається.
+        Старі операції не змінюються. У конкретній витраті людину можна повернути галочкою.
+        {!canEdit && ' Змінювати може той, хто увійшов.'}
+      </span>
+    </div>
+  );
+}
+
+function People({ members, state, ops, config, canEdit, onDone, toast }) {
   return (
     <>
+      <ExcludeCard members={members} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
       {byOrder(members).map((m) => {
         let run = m.opening || 0;
         const lines = [{ date: '', what: 'Початковий баланс', v: null, run }];
