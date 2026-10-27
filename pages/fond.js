@@ -17,7 +17,7 @@ import {
 } from '../components/base';
 import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
-  byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk,
+  byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk, shortReport,
 } from '../lib/fund';
 
 const TABS = [
@@ -180,23 +180,24 @@ const LoginHint = ({ what }) => (
 
 function Summary({ state, members, config }) {
   const ms = byOrder(members);
-  const owe = ms.filter((m) => state.bal[m.id] < 0);
-  const cred = ms.filter((m) => state.bal[m.id] > 0);
-  const even = ms.filter((m) => !state.bal[m.id]);
   const base = config.openingDiff || 0;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(shortReport(state, members)); }
+    catch { /* без буфера користувач виділить текст сам */ }
+  };
 
   return (
     <>
       <div className="fund-card">
-        <div className="fund-cash">
-          <span className="fund-k">Готівка в касі</span>
-          <b className="fund-big">{money(state.cash)} грн</b>
-        </div>
+        <pre className="fund-short">{shortReport(state, members)}</pre>
+        <button type="button" className="fund-copy" onClick={copy}>Копіювати</button>
         <div className="fund-note">
-          Каса мінус сума балансів: <b>{signed(state.diff)}</b> грн.{' '}
-          {state.adjusted
-            ? <>З них початкове розходження {money(base)} і коригування {signed(state.adjusted)}.</>
-            : <>Це початкове розходження {money(base)} грн — воно ні на кого не розподілене.</>}
+          Каса — окрема цифра: вона міняється лише від внесків у касу й виплат з неї.
+          Плюс у людини — це її гроші наперед, з нього віднімаються її частки наступних витрат.
+          {state.diff !== base + state.adjusted || state.diff
+            ? <> Каса мінус сума балансів: {signed(state.diff)} грн
+              {state.adjusted ? <> (початкове {money(base)}, коригування {signed(state.adjusted)})</> : <> — початкове розходження, воно ні на кого не розподілене</>}.</>
+            : null}
         </div>
       </div>
 
@@ -219,22 +220,6 @@ function Summary({ state, members, config }) {
         </div>
       </div>
 
-      {(owe.length > 0 || cred.length > 0) && (
-        <div className="fund-card">
-          <h2 className="fund-h2">Коротко</h2>
-          {owe.length > 0 && (
-            <p className="fund-p">
-              <b>Винні фондові:</b> {owe.map((m) => `${m.name} ${money(-state.bal[m.id])}`).join(', ')}
-            </p>
-          )}
-          {cred.length > 0 && (
-            <p className="fund-p">
-              <b>Фонд винен:</b> {cred.map((m) => `${m.name} ${money(state.bal[m.id])}`).join(', ')}
-            </p>
-          )}
-          {even.length > 0 && <p className="fund-p"><b>У розрахунку:</b> {even.map((m) => m.name).join(', ')}</p>}
-        </div>
-      )}
     </>
   );
 }
