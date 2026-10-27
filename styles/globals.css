@@ -5245,3 +5245,116 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 /* Швидкість пригадування — те, заради чого все це; їй і акцент */
 .h-mt-sum .is-key { border-color: var(--ob-accent-dim-line); }
 .h-mt-sum .is-key i { color: var(--ob-accent); }
+
+/* ========================================================================== */
+/* Спільний фонд                                                               */
+/* ========================================================================== */
+
+/*
+ * Єдина сторінка застосунку, відкрита без входу. Вона вужча за решту —
+ * це касова книга, а не таблиця майна: колонка з числами праворуч і
+ * короткі рядки читаються з телефона, не розсовуючись на весь екран.
+ */
+.fund-wrap { max-width: 640px; margin: 0 auto; padding: 20px 0 40px; }
+
+.fund-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; margin-bottom: 18px;
+}
+.fund-h1 { margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -.035em; text-transform: none; }
+.fund-h1::before { display: none; }
+.fund-sub { display: block; margin-top: 6px; font-size: .76rem; color: var(--ob-muted); }
+/* Гостю чесно написано, що він лише дивиться, а не що кнопок немає */
+.fund-ro {
+  flex: 0 0 auto; padding: 4px 10px; border-radius: 999px;
+  background: var(--ob-elevated); border: 1px solid var(--ob-line);
+  font-size: .66rem; color: var(--ob-muted);
+}
+
+.fund-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+
+.fund-card {
+  background: var(--ob-surface); border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-lg); padding: 16px;
+  display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px;
+}
+.fund-h2 { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: -.02em; }
+.fund-k {
+  font-size: .62rem; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ob-muted);
+}
+.fund-p { margin: 0; font-size: .84rem; line-height: 1.55; color: var(--ob-secondary); }
+.fund-p b { color: var(--ob-text); }
+.fund-hint { font-size: .74rem; color: var(--ob-muted); line-height: 1.5; }
+.fund-small { font-size: .74rem; color: var(--ob-muted); line-height: 1.5; }
+
+.fund-cash { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.fund-big { font-family: var(--ob-mono); font-size: 1.7rem; font-weight: 600; }
+
+/* Перевірка каси стоїть поруч із самою касою: якщо вона не зійшлась,
+   це має побачити той, хто дивиться на число, а не бухгалтер потім */
+.fund-note {
+  font-size: .76rem; line-height: 1.55; color: var(--ob-secondary);
+  background: var(--ob-elevated); border-radius: var(--ob-radius-sm); padding: 10px 12px;
+}
+.fund-bad {
+  margin-bottom: 12px; padding: 10px 12px; border-radius: var(--ob-radius-sm);
+  background: var(--ob-danger-bg); color: var(--ob-danger); font-size: .8rem;
+}
+
+.fund-rows { display: flex; flex-direction: column; }
+.fund-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 0; border-top: 1px solid var(--ob-line);
+}
+.fund-rows .fund-row:first-child, .fund-prev .fund-row:first-child { border-top: 0; }
+.fund-who { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.fund-who i { font-style: normal; font-size: .72rem; color: var(--ob-muted); }
+.fund-v {
+  flex: 0 0 auto; font-family: var(--ob-mono); font-variant-numeric: tabular-nums;
+  white-space: nowrap; font-weight: 600;
+}
+.fund-v i { font-style: normal; color: var(--ob-muted); font-weight: 400; margin-left: 8px; }
+.fund-v.is-pos, .fund-big.is-pos { color: var(--ob-success); }
+.fund-v.is-neg, .fund-big.is-neg { color: var(--ob-danger); }
+
+/* ---- Форми ---- */
+.fund-f { display: flex; flex-direction: column; gap: 6px; font-size: .74rem; color: var(--ob-secondary); }
+.fund-f input, .fund-f select {
+  width: 100%; min-height: 44px; padding: 0 12px;
+  background: var(--ob-elevated); border: 1px solid var(--ob-control-line);
+  border-radius: var(--ob-radius-md); color: var(--ob-text); font-size: .9rem;
+}
+.fund-amount { font-family: var(--ob-mono); font-size: 1.2rem !important; font-weight: 600; }
+.fund-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 420px) { .fund-two { grid-template-columns: 1fr; } }
+.fund-seg { display: flex; gap: 6px; }
+.fund-parts { display: flex; flex-wrap: wrap; gap: 6px; }
+.fund-parts .chip { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.fund-parts input { width: auto; min-height: 0; margin: 0; }
+.fund-parts i { font-style: normal; color: var(--ob-muted); font-size: .68rem; }
+
+/* Попередній перегляд пунктиром: це ще не записане, і воно має так виглядати */
+.fund-prev {
+  border: 1px dashed var(--ob-line); border-radius: var(--ob-radius-md);
+  padding: 10px 12px; display: flex; flex-direction: column;
+}
+
+/* ---- Журнал ---- */
+.fund-op {
+  border-top: 1px solid var(--ob-line); padding: 12px 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.fund-op:first-of-type { border-top: 0; }
+.fund-op.is-off { opacity: .55; }
+.fund-op.is-off .fund-v { text-decoration: line-through; }
+.fund-op .is-off-t { color: var(--ob-danger); }
+.fund-cancel { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.fund-cancel input {
+  flex: 1 1 160px; min-height: 38px; padding: 0 10px;
+  background: var(--ob-elevated); border: 1px solid var(--ob-control-line);
+  border-radius: var(--ob-radius-sm); color: var(--ob-text);
+}
+
+.fund-exp summary { cursor: pointer; font-size: .78rem; color: var(--ob-accent); }
+.fund-exp[open] summary { margin-bottom: 8px; }
