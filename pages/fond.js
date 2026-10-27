@@ -218,7 +218,6 @@ function Person({ m, i, bal, max, today }) {
 function Summary({ state, members, config, ops, nameOf }) {
   const toast = useToast();
   const ms = byOrder(members);
-  const base = config.openingDiff || 0;
   const today = todayIso();
   const text = shortReport(state, members);
   const max = Math.max(1, ...ms.map((m) => Math.abs(state.bal[m.id] || 0)));
@@ -288,8 +287,6 @@ function Summary({ state, members, config, ops, nameOf }) {
       <p className="fund-foot">
         Каса — окрема цифра: вона міняється лише від внесків у касу й виплат з неї.
         Плюс у людини — це не гроші в касі: вона витратила свої, і з цього плюса віднімаються її частки наступних витрат.
-        {(state.diff || state.adjusted) ? <> Каса мінус сума балансів: {signed(state.diff)} грн
-          {state.adjusted ? <> (початкове {money(base)}, коригування {signed(state.adjusted)})</> : <> — початкове розходження, воно ні на кого не розподілене</>}.</> : null}
       </p>
     </>
   );
