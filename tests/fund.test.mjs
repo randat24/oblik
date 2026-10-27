@@ -1,4 +1,6 @@
 import test from 'node:test';
+import { shortReport, plain as plainSum } from '../lib/fund.js';
+import { OPENING_MEMBERS as SEED_MEMBERS, OPENING_CASH as SEED_CASH } from '../lib/fund-seed.js';
 import assert from 'node:assert/strict';
 import {
   kop, money, signed, split, effect, compute, invariantOk, eligible,
@@ -319,4 +321,46 @@ test('учасники впорядковані за стажем', () => {
 test('скасовані не потрапляють у програвання', () => {
   const book = [ex({ amount: 100, status: 'cancelled' }), ex({ amount: 200 })];
   assert.equal(livedOps(book).length, 1);
+});
+
+/* ---------- Короткий звіт ---------- */
+
+test('короткий звіт — рівно у вигляді, який просили', () => {
+  const state = compute(SEED_MEMBERS, [], { openingCash: SEED_CASH, openingDiff: 200 });
+  assert.equal(shortReport(state, SEED_MEMBERS), [
+    'На сьогодні',
+    'в касі 13199',
+    '',
+    'Борг у касу:',
+    'Ваня - 4240',
+    'Фантомас - 3291',
+    'Денис - 2920',
+    'Вальтер - 2186',
+    '',
+    'Накопичено в касі:',
+    'Петя + 11514',
+    'Фесс + 14320',
+  ].join('\n'));
+});
+
+test('порожній розділ у звіті не з’являється', () => {
+  const ms = SEED_MEMBERS.map((m) => ({ ...m, opening: 0 }));
+  const state = compute(ms, [], { openingCash: 500 });
+  assert.equal(shortReport(state, ms), 'На сьогодні\nв касі 5');
+});
+
+test('копійки у звіті лише там, де вони є', () => {
+  assert.equal(plainSum(1234500), '12345');
+  assert.equal(plainSum(1234550), '12345.50');
+  assert.equal(plainSum(-5), '0.05');
+});
+
+test('каса не міняється від витрати, яку оплатила людина з власних', () => {
+  const ms = SEED_MEMBERS;
+  const op = { type: 'expense', date: '2026-10-15', amount: 60000, category: 'var',
+    payer: 'petya', mode: 'auto', status: 'active' };
+  const before = compute(ms, [], { openingCash: SEED_CASH });
+  const after = compute(ms, [op], { openingCash: SEED_CASH });
+  assert.equal(after.cash, before.cash, 'готівка в касі та сама');
+  assert.ok(after.bal.petya > before.bal.petya - 1, 'платник у плюсі більше, ніж був');
 });
