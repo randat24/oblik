@@ -18,6 +18,7 @@ import {
 import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
   byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk, shortReport,
+  openPeriod, leaveGroup, rejoinGroup, addVacation,
 } from '../lib/fund';
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
 
@@ -122,7 +123,7 @@ function Fund() {
             onDone={load} toast={toast} />
         )}
         {tab === 'rep' && !!members.length && <Reports members={members} ops={ops} config={config} nameOf={nameOf} />}
-        {tab === 'people' && <People members={members} state={state} ops={ops} />}
+        {tab === 'people' && <People members={members} state={state} ops={ops} canEdit={canEdit} onDone={load} toast={toast} />}
       </div>
     </div>
   );
@@ -727,7 +728,62 @@ function Journal({ ops, members, nameOf, canEdit, onDone, toast }) {
 
 /* ---------- Учасники ---------- */
 
-function People({ members, state, ops }) {
+/** Правка складу: вихід із групи, повернення, відпустки */
+function MemberEdit({ m, onDone, toast }) {
+  const [date, setDate] = useState(todayIso());
+  const [from, setFrom] = useState(todayIso());
+  const [to, setTo] = useState(todayIso());
+  const [busy, setBusy] = useState(false);
+  const open = openPeriod(m);
+
+  const save = async (next, ok) => {
+    if (next.error) return toast(next.error, { type: 'err' });
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api('/api/fund', {
+        method: 'POST', label: 'зміна учасника',
+        body: { action: 'member', id: m.id, periods: next.periods || m.periods, vacations: next.vacations || m.vacations || [] },
+      });
+      toast(ok);
+      onDone();
+    } catch (e) { saveFailed(toast, e); } finally { setBusy(false); }
+  };
+
+  return (
+    <details className="fund-exp">
+      <summary>Склад і відпустки</summary>
+      <div className="fund-edit">
+        <div className="fund-small">
+          {open ? 'Зараз у групі.' : 'Зараз поза групою — витрати на нього не діляться, баланс лишається.'}
+        </div>
+        <div className="fund-edit-row">
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          {open
+            ? <button type="button" className="act-btn" disabled={busy} onClick={() => save(leaveGroup(m, date), 'Записано: вийшов з групи')}>Вийшов з цієї дати</button>
+            : <button type="button" className="act-btn" disabled={busy} onClick={() => save(rejoinGroup(m, date), 'Записано: повернувся')}>Повернувся з цієї дати</button>}
+        </div>
+
+        <div className="fund-small">Відпустки (обидві дати включно):</div>
+        {(m.vacations || []).map((v) => (
+          <div className="fund-edit-row" key={v.start}>
+            <span>{dmy(v.start)} — {dmy(v.end)}</span>
+            <button type="button" className="act-btn act-del" disabled={busy}
+              onClick={() => save({ vacations: m.vacations.filter((x) => x !== v) }, 'Відпустку прибрано')}>Прибрати</button>
+          </div>
+        ))}
+        <div className="fund-edit-row">
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Початок" />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="Кінець" />
+          <button type="button" className="act-btn" disabled={busy}
+            onClick={() => save(addVacation(m, from, to), 'Відпустку додано')}>Додати</button>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function People({ members, state, ops, canEdit, onDone, toast }) {
   return (
     <>
       {byOrder(members).map((m) => {
@@ -762,6 +818,8 @@ function People({ members, state, ops }) {
                 Відпустки: {m.vacations.map((v) => `${dmy(v.start)} — ${dmy(v.end)}`).join('; ')}
               </div>
             )}
+            {openPeriod(m) ? null : <div className="fund-small">Поза групою з {dmy(m.periods[m.periods.length - 1]?.end)}</div>}
+            {canEdit && <MemberEdit m={m} onDone={onDone} toast={toast} />}
           </div>
         );
       })}
