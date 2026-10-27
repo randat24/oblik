@@ -5431,3 +5431,24 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 .fund-edit-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .fund-edit-row input[type="date"] { flex: 1; min-width: 130px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--ob-control-line); border-radius: var(--ob-radius-md); background: var(--ob-bg); color: var(--ob-text); font: inherit; }
 .fund-edit-row .act-btn { flex: none; min-height: 40px; padding: 0 14px; white-space: nowrap; }
+
+/* ---------- Повтори між листами ---------- */
+.dup-title { margin: 0; font-size: 1.05rem; font-weight: 600; letter-spacing: -.02em; }
+.dup-lead { margin: 0 0 16px; font-size: .84rem; line-height: 1.55; color: var(--ob-secondary); max-width: 62ch; }
+.dup-group { margin-bottom: 18px; border: 1px solid var(--ob-line); border-radius: var(--ob-radius-lg); background: var(--ob-surface); overflow: hidden; }
+.dup-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px; border-bottom: 1px solid var(--ob-line); background: var(--ob-elevated); }
+.dup-sn { font-family: var(--ob-mono); font-size: 1rem; color: var(--ob-warning); }
+.dup-meta { flex: 1; min-width: 160px; font-size: .74rem; color: var(--ob-muted); }
+.dup-places { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.dup-place { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
+.dup-place + .dup-place { border-left: 1px solid var(--ob-line); }
+@media (max-width: 560px) { .dup-place + .dup-place { border-left: 0; border-top: 1px solid var(--ob-line); } }
+.dup-top { display: flex; align-items: center; gap: 8px; }
+.dup-row { font-size: .72rem; color: var(--ob-muted); font-family: var(--ob-mono); }
+.dup-name { font-size: .95rem; font-weight: 600; }
+.dup-fields { margin: 0; display: grid; gap: 4px; }
+.dup-fields div { display: flex; gap: 8px; justify-content: space-between; font-size: .76rem; }
+.dup-fields dt { color: var(--ob-muted); flex: none; }
+.dup-fields dd { margin: 0; text-align: right; color: var(--ob-text); overflow-wrap: anywhere; }
+.dup-act { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 6px; }
+.dup-head .act-btn { flex: none; }
