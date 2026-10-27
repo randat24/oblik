@@ -102,7 +102,11 @@ function Fund() {
           </div>
         )}
 
-        {tab === 'sum' && <Summary state={state} members={members} config={config} />}
+        {!members.length && (
+          <Empty canSeed={data.canSeed} onDone={load} toast={toast} />
+        )}
+
+        {tab === 'sum' && !!members.length && <Summary state={state} members={members} config={config} />}
         {tab === 'add' && (canEdit
           ? <ExpenseForm members={members} ops={ops} config={config} onDone={load} toast={toast} />
           : <LoginHint what="записувати витрати" />)}
@@ -115,6 +119,49 @@ function Fund() {
         )}
         {tab === 'people' && <People members={members} state={state} ops={ops} />}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Порожній фонд.
+ *
+ * Початковий стан вписується один раз і тільки звідси: доступу до
+ * таблиці з-поза застосунку немає, а руками шість рядків із копійками
+ * набирають з помилками.
+ */
+function Empty({ canSeed, onDone, toast }) {
+  const [busy, setBusy] = useState(false);
+  const seed = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await api('/api/fund', { method: 'POST', label: 'початковий стан', body: { action: 'seed' } });
+      toast(`Записано учасників: ${r.members}`);
+      onDone();
+    } catch (e) { saveFailed(toast, e); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fund-card">
+      <h2 className="fund-h2">Фонд ще порожній</h2>
+      <p className="fund-p">
+        Початковий стан — шестеро з балансами й каса 13 199,00 грн, із них
+        2,00 грн розходження, яке ні на кого не розподілене.
+      </p>
+      {canSeed
+        ? (
+          <>
+            <p className="fund-hint">
+              Записується один раз. Якщо учасники вже є, кнопка нічого не
+              зробить: повторний запуск подвоїв би всім початкові баланси.
+            </p>
+            <button className="btn" onClick={seed} disabled={busy}>
+              {busy ? 'Записуємо…' : 'Вписати початковий стан'}
+            </button>
+          </>
+        )
+        : <p className="fund-hint">Вписати його може адміністратор застосунку.</p>}
     </div>
   );
 }
