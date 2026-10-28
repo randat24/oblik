@@ -453,3 +453,63 @@ test('налаштування «не рахуємо» читається зі �
   assert.deepEqual(c.excluded, ['denis', 'petya']);
   assert.deepEqual(cfgParse([]).excluded, []);
 });
+
+/* ---------- Власник каси ---------- */
+import { ownerRecalcPlan, withOwner } from '../lib/fund.js';
+
+const OWNER = { id: 'alex', name: 'Алекс', order: 7, opening: 0, periods: [{ start: '2000-01-01' }], vacations: [] };
+const mkExp = (id, sum, participants, extra = {}) => ({
+  id, type: 'expense', date: '2026-10-21', amount: kop(sum), category: 'var', payer: 'fess',
+  mode: 'manual', participants, status: 'active', createdAt: id, ...extra,
+});
+
+test('у перерахунок потрапляють лише чинні ручні витрати без власника', () => {
+  const ops = [
+    mkExp('a', '100', ['vanya', 'fess']),
+    mkExp('b', '100', ['vanya', 'alex']),
+    mkExp('c', '100', ['vanya'], { status: 'cancelled' }),
+    mkExp('d', '100', [], { mode: 'auto' }),
+    { id: 'e', type: 'deposit', date: '2026-10-21', amount: 1, member: 'vanya', status: 'active', createdAt: 'e' },
+  ];
+  assert.deepEqual(ownerRecalcPlan(ops, 'alex').map((o) => o.id), ['a']);
+});
+
+test('новий запис зберігає склад і додає власника, примітка не губиться', () => {
+  const old = mkExp('a', '100', ['vanya', 'fess'], { note: 'магазин' });
+  const n = withOwner(old, 'alex', { id: 'n1', at: 'T', who: 'F' });
+  assert.deepEqual(n.participants, ['vanya', 'fess', 'alex']);
+  assert.equal(n.note, 'магазин · Перерахунок: додано власника каси');
+  assert.equal(n.status, 'active');
+  assert.equal(n.id, 'n1');
+  assert.deepEqual(old.participants, ['vanya', 'fess'], 'старий запис не змінюється');
+});
+
+test('після перерахунку з власником усе сходиться, інваріант тримається', () => {
+  const cfg = CFG;
+  const before = [mkExp('a', '600', ['vanya', 'fess'])];
+  const members = [...MEMBERS, OWNER];
+  const old = ownerRecalcPlan(before, 'alex');
+  const after = [
+    { ...before[0], status: 'cancelled' },
+    ...old.map((o, i) => withOwner(o, 'alex', { id: `n${i}`, at: 'T', who: 'F' })),
+  ];
+  const s = compute(members, after, cfg);
+  assert.equal(s.bal.vanya, MEMBERS.find((m) => m.id === 'vanya').opening - kop('200'));
+  assert.equal(s.bal.alex, -kop('200'));
+  assert.equal(s.bal.fess, MEMBERS.find((m) => m.id === 'fess').opening + kop('600') - kop('200'));
+  assert.ok(invariantOk(s, cfg));
+});
+
+test('короткий звіт не показує власника каси, а решта лишається', () => {
+  const members = [...MEMBERS, OWNER];
+  const s = compute(members, [mkExp('a', '600', ['vanya', 'fess', 'alex'])], { openingCash: 0 });
+  const text = shortReport(s, members, 'alex');
+  assert.ok(!text.includes('Алекс'));
+  assert.ok(text.includes('Ваня'));
+  assert.ok(shortReport(s, members).includes('Алекс'), 'без вказаного власника він як усі');
+});
+
+test('налаштування власника каси читається', () => {
+  assert.equal(cfgParse([['Ключ', 'Значення'], ['owner', 'alex']]).owner, 'alex');
+  assert.equal(cfgParse([]).owner, '');
+});

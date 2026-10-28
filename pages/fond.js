@@ -19,6 +19,7 @@ import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
   byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk, shortReport,
   openPeriod, leaveGroup, rejoinGroup, addVacation, newExpenseParts, cashAdjustment,
+  ownerRecalcPlan,
 } from '../lib/fund';
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
 
@@ -218,9 +219,10 @@ function Person({ m, i, bal, max, today }) {
 
 function Summary({ state, members, config, ops, nameOf }) {
   const toast = useToast();
-  const ms = byOrder(members);
+  // власник каси бере участь у витратах, але в списках боргів його немає
+  const ms = byOrder(members).filter((m) => m.id !== config.owner);
   const today = todayIso();
-  const text = shortReport(state, members);
+  const text = shortReport(state, members, config.owner);
   const max = Math.max(1, ...ms.map((m) => Math.abs(state.bal[m.id] || 0)));
   const owe = ms.filter((m) => (state.bal[m.id] || 0) < 0);
   const save = ms.filter((m) => (state.bal[m.id] || 0) > 0);
@@ -805,6 +807,51 @@ function MemberEdit({ m, onDone, toast }) {
   );
 }
 
+/** Власник каси: додається одним кліком, з перерахунком уже записаних витрат */
+function OwnerCard({ members, ops, config, canEdit, onDone, toast }) {
+  const [name, setName] = useState('Алекс');
+  const [busy, setBusy] = useState(false);
+  if (config.owner) {
+    const o = members.find((m) => m.id === config.owner);
+    return (
+      <div className="fund-card">
+        <h2 className="fund-h2">Власник каси: {o?.name || config.owner}</h2>
+        <span className="fund-hint">
+          Бере участь у всіх витратах нарівні з іншими, але в списках боргу й плюсів не показується:
+          його частку покриває каса.
+        </span>
+      </div>
+    );
+  }
+  if (!canEdit) return null;
+  const count = ownerRecalcPlan(ops, 'alex').length;
+  const add = async () => {
+    if (busy) return;
+    if (!confirm(`Додати «${name}» власником каси й перерахувати витрат: ${count}?\n\nСтарі записи буде скасовано з причиною, замість них зʼявляться нові вже з ним.`)) return;
+    setBusy(true);
+    try {
+      const d = await api('/api/fund', { method: 'POST', label: 'власник каси', body: { action: 'owner', name } });
+      toast(`Готово: перераховано витрат ${d.recalculated}`);
+      onDone();
+    } catch (e) { saveFailed(toast, e); } finally { setBusy(false); }
+  };
+  return (
+    <div className="fund-card">
+      <h2 className="fund-h2">Власник каси</h2>
+      <span className="fund-hint">
+        Додається учасником і береться в усі витрати, але в списках боргу й плюсів його не буде.
+        Наразі витрат для перерахунку: {count}.
+      </span>
+      <div className="fund-edit-row">
+        <input value={name} onChange={(e) => setName(e.target.value)} aria-label="Імʼя" />
+        <button type="button" className="act-btn" disabled={busy || !name.trim()} onClick={add}>
+          Додати й перерахувати
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Кого не рахуємо у нових витратах — одне налаштування для всіх пристроїв */
 function ExcludeCard({ members, config, canEdit, onDone, toast }) {
   const [busy, setBusy] = useState(false);
@@ -842,6 +889,7 @@ function ExcludeCard({ members, config, canEdit, onDone, toast }) {
 function People({ members, state, ops, config, canEdit, onDone, toast }) {
   return (
     <>
+      <OwnerCard members={members} ops={ops} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
       <ExcludeCard members={members} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
       {byOrder(members).map((m) => {
         let run = m.opening || 0;
