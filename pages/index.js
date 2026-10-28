@@ -382,7 +382,7 @@ function HomeView({ setState, onOpen, me }) {
                 <th className="col-num">В наявності</th>
                 <th className="col-num">На руках</th>
                 <th className="col-num">За док.</th>
-                <th />
+                <th><span className="sr-only">Дії</span></th>
               </tr>
             </thead>
             <tbody>
@@ -520,7 +520,7 @@ function HomeView({ setState, onOpen, me }) {
                     <th className="col-num">Місць</th>
                     <th className="col-num">Везти, кг</th>
                     <th>Ще не поставлено</th>
-                    <th />
+                    <th><span className="sr-only">Дії</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1413,7 +1413,8 @@ export default function Home({ startView }) {
         </aside>
 
         <div className="shell">
-          <div className="topbar">
+          <div className="topbar" role="banner">
+            <h1 className="sr-only">{here ? here.label : 'Огляд'}</h1>
             <div className="crumb">
               <span className="mobile-mark" aria-hidden="true">О</span>
               <span className="crumb-root">Облік майна</span>

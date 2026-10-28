@@ -79,13 +79,13 @@ export function Sheet({ title, onBack, onClose, children }) {
   return (
     <div className="fund-sheet-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="fund-sheet" role="dialog" aria-modal="true" aria-label={title}>
-        <header className="fund-sheet-h">
+        <div className="fund-sheet-h">
           {onBack
             ? <button type="button" className="fund-icon-btn" onClick={onBack} aria-label="Назад"><IcoBack size={20} /></button>
             : <span className="fund-icon-btn is-ghost" />}
           <h2>{title}</h2>
           <button type="button" className="fund-icon-btn" onClick={onClose} aria-label="Закрити"><IcoClose size={20} /></button>
-        </header>
+        </div>
         <div className="fund-sheet-b">{children}</div>
       </div>
     </div>
