@@ -13,8 +13,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Head from 'next/head';
 import {
-  api, ToastCtx, ToastHost, useToasts, useToast, saveFailed, todayStr,
-} from '../components/base';
+  api, ToastCtx, ToastHost, useToasts, useToast, saveFailed, } from '../components/base';
 import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
   byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk, shortReport,

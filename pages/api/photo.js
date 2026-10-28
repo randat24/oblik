@@ -16,7 +16,7 @@ export default withAuth(async (req, res) => {
   let stream, mimeType;
   try {
     ({ stream, mimeType } = await getPhotoStream(fileId));
-  } catch (err) {
+  } catch {
     return res.status(404).json({ error: 'Фото не знайдено' });
   }
 

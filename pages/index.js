@@ -4129,7 +4129,7 @@ function WarehouseView({ setState, focusCode, onOpen }) {
   const loadBoxes = useCallback(async () => {
     try {
       setBoxes(await api('/api/boxes'));
-    } catch (e) {
+    } catch {
       // вміст — доповнення до картки: без нього склад має лишатись робочим
       setBoxes({ lines: [], units: [], names: [], people: [], accountingOptions: [] });
     }
@@ -4835,7 +4835,7 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
     setItems((p) => p.map((x, j) => (j === i ? { cells: { ...h.cells }, row: h.row } : x)));
   const unbind = (i) => setItems((p) => p.map((x, j) => {
     if (j !== i) return x;
-    const { row, ...rest } = x;
+    const rest = { ...x }; delete rest.row;
     return rest;
   }));
 
