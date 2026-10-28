@@ -811,6 +811,7 @@ function MemberEdit({ m, onDone, toast }) {
 function OwnerCard({ members, ops, config, canEdit, onDone, toast }) {
   const [name, setName] = useState('Алекс');
   const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(false);
   if (config.owner) {
     const o = members.find((m) => m.id === config.owner);
     return (
@@ -825,13 +826,15 @@ function OwnerCard({ members, ops, config, canEdit, onDone, toast }) {
   }
   if (!canEdit) return null;
   const count = ownerRecalcPlan(ops, 'alex').length;
+  // підтвердження на самій сторінці: системне вікно confirm() у вбудованих
+  // браузерах мовчки блокується, і кнопка здавалась би мертвою
   const add = async () => {
     if (busy) return;
-    if (!confirm(`Додати «${name}» власником каси й перерахувати витрат: ${count}?\n\nСтарі записи буде скасовано з причиною, замість них зʼявляться нові вже з ним.`)) return;
     setBusy(true);
     try {
       const d = await api('/api/fund', { method: 'POST', label: 'власник каси', body: { action: 'owner', name } });
       toast(`Готово: перераховано витрат ${d.recalculated}`);
+      setAsk(false);
       onDone();
     } catch (e) { saveFailed(toast, e); } finally { setBusy(false); }
   };
@@ -843,11 +846,27 @@ function OwnerCard({ members, ops, config, canEdit, onDone, toast }) {
         Наразі витрат для перерахунку: {count}.
       </span>
       <div className="fund-edit-row">
-        <input value={name} onChange={(e) => setName(e.target.value)} aria-label="Імʼя" />
-        <button type="button" className="act-btn" disabled={busy || !name.trim()} onClick={add}>
-          Додати й перерахувати
-        </button>
+        <input value={name} onChange={(e) => { setName(e.target.value); setAsk(false); }} aria-label="Імʼя" />
+        {!ask && (
+          <button type="button" className="act-btn" disabled={!name.trim()} onClick={() => setAsk(true)}>
+            Додати й перерахувати
+          </button>
+        )}
       </div>
+      {ask && (
+        <div className="fund-edit">
+          <span className="fund-small">
+            Додати «{name}» власником каси й перерахувати витрат: {count}? Старі записи буде скасовано
+            з причиною, замість них зʼявляться нові вже з ним.
+          </span>
+          <div className="fund-edit-row">
+            <button type="button" className="act-btn" disabled={busy} onClick={add}>
+              {busy ? 'Перераховуємо…' : 'Так, перерахувати'}
+            </button>
+            <button type="button" className="act-btn" disabled={busy} onClick={() => setAsk(false)}>Ні</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
