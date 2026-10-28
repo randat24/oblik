@@ -5453,3 +5453,5 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 .dup-act { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 6px; }
 .dup-head .act-btn { flex: none; }
 .fund-edit-row input:not([type="date"]) { flex: 1; min-width: 120px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--ob-control-line); border-radius: var(--ob-radius-md); background: var(--ob-bg); color: var(--ob-text); font: inherit; }
+.fund-check { flex-direction: row; align-items: center; }
+.fund-check input { width: auto; min-height: 0; margin-right: 8px; }
