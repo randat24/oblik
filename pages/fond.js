@@ -426,7 +426,20 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
     () => byOrder(members).map((m) => m.id).filter((id) => excluded.includes(id) === flips.includes(id)),
     [members, excluded, flips],
   );
-  const use = byDays ? pool : parts;
+  // окремі дні людини: хто тут вказаний, платить лише за них і потрапляє в коло, навіть якщо був знятий
+  const [ranges, setRanges] = useState({});
+  const [rWho, setRWho] = useState(ms[0]?.id || '');
+  const [rFrom, setRFrom] = useState(monthBounds(todayIso()).from);
+  const [rTo, setRTo] = useState(monthBounds(todayIso()).to);
+  const poolAll = useMemo(
+    () => byOrder(members).map((m) => m.id).filter((id) => pool.includes(id) || id in ranges),
+    [members, pool, ranges],
+  );
+  const addRange = () => {
+    if (!rWho || !rFrom || !rTo || rFrom > rTo) return toast('Вкажіть людину й дні: «з» не пізніше за «по»', { type: 'err' });
+    setRanges((r) => ({ ...r, [rWho]: { from: rFrom, to: rTo } }));
+  };
+  const use = byDays ? poolAll : parts;
   const manual = byDays || parts.length !== auto.length || parts.some((id) => !auto.includes(id));
   const toggle = (id) => setFlips((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]));
   const periodDays = byDays ? daysOf(pFrom, pTo).length : 0;
@@ -435,7 +448,7 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
   const draft = {
     type: 'expense', amount: sum, date, category, payer,
     mode: manual ? 'manual' : 'auto', participants: use,
-    ...(byDays ? { periodFrom: pFrom, periodTo: pTo } : {}),
+    ...(byDays ? { periodFrom: pFrom, periodTo: pTo, ranges } : {}),
   };
   const preview = Number.isFinite(sum) && sum > 0 && use.length && (!byDays || periodDays)
     ? effect(draft, members) : null;
@@ -453,11 +466,11 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
         body: {
           action: 'expense', amount, desc, category, date, payer,
           mode: manual ? 'manual' : 'auto', participants: use,
-          ...(byDays ? { periodFrom: pFrom, periodTo: pTo } : {}),
+          ...(byDays ? { periodFrom: pFrom, periodTo: pTo, ranges } : {}),
         },
       });
       toast(`Записано: ${money(sum)} грн`);
-      setAmount(''); setDesc(''); setFlips([]);
+      setAmount(''); setDesc(''); setFlips([]); setRanges({});
       onDone();
     } catch (ex) { saveFailed(toast, ex); } finally { setBusy(false); }
   };
@@ -508,6 +521,28 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
               ? `Діб: ${periodDays}. Кожна доба ділиться між тими, хто був у групі цього дня: хто прожив частину періоду, платить лише за свої дні.`
               : 'Вкажіть період: «з» не пізніше за «по».'}
           </span>
+          <div className="fund-f">
+            <span>Окремі дні для людини</span>
+            <div className="fund-edit-row">
+              <select value={rWho} onChange={(e) => setRWho(e.target.value)} aria-label="Людина">
+                {ms.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+              <input type="date" value={rFrom} onChange={(e) => setRFrom(e.target.value)} aria-label="З" />
+              <input type="date" value={rTo} onChange={(e) => setRTo(e.target.value)} aria-label="По" />
+              <button type="button" className="act-btn" onClick={addRange}>Задати</button>
+            </div>
+            {Object.entries(ranges).map(([id, r]) => (
+              <div className="fund-edit-row" key={id}>
+                <span>{members.find((m) => m.id === id)?.name}: {dmy(r.from)} — {dmy(r.to)}</span>
+                <button type="button" className="act-btn act-del"
+                  onClick={() => setRanges((x) => { const n = { ...x }; delete n[id]; return n; })}>Прибрати</button>
+              </div>
+            ))}
+            <span className="fund-hint">
+              Хто тут вказаний, платить лише за ці дні, навіть якщо в групі був довше чи коротше.
+              Решта рахується за складом групи.
+            </span>
+          </div>
         </div>
       )}
 
@@ -761,6 +796,9 @@ function Journal({ ops, members, nameOf, canEdit, onDone, toast }) {
                 {op.payer === 'cash' ? 'з каси фонду' : `платив ${nameOf(op.payer)}`} ·{' '}
                 {op.mode === 'manual' ? 'вручну' : 'за правилами'}
                 {op.periodFrom && <> · по днях {dmy(op.periodFrom)}–{dmy(op.periodTo)}</>}
+                {op.periodFrom && Object.keys(op.ranges || {}).length > 0 && (
+                  <> · окремі дні: {Object.entries(op.ranges).map(([id, r]) => `${nameOf(id)} ${dmy(r.from)}–${dmy(r.to)}`).join(', ')}</>
+                )}
                 <br />
                 Частки: {e.parts.map((id) => `${nameOf(id)} ${money(e.shares[id])}`).join(', ')}
               </div>
