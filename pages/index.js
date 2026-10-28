@@ -1,107 +1,56 @@
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
-
-const api = async (url, opts = {}) => {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  if (res.status === 401) throw new Error('UNAUTHED');
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Помилка');
-  return data;
-};
-
-function statusColor(s) {
-  const v = (s || '').toLowerCase();
-  if (v.includes('видан') || v.includes('выдан')) return 'var(--green)';
-  if (v.includes('втрач') || v.includes('утер')) return 'var(--red)';
-  if (v.includes('ксп') || v.includes('склад')) return 'var(--blue)';
-  if (v.includes('спис')) return 'var(--gray)';
-  return 'var(--amber)';
-}
-
-/* ---------- Логін ---------- */
-function Login({ onOk }) {
-  const [pw, setPw] = useState('');
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const submit = async () => {
-    setBusy(true);
-    setErr('');
-    try {
-      await api('/api/login', { method: 'POST', body: { password: pw } });
-      onOk();
-    } catch (e) {
-      setErr('Невірний пароль');
-    }
-    setBusy(false);
-  };
-
-  return (
-    <div className="login-wrap">
-      <div className="login-box">
-        <h1 style={{ fontSize: '1.1rem', marginBottom: 18 }}>Облік майна</h1>
-        <label>Пароль</label>
-        <input
-          type="password"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
-          style={{ width: '100%' }}
-          autoFocus
-        />
-        <button className="btn" style={{ width: '100%', marginTop: 16 }} onClick={submit} disabled={busy}>
-          {busy ? '...' : 'Увійти'}
-        </button>
-        {err && <div className="err">{err}</div>}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- Модальні вікна ---------- */
-function Modal({ title, children, onCancel, onSave, saveLabel = 'Зберегти', busy }) {
-  return (
-    <div className="overlay" onClick={(e) => e.target.className === 'overlay' && onCancel()}>
-      <div className="modal">
-        <h2>{title}</h2>
-        {children}
-        <div className="modal-actions">
-          <button className="btn-cancel" onClick={onCancel}>Скасувати</button>
-          <button className="btn-save" onClick={onSave} disabled={busy}>
-            {busy ? '...' : saveLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+import LoginForm from '../components/LoginForm';
+import Modal from '../components/Modal';
+import ItemsTable from '../components/ItemsTable';
+import ItemsCards from '../components/ItemsCards';
+import CommandPalette from '../components/CommandPalette';
+import { useToast, ToastViewport } from '../hooks/useToast';
+import { useHotkeys } from '../hooks/useHotkeys';
+import { loginApi, sheetApi, itemApi, archiveApi, ledgerApi, warehouseApi, searchApi } from '../services/api';
+import { statusColor } from '../constants/status';
+import { VIEW_KIND, DEFAULT_VIEW } from '../constants/view';
 
 /* ---------- Головна ---------- */
 export default function Home() {
   const [authed, setAuthed] = useState(null);
   const [sheets, setSheets] = useState([]);
-  const [view, setView] = useState({ kind: 'search', name: null });
+  const [view, setView] = useState(DEFAULT_VIEW);
   const [state, setState] = useState('');
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const { toast, push, clear } = useToast();
+
+  useHotkeys(
+    {
+      'ctrl+f': (event) => {
+        event.preventDefault();
+        setView(DEFAULT_VIEW);
+        setTimeout(() => document.querySelector('.search-input')?.focus(), 0);
+      },
+      'ctrl+k': () => setPaletteOpen(true),
+      escape: () => {
+        // Відкрите вікно закриває Esc саме
+        if (!document.querySelector('.overlay')) setView(DEFAULT_VIEW);
+      },
+    },
+    [sheets]
+  );
 
   useEffect(() => {
-    api('/api/login')
+    loginApi.check()
       .then((d) => setAuthed(d.authed || !d.required))
       .catch(() => setAuthed(false));
   }, []);
 
   useEffect(() => {
     if (!authed) return;
-    api('/api/sheet')
+    sheetApi.list()
       .then((d) => setSheets(d.sheets))
       .catch((e) => setState('помилка: ' + e.message));
   }, [authed]);
 
   if (authed === null) return <div className="loading">Завантаження…</div>;
-  if (!authed) return <Login onOk={() => setAuthed(true)} />;
+  if (!authed) return <LoginForm onOk={() => setAuthed(true)} />;
 
   return (
     <>
@@ -113,10 +62,7 @@ export default function Home() {
         </header>
 
         <div className="tabs">
-          <div
-            className={'tab' + (view.kind === 'search' ? ' active' : '')}
-            onClick={() => setView({ kind: 'search', name: null })}
-          >
+          <div className={'tab' + (view.kind === VIEW_KIND.SEARCH ? ' active' : '')} onClick={() => setView(DEFAULT_VIEW)}>
             🔍 Пошук
           </div>
           {sheets.map((s) => (
@@ -130,10 +76,20 @@ export default function Home() {
           ))}
         </div>
 
-        {view.kind === 'search' && <SearchView sheets={sheets} setState={setState} onOpen={setView} />}
-        {view.kind === 'items' && <ItemsView key={view.name} name={view.name} setState={setState} />}
-        {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
-        {view.kind === 'warehouse' && <WarehouseView setState={setState} />}
+        {view.kind === VIEW_KIND.SEARCH && <SearchView sheets={sheets} setState={setState} onOpen={setView} />}
+        {view.kind === VIEW_KIND.ITEMS && <ItemsView key={view.name} name={view.name} setState={setState} push={push} />}
+        {view.kind === VIEW_KIND.LEDGER && <LedgerView key={view.name} name={view.name} setState={setState} />}
+        {view.kind === VIEW_KIND.WAREHOUSE && <WarehouseView setState={setState} />}
+        <CommandPalette
+          open={paletteOpen}
+          sheets={sheets}
+          onClose={() => setPaletteOpen(false)}
+          onOpen={(id) => {
+            const s = sheets.find((x) => x.name === id);
+            if (s) setView({ kind: s.kind, name: s.name });
+          }}
+        />
+        <ToastViewport toast={toast} clear={clear} />
       </div>
     </>
   );
@@ -150,7 +106,7 @@ function SearchView({ setState, onOpen }) {
     setBusy(true);
     setState('пошук…');
     try {
-      const d = await api('/api/search?q=' + encodeURIComponent(q.trim()));
+      const d = await searchApi.query(q.trim());
       setRes(d);
       setState('готово');
     } catch (e) {
@@ -229,17 +185,18 @@ function SearchView({ setState, onOpen }) {
 }
 
 /* ---------- Звичайні листи ---------- */
-function ItemsView({ name, setState }) {
+function ItemsView({ name, setState, push }) {
   const [data, setData] = useState(null);
   const [chip, setChip] = useState(null);
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
   const [issuing, setIssuing] = useState(null);
+  const [viewMode, setViewMode] = useState('table');
 
   const load = useCallback(async () => {
     setState('завантаження…');
     try {
-      const d = await api('/api/sheet?name=' + encodeURIComponent(name));
+      const d = await sheetApi.get(name);
       setData(d);
       setState('синхронізовано');
     } catch (e) {
@@ -256,11 +213,49 @@ function ItemsView({ name, setState }) {
   const save = async (row, colIdx, value) => {
     setState('збереження…');
     try {
-      await api('/api/item', { method: 'PATCH', body: { sheet: name, row, col: colIdx, value } });
+      await itemApi.patch({ sheet: name, row, col: colIdx, value });
+      push('Збережено', 'success');
       setState('синхронізовано');
     } catch (e) {
       setState('помилка збереження');
     }
+  };
+
+  const run = async (fn, msg, kind = 'success') => {
+    setState('збереження…');
+    try {
+      await fn();
+      push(msg, kind);
+      load();
+    } catch (e) {
+      setState('помилка: ' + e.message);
+    }
+  };
+
+  // Без колонки «Де» архівувати нікуди — тоді видаляємо рядок назавжди
+  const canArchive = cols.where >= 0;
+  const isArchived = (it) => canArchive && it.values[cols.where] === 'Архів';
+
+  const handlers = {
+    onSave: save,
+    onIssue: (it) => setIssuing(it),
+    onReturn: (it) => {
+      if (!confirm('Прийняти на КСП? Отримувача буде очищено.')) return;
+      run(() => itemApi.post({ sheet: name, action: 'return', row: it.row }), 'Повернуто на КСП');
+    },
+    onDelete: (it) => {
+      if (canArchive) {
+        if (!confirm(`Перенести запис (рядок ${it.row}) в архів? Його можна буде відновити.`)) return;
+        run(() => archiveApi.archive({ sheet: name, row: it.row }), 'Запис перенесено в архів', 'info');
+      } else {
+        if (!confirm(`Видалити запис (рядок ${it.row}) назавжди?`)) return;
+        run(() => itemApi.delete({ sheet: name, row: it.row }), 'Запис видалено', 'info');
+      }
+    },
+    onRestore: (it) => {
+      run(() => archiveApi.restore({ sheet: name, row: it.row }), 'Запис відновлено');
+    },
+    isArchived,
   };
 
   let list = items;
@@ -280,70 +275,38 @@ function ItemsView({ name, setState }) {
           </div>
         ))}
         <div className="spacer" />
+        <button className="btn" onClick={() => setViewMode((m) => (m === 'table' ? 'cards' : 'table'))}>
+          {viewMode === 'table' ? 'Картки' : 'Таблиця'}
+        </button>
         <button className="btn" onClick={() => setAdding(true)}>+ Додати запис</button>
       </div>
 
       {list.length === 0 ? (
         <div className="empty">Немає записів</div>
+      ) : viewMode === 'table' ? (
+        <ItemsTable
+          headers={headers}
+          items={list}
+          cols={cols}
+          statusOptions={statusOptions}
+          typeOptions={typeOptions}
+          maskCols={maskCols}
+          onSave={save}
+          noIssue={noIssue}
+          {...handlers}
+        />
       ) : (
-        <div className="grid">
-          {list.map((it) => (
-            <div className="card" key={it.row}>
-              <div className="rownum">ряд. {it.row}</div>
-              {headers.map((h, ci) => (
-                <div className="field" key={ci}>
-                  <label>{h || 'Поле ' + (ci + 1)}</label>
-                  {ci === cols.status || ci === cols.type ? (
-                    <select
-                      defaultValue={it.values[ci]}
-                      onChange={(e) => save(it.row, ci, e.target.value)}
-                    >
-                      {!(ci === cols.status ? statusOptions : typeOptions).includes(it.values[ci]) &&
-                        it.values[ci] && <option value={it.values[ci]}>{it.values[ci]}</option>}
-                      {(ci === cols.status ? statusOptions : typeOptions).map((o) => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type={maskCols?.includes(ci) ? 'password' : 'text'}
-                      defaultValue={it.values[ci]}
-                      onBlur={(e) => e.target.value !== it.values[ci] && save(it.row, ci, e.target.value)}
-                    />
-                  )}
-                </div>
-              ))}
-              <div className="actions">
-                {!noIssue && (
-                  <>
-                    <button className="act-btn act-issue" onClick={() => setIssuing(it)}>Видати</button>
-                    <button
-                      className="act-btn act-return"
-                      onClick={async () => {
-                        if (!confirm('Прийняти на КСП? Отримувача буде очищено.')) return;
-                        setState('збереження…');
-                        await api('/api/item', { method: 'POST', body: { sheet: name, action: 'return', row: it.row } });
-                        load();
-                      }}
-                    >
-                      Прийняти
-                    </button>
-                  </>
-                )}
-                <button
-                  className="act-btn act-del"
-                  onClick={async () => {
-                    if (!confirm(`Видалити запис (рядок ${it.row})?`)) return;
-                    await api('/api/item', { method: 'DELETE', body: { sheet: name, row: it.row } });
-                    load();
-                  }}
-                >
-                  Видалити
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <ItemsCards
+          headers={headers}
+          items={list}
+          cols={cols}
+          statusOptions={statusOptions}
+          typeOptions={typeOptions}
+          maskCols={maskCols}
+          onSave={save}
+          noIssue={noIssue}
+          {...handlers}
+        />
       )}
 
       {adding && (
@@ -354,8 +317,9 @@ function ItemsView({ name, setState }) {
           typeOptions={typeOptions}
           onCancel={() => setAdding(false)}
           onSave={async (values) => {
-            await api('/api/item', { method: 'POST', body: { sheet: name, values } });
+            await itemApi.post({ sheet: name, values });
             setAdding(false);
+            push('Запис додано', 'success');
             load();
           }}
         />
@@ -367,11 +331,9 @@ function ItemsView({ name, setState }) {
           whereOptions={data.whereOptions}
           onCancel={() => setIssuing(null)}
           onSave={async ({ who, where, date }) => {
-            await api('/api/item', {
-              method: 'POST',
-              body: { sheet: name, action: 'issue', row: issuing.row, who, where, date },
-            });
+            await itemApi.post({ sheet: name, action: 'issue', row: issuing.row, who, where, date });
             setIssuing(null);
+            push('Видано', 'success');
             load();
           }}
         />
@@ -461,7 +423,7 @@ function LedgerView({ name, setState }) {
   const load = useCallback(async () => {
     setState('завантаження…');
     try {
-      const d = await api('/api/ledger?sheet=' + encodeURIComponent(name));
+      const d = await ledgerApi.get(name);
       setItems(d.items);
       setState('синхронізовано');
     } catch (e) {
@@ -512,7 +474,7 @@ function LedgerView({ name, setState }) {
           item={wo}
           onCancel={() => setWo(null)}
           onSave={async ({ qty, date }) => {
-            await api('/api/ledger', { method: 'POST', body: { sheet: name, action: 'writeoff', row: wo.row, qty, date } });
+            await ledgerApi.post({ sheet: name, action: 'writeoff', row: wo.row, qty, date });
             setWo(null);
             load();
           }}
@@ -523,7 +485,7 @@ function LedgerView({ name, setState }) {
         <AddLedgerModal
           onCancel={() => setAdding(false)}
           onSave={async (body) => {
-            await api('/api/ledger', { method: 'POST', body: { sheet: name, ...body } });
+            await ledgerApi.post({ sheet: name, ...body });
             setAdding(false);
             load();
           }}
@@ -601,7 +563,7 @@ function WarehouseView({ setState }) {
   const load = useCallback(async () => {
     setState('завантаження…');
     try {
-      const d = await api('/api/warehouse');
+      const d = await warehouseApi.get();
       setData(d);
       setState('синхронізовано');
     } catch (e) {
@@ -615,7 +577,7 @@ function WarehouseView({ setState }) {
   const save = async (row, field, value) => {
     setState('збереження…');
     try {
-      await api('/api/warehouse', { method: 'PATCH', body: { row, field, value } });
+      await warehouseApi.patch({ row, field, value });
       setState('синхронізовано');
     } catch { setState('помилка збереження'); }
   };
@@ -698,7 +660,7 @@ function WarehouseView({ setState }) {
                 <button className="act-btn act-qr" onClick={() => setQr(it)}>QR</button>
                 <button className="act-btn act-del" onClick={async () => {
                   if (!confirm('Видалити ящик ' + it.code + '?')) return;
-                  const d = await api('/api/warehouse', { method: 'DELETE', body: { row: it.row } });
+                  const d = await warehouseApi.delete({ row: it.row });
                   setData({ ...data, items: d.items });
                 }}>Видалити</button>
               </div>
@@ -724,7 +686,7 @@ function WarehouseView({ setState }) {
           priorities={data.priorities}
           onCancel={() => setAdding(false)}
           onSave={async (body) => {
-            const d = await api('/api/warehouse', { method: 'POST', body });
+            const d = await warehouseApi.post(body);
             setData({ ...data, items: d.items });
             setAdding(false);
           }}

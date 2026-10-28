@@ -1,8 +1,17 @@
-import { setSessionCookie, clearSessionCookie, isAuthed } from '../../lib/auth';
+import { setSessionCookie, clearSessionCookie, isAuthed, checkPassword, authDisabled } from '../../lib/auth';
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
+  try {
+    return await login(req, res);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || 'Помилка сервера' });
+  }
+}
+
+async function login(req, res) {
   if (req.method === 'GET') {
-    return res.json({ authed: isAuthed(req), required: !!process.env.APP_PASSWORD });
+    return res.json({ authed: isAuthed(req), required: !authDisabled() });
   }
 
   if (req.method === 'DELETE') {
@@ -13,11 +22,14 @@ export default function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { password } = req.body || {};
-  if (!process.env.APP_PASSWORD) return res.json({ ok: true });
+  if (authDisabled()) return res.json({ ok: true });
+  if (!process.env.APP_PASSWORD) throw new Error('Не заданий APP_PASSWORD у змінних оточення');
 
-  if (password === process.env.APP_PASSWORD) {
+  if (checkPassword(password)) {
     setSessionCookie(res);
     return res.json({ ok: true });
   }
+  // Пауза після невдалої спроби уповільнює перебір пароля
+  await new Promise((r) => setTimeout(r, 1000));
   return res.status(401).json({ error: 'Невірний пароль' });
 }

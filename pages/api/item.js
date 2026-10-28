@@ -8,9 +8,12 @@ import {
   deleteRow,
   findColumns,
   todayStr,
+  assertSheet,
 } from '../../lib/sheets';
 
 export default withAuth(async (req, res) => {
+  assertSheet(req.body?.sheet, 'items');
+
   if (req.method === 'PATCH') {
     const { sheet, row, col, value } = req.body;
     await writeCell(sheet, row, col + 1, value);

@@ -1,5 +1,5 @@
 import { withAuth } from '../../lib/auth';
-import { readSheet, writeCells, appendRow, colToA1 } from '../../lib/sheets';
+import { readSheet, writeCells, appendRow, colToA1, assertSheet } from '../../lib/sheets';
 
 /** Знаходить структуру відомості: рядок заголовків і ключові колонки */
 function getMeta(values) {
@@ -71,6 +71,7 @@ function parseItems(values, meta) {
 
 export default withAuth(async (req, res) => {
   const sheet = req.query.sheet || req.body?.sheet || 'Майно роти';
+  assertSheet(sheet, 'ledger');
   const values = await readSheet(sheet);
   const meta = getMeta(values);
 
