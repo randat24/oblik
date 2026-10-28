@@ -1,6 +1,11 @@
 import { withAuth, currentActor, isGuest, session } from '../../lib/auth';
-import { readFund, addOp, cancelOp, saveMember, seedFund, setConfig } from '../../lib/fund-store';
-import { kop, compute, invariantOk, categoryOf } from '../../lib/fund';
+import {
+  readFund, addOp, addOps, cancelOp, cancelOps, saveMember, seedFund, setConfig, addMember,
+} from '../../lib/fund-store';
+import {
+  kop, compute, invariantOk, categoryOf, ownerRecalcPlan, withOwner, byOrder,
+} from '../../lib/fund';
+import { OPENING_DATE } from '../../lib/fund-seed';
 import { logChange } from '../../lib/log';
 
 /**
@@ -112,6 +117,36 @@ export default withAuth(async (req, res) => {
       after: `періодів ${next.periods.length}, відпусток ${next.vacations.length}`,
     });
     return res.json({ ok: true });
+  }
+
+  /* ---------- Власник каси ---------- */
+  if (action === 'owner') {
+    const name = String(req.body.name || 'Алекс').trim().slice(0, 40) || 'Алекс';
+    const data = await readFund();
+    if (data.config.owner) {
+      return res.status(400).json({ error: 'Власника каси вже вказано' });
+    }
+    const id = 'alex';
+    let members = data.members;
+    if (!members.some((m) => m.id === id)) {
+      const last = Math.max(0, ...members.map((m) => m.order || 0));
+      const owner = { id, name, order: last + 1, opening: 0, periods: [{ start: OPENING_DATE }], vacations: [] };
+      await addMember(owner);
+      members = [...members, owner];
+    }
+    // спершу нові записи, потім скасування старих: якщо щось урветься посередині,
+    // краще побачити зайвий дубль, ніж загубити витрату
+    const at = new Date().toISOString();
+    const old = ownerRecalcPlan(data.ops, id);
+    const fresh = old.map((o, i) => withOwner(o, id, { id: `${newId()}${i}`, at, who }));
+    await addOps(fresh);
+    await cancelOps(old.map((o) => o.row), { reason: 'Перерахунок з власником каси', at, who });
+    await setConfig('owner', id);
+    await logChange({
+      sheet: 'Фонд', action: 'Власник каси', field: name,
+      after: `перераховано витрат: ${old.length}`,
+    });
+    return res.json({ ok: true, recalculated: old.length, members: byOrder(members).length });
   }
 
   /* ---------- Кого не рахуємо у нових витратах ---------- */
