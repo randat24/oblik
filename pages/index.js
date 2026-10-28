@@ -382,7 +382,7 @@ function HomeView({ setState, onOpen, me }) {
                 <th className="col-num">В наявності</th>
                 <th className="col-num">На руках</th>
                 <th className="col-num">За док.</th>
-                <th />
+                <th><span className="sr-only">Дії</span></th>
               </tr>
             </thead>
             <tbody>
@@ -520,7 +520,7 @@ function HomeView({ setState, onOpen, me }) {
                     <th className="col-num">Місць</th>
                     <th className="col-num">Везти, кг</th>
                     <th>Ще не поставлено</th>
-                    <th />
+                    <th><span className="sr-only">Дії</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1413,7 +1413,8 @@ export default function Home({ startView }) {
         </aside>
 
         <div className="shell">
-          <div className="topbar">
+          <div className="topbar" role="banner">
+            <h1 className="sr-only">{here ? here.label : 'Огляд'}</h1>
             <div className="crumb">
               <span className="mobile-mark" aria-hidden="true">О</span>
               <span className="crumb-root">Облік майна</span>
@@ -4128,7 +4129,7 @@ function WarehouseView({ setState, focusCode, onOpen }) {
   const loadBoxes = useCallback(async () => {
     try {
       setBoxes(await api('/api/boxes'));
-    } catch (e) {
+    } catch {
       // вміст — доповнення до картки: без нього склад має лишатись робочим
       setBoxes({ lines: [], units: [], names: [], people: [], accountingOptions: [] });
     }
@@ -4834,7 +4835,7 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
     setItems((p) => p.map((x, j) => (j === i ? { cells: { ...h.cells }, row: h.row } : x)));
   const unbind = (i) => setItems((p) => p.map((x, j) => {
     if (j !== i) return x;
-    const { row, ...rest } = x;
+    const rest = { ...x }; delete rest.row;
     return rest;
   }));
 

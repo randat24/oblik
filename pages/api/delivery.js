@@ -3,9 +3,8 @@ import { readSheet, writeRow, appendRow, deleteRow, ensureSheet } from '../../li
 import { logChange } from '../../lib/log';
 import { readAllLists, activeNames } from '../../lib/points';
 import {
-  DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, DRIVERS, POINTS, LOST_WHY, PRIO_FIRST,
-  parseDeliveries, deliveryRow, stampKyiv, suggestions, stageOf,
-  splitParts, parseDone, joinDone, partsOf, parseHot, joinHot,
+  DELIVERY_SHEET, DELIVERY_HEADERS, DL, STAGES, POINTS, LOST_WHY, PRIO_FIRST,
+  parseDeliveries, deliveryRow, stampKyiv, suggestions, splitParts, parseDone, joinDone, partsOf, parseHot, joinHot,
   remapDone, remapHot, headersStale,
 } from '../../lib/delivery';
 

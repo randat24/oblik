@@ -1,6 +1,7 @@
 import Head from 'next/head';
 import { useEffect } from 'react';
 import '../styles/globals.css';
+import ErrorBoundary from '../components/error-boundary';
 
 export default function App({ Component, pageProps }) {
   // Без службового робітника сторінка в полі просто не відкриється. Версію
@@ -22,7 +23,9 @@ export default function App({ Component, pageProps }) {
         <link rel="apple-touch-icon" href="/favicon.svg" />
         <link rel="manifest" href="/manifest.webmanifest" />
       </Head>
-      <Component {...pageProps} />
+      <ErrorBoundary>
+        <Component {...pageProps} />
+      </ErrorBoundary>
     </>
   );
 }

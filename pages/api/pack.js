@@ -3,10 +3,9 @@ import { readSheet, writeRow, appendRow, ensureSheet } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
 import { readList, activeNames } from '../../lib/points';
 import {
-  DELIVERY_SHEET, DELIVERY_HEADERS, DL, PRIO_FIRST,
+  DELIVERY_SHEET, DELIVERY_HEADERS, PRIO_FIRST,
   parseDeliveries, deliveryRow, stampKyiv, partsOf, headersStale,
-  splitParts, parseHot, joinHot, stampOf, remapDone, remapLost, remapHot,
-} from '../../lib/delivery';
+  splitParts, parseHot, joinHot, stampOf, remapDone, remapLost, } from '../../lib/delivery';
 
 /**
  * Пункт збору — окремий вхід за посиланням.

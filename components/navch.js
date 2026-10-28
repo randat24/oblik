@@ -15,10 +15,9 @@ import { useState, useEffect, useRef } from 'react';
 
 import {
   LESSONS, FACTS, RUN, FAST_SEC, keyOf, known, auto, runOf, tipFor, options, question, factOf,
-  problems, slows, dayQueue, daily, dayStreak, hardest, hookFor, practiceDays, DAY_SIZE,
+  dayQueue, daily, dayStreak, hardest, hookFor, practiceDays, DAY_SIZE,
   QUICK_TILES, QUICK_SIZE, quickQueue, HARD, hardDone, stats, nextNew, NEW_PER_DAY,
-  arcadeLevel, arcadeNext, ARCADE_LIVES, ARCADE_PER_LEVEL, ask, formFor,
-  lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
+  arcadeLevel, arcadeNext, ARCADE_LIVES, ARCADE_PER_LEVEL, lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
   lessonProgress, partProgress, unlockedLessons,
   buildSession, partQueue, applyResults,
 } from '../lib/mult';
@@ -37,28 +36,27 @@ import {
 import { tokenize, modeOf, lineCount } from '../lib/highlight';
 import { PLAN, COURSE, nextSteps, planProgress, lessonOf, tourOf } from '../lib/plan';
 import {
-  ABC, ABC_GROUPS, STATES, byGroup, abcProgress, suggestNext, cycleState, stateOf,
+  ABC_GROUPS, STATES, byGroup, abcProgress, suggestNext, cycleState, stateOf,
 } from '../lib/abc';
-import { pathOf, hasWhere, coverage } from '../lib/paths';
+import { pathOf, hasWhere } from '../lib/paths';
 import {
   ERR_GROUPS, ERRORS, matchError, findErrors, errorStats, errorsOfTopic,
 } from '../lib/errors';
 import {
   SOURCES, VERSIONS, NODE, OLD_WAYS, HOW_TO_READ, CHECK_DAY,
-  sourceById, sourceOf, sourceStats,
+  sourceOf, sourceStats,
 } from '../lib/sources';
 import {
   // «джерела» тут і в `lib/sources` — різні речі: там сайти, тут «звідки
   // взялась відповідь», тож імена розводимо на вході
-  KINDS, SOURCES as NOTE_SOURCES, AI_CHECK, STARTERS, KIND_KEYS,
-  findNotes, noteStats, byTopic, kindBy, sourceBy, topicLabel, noteError,
+  KINDS, SOURCES as NOTE_SOURCES, AI_CHECK, STARTERS, findNotes, noteStats, byTopic, kindBy, sourceBy, topicLabel, noteError,
   isOpen as noteOpen,
 } from '../lib/notes';
 import { changedOnly } from '../lib/patch';
 import { FIELDS as PRACTICE_FIELDS, statsOf, freshIdeas } from '../lib/practice';
 import { REF_GROUPS, REF_CARDS, findCards } from '../lib/ref';
 import { TOURS, tourById } from '../lib/tour';
-import { api, today, stamp, short, num, plural, plur } from './util';
+import { api, today, stamp, num, plural, plur } from './util';
 
 /*
  * Лічильник уроків для шапки сторінки.
@@ -574,7 +572,6 @@ function MultLook({ lesson, part, n, onStart, onBack }) {
  * кінці — знак «дорівнює» означає «стільки ж», а не «зараз буде результат».
  */
 function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
-  const mode = part ? 'part' : 'session';
   const [pool] = useState(() => (part ? partQueue(lesson, part) : null));
   const [queue] = useState(() => (part ? null : buildSession(lesson, prog, 12)));
 
@@ -600,7 +597,7 @@ function MultDrill({ lesson, part, n, prog, onBack, onDone }) {
   const [fix, setFix] = useState(null);
   const [opts, setOpts] = useState([]);
   const [picked, setPicked] = useState(null);
-  const [results, setResults] = useState([]);
+  const [, setResults] = useState([]);
   const started = useRef(Date.now());
 
   // перше питання й кожне наступне: варіанти рахуються один раз на питання
@@ -1066,7 +1063,7 @@ function MultSpeed({ prog, items, onBack, onDone }) {
   const [state, setState] = useState('ask');
   const started = useRef(Date.now());
   const resRef = useRef([]);
-  const [results, setResults] = useState([]);
+  const [, setResults] = useState([]);
 
   const cur = queue[i];
 
@@ -1644,7 +1641,7 @@ function runJS(code, timeoutMs = 3000) {
       worker.onmessage = (e) => finish(e.data);
       worker.onerror = (e) => finish({ ok: false, output: '', error: e.message || 'Помилка виконання' });
       worker.postMessage(code);
-    } catch (e) {
+    } catch {
       resolve({ ok: false, output: '', error: 'Браузер не підтримує виконання коду тут.' });
     }
   });
@@ -1809,7 +1806,7 @@ function CodeEditor({ value, onChange, mode, rows, onRun }) {
   const edit = (ta, from, to, text, caret) => {
     ta.focus();
     ta.setSelectionRange(from, to);
-    let done = false;
+    let done;
     try { done = document.execCommand('insertText', false, text); } catch { done = false; }
     if (!done) ta.setRangeText(text, from, to, 'end');
     if (caret !== undefined) ta.setSelectionRange(caret, caret);
@@ -2308,7 +2305,7 @@ export function CodeTab({ data, reload, toast, jump, onJumped }) {
   const [prog, setProg] = useState(() => data.code || {});
   const [target, setTarget] = useState(null);
   const [openId, setOpenId] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const [, setSaving] = useState(false);
   // Курс проходять один раз, а довідник відкривають щотижня — тож це не
   // підрозділ уроків, а рівноправний режим вкладки.
   const [mode, setMode] = useState('learn');
