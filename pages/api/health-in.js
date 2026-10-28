@@ -1,3 +1,4 @@
+import { sameSecret, keyFrom } from '../../lib/auth';
 import { saveDay, todayKyiv } from '../../lib/health';
 import { dayFromBody, hasNumbers } from '../../lib/vitals';
 
@@ -9,14 +10,6 @@ import { dayFromBody, hasNumbers } from '../../lib/vitals';
  * Вмикається лише змінною HEALTH_INGEST_TOKEN. Поки її немає, маршрут не
  * існує взагалі — жодного способу дописати щось у розділ повз вхід.
  */
-/** Порівняння, що не підказує довжиною збігу, скільки символів угадано */
-function sameToken(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
 export default async function handler(req, res) {
   const secret = process.env.HEALTH_INGEST_TOKEN;
   if (!secret || secret.length < 16) {
@@ -26,10 +19,7 @@ export default async function handler(req, res) {
   // Ключ приймаємо трьома способами: заголовком, у тілі або в адресі.
   // Заголовок надійніший, але в «Командах» його легко забути, а перевірити
   // налаштування простіше за посиланням.
-  const given = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
-    || (req.body?.token || '')
-    || (req.query?.token || '');
-  if (!sameToken(String(given), secret)) {
+  if (!sameSecret(String(keyFrom(req)), secret)) {
     return res.status(401).json({ error: 'Не той ключ' });
   }
 
