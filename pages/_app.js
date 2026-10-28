@@ -2,8 +2,11 @@ import Head from 'next/head';
 import { useEffect } from 'react';
 import '../styles/globals.css';
 import ErrorBoundary from '../components/error-boundary';
+import { useLabelLinks } from '../components/label-links';
 
 export default function App({ Component, pageProps }) {
+  useLabelLinks();
+
   // Без службового робітника сторінка в полі просто не відкриється. Версію
   // збірки дописуємо в адресу: інакше браузер лишає старого воркера зі старим
   // кешем, і нові зміни не доходять, скільки сторінку не перезавантажуй.

@@ -7,7 +7,7 @@
  * Тут лишилось те, що тримає сторінку разом: хто увійшов, яка вкладка
  * відкрита і яка в неї адреса.
  */
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import {
   api, setOnUnauthed, saveFailed, todayStr, statusColor, photoSrc,
   ToastCtx, useToast, ToastHost, useToasts, IconSearch, IconQr, parseCode, hhmm,
@@ -487,26 +487,26 @@ function HomeView({ setState, onOpen, me }) {
 
           <div className="chips">
             {d.delivery.urgent.slice(0, 4).map((x, i) => (
-              <div className="chip dlv-prio-chip on" key={'u' + i}
+              <button type="button" className="chip dlv-prio-chip on" key={'u' + i}
                 onClick={() => onOpen(DELIVERY_VIEW)}
                 title={[x.stage, x.names.length && x.names.join(', '), x.kg && `${x.kg} кг`]
                   .filter(Boolean).join(' · ')}>
                 {x.what}{x.to ? ` → ${x.to}` : ''}
                 <b style={{ marginLeft: 5 }}>{x.places}</b>
-              </div>
+              </button>
             ))}
             {d.delivery.byStage.filter((s) => s.n > 0).map((s) => (
-              <div className="chip" key={s.key} onClick={() => onOpen(DELIVERY_VIEW)}>
+              <button type="button" className="chip" key={s.key} onClick={() => onOpen(DELIVERY_VIEW)}>
                 {s.label}<span className="count">{s.n}</span>
-              </div>
+              </button>
             ))}
             {d.delivery.points.map((x) => (
-              <div className="chip" key={'p' + x.name} style={{ color: 'var(--blue)' }}
+              <button type="button" className="chip" key={'p' + x.name} style={{ color: 'var(--blue)' }}
                 onClick={() => onOpen(DELIVERY_VIEW)}
                 title={`${x.places} місць у ${x.n} посилках`}>
                 → {x.name} <b style={{ marginLeft: 4 }}>{x.places}</b>
                 {x.places !== x.n && <span className="totals-of"> / {x.n}</span>}
-              </div>
+              </button>
             ))}
           </div>
 
@@ -556,10 +556,10 @@ function HomeView({ setState, onOpen, me }) {
           <h3 className="sec">За статусами</h3>
           <div className="chips">
             {d.items.byStatus.map(([s, n]) => (
-              <div className="chip" key={s} style={{ color: statusColor(s), borderColor: 'var(--line)' }}
+              <button type="button" className="chip" key={s} style={{ color: statusColor(s), borderColor: 'var(--line)' }}
                 onClick={() => onOpen({ kind: 'search', name: null, q: s })}>
                 {s} <b style={{ marginLeft: 4 }}>{n}</b>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -988,7 +988,7 @@ function CommandPalette({ commands, onClose }) {
           autoFocus
           onChange={(e) => setQ(e.target.value)}
         />
-        <div className="cmd-list" ref={listRef}>
+        <div className="cmd-list" ref={listRef} tabIndex={0}>
           {list.length === 0 && <div className="cmd-empty">Нічого не знайдено</div>}
           {list.map((c, i) => (
             <div
@@ -1458,6 +1458,7 @@ export default function Home({ startView }) {
           </div>
 
           <main className="shell-main">
+            <h2 className="sr-only">Вміст розділу</h2>
 
         {view.kind === 'home' && (
           <HomeView setState={setState} onOpen={setView} me={me.callsign} />
@@ -1688,15 +1689,15 @@ function SearchView({ setState, onOpen, initialQuery, autoAct, me = '' }) {
       {sheetChips.length > 1 && (
         <div className="filters">
           <span className="filters-k">Категорія</span>
-          <div className={'chip' + (onlySheet === null ? ' on' : '')}
+          <button type="button" className={'chip' + (onlySheet === null ? ' on' : '')}
             onClick={() => setOnlySheet(null)}>
             усі<b>{allHits.length}</b>
-          </div>
+          </button>
           {sheetChips.map(([sh, n]) => (
-            <div key={sh} className={'chip' + (onlySheet === sh ? ' on' : '')}
+            <button type="button" key={sh} className={'chip' + (onlySheet === sh ? ' on' : '')}
               onClick={() => setOnlySheet(onlySheet === sh ? null : sh)}>
               {sh}<b>{n}</b>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -2203,6 +2204,7 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
         {!hideStatus && cols.status >= 0 && (
           <select
             className="pill"
+            aria-label="Статус"
             style={{ color: statusColor(it.values[cols.status]) }}
             defaultValue={it.values[cols.status]}
             onChange={(e) => save(it.row, cols.status, e.target.value, it.values[cols.status])}
@@ -2241,6 +2243,7 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
                       className="tag-pick is-over"
                       defaultValue={t.v}
                       title={tagLabel(t.ci)}
+                      aria-label={tagLabel(t.ci)}
                       onChange={(e) => save(it.row, t.ci, e.target.value, t.v)}
                     >
                       <option value="">{tagLabel(t.ci)}</option>
@@ -2273,6 +2276,7 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
               {ci === cols.type ? (
                 <select
                   className="ghost"
+                  aria-label={(headers[ci] || '').toString().trim() || 'Тип'}
                   defaultValue={it.values[ci]}
                   onChange={(e) => save(it.row, ci, e.target.value, it.values[ci])}
                 >
@@ -2471,11 +2475,11 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
         <div className="filters" key={f.ci}>
           <span className="filters-k">{f.label}</span>
           {f.values.map(([v, n]) => (
-            <div key={v}
+            <button type="button" key={v}
               className={'chip' + (tagF[f.ci] === v ? ' on' : '')}
               onClick={() => setTagF((p) => ({ ...p, [f.ci]: p[f.ci] === v ? null : v }))}>
               {v}<b>{n}</b>
-            </div>
+            </button>
           ))}
         </div>
       ))}
@@ -2492,11 +2496,15 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
         <SearchBox value={q} onChange={setQ} placeholder="Пошук..." />
         {/* фільтри за статусом — лише там, де статус узагалі є: у листі без
             такої колонки шість чипів нічого не фільтрують, а місце займають */}
-        {!hideStatus && cols.status >= 0 && statusOptions.map((s) => (
-          <div key={s} className={'chip' + (chip === s ? ' on' : '')} onClick={() => setChip(chip === s ? null : s)}>
-            {s}
+        {!hideStatus && cols.status >= 0 && (
+          <div className="filters tb-chips">
+            {statusOptions.map((s) => (
+              <button type="button" key={s} className={'chip' + (chip === s ? ' on' : '')} onClick={() => setChip(chip === s ? null : s)}>
+                {s}
+              </button>
+            ))}
           </div>
-        ))}
+        )}
         <div className="spacer" />
         {whoIdx >= 0 && (
           <button className={'btn btn-2 btn-group' + (group === 'who' ? ' on' : '')}
@@ -3509,6 +3517,7 @@ function StockView({ setState, focusId, onClearFocus, onOpen }) {
               className={'pill acct-' + (it.accounting === 'Облікове' ? 'on' : it.accounting ? 'off' : 'none')}
               value={it.accounting}
               title="Чи числиться за документами"
+              aria-label="Облік"
               onChange={(e) => save(it.row, 'accounting', e.target.value, it.accounting)}
             >
               <option value="">Облік не вказано</option>
@@ -3714,11 +3723,11 @@ function StockView({ setState, focusId, onClearFocus, onOpen }) {
       {data.items.length > 0 && (
         <div className="chips">
           {[...(data.accountingOptions || []), '—'].map((a) => (
-            <div key={a} className={'chip chip-acct' + (acct === a ? ' on' : '')}
+            <button type="button" key={a} className={'chip chip-acct' + (acct === a ? ' on' : '')}
               title={a === '—' ? 'Облік не вказано' : ''}
               onClick={() => setAcct(acct === a ? null : a)}>
               {a === '—' ? 'Облік не вказано' : a}
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -3726,10 +3735,10 @@ function StockView({ setState, focusId, onClearFocus, onOpen }) {
       {data.categories.length > 0 && (
         <div className="chips">
           {data.categories.map((c) => (
-            <div key={c} className={'chip' + (cat === c ? ' on' : '')}
+            <button type="button" key={c} className={'chip' + (cat === c ? ' on' : '')}
               onClick={() => setCat(cat === c ? null : c)}>
               {c}
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -4074,6 +4083,7 @@ function BoxContents({ box, lines, loading, title = 'Вміст', addLabel = '+ 
             className="ghost box-line-n"
             type="text"
             defaultValue={l.name}
+            aria-label="Назва позиції"
             onBlur={(e) => onEdit(l, 'name', e.target.value, l.name)}
           />
           <BoxLeft line={l} />
@@ -4279,12 +4289,14 @@ function WarehouseView({ setState, focusCode, onOpen }) {
 
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Пошук: код, назва, вміст..." />
-        {data.priorities.map((p) => (
-          <div key={p.value} className={'chip' + (chip === p.value ? ' on' : '')}
-            title={p.label} onClick={() => setChip(chip === p.value ? null : p.value)}>
-            Пріоритет {p.value}
-          </div>
-        ))}
+        <div className="filters tb-chips">
+          {data.priorities.map((p) => (
+            <button type="button" key={p.value} className={'chip' + (chip === p.value ? ' on' : '')}
+              title={p.label} onClick={() => setChip(chip === p.value ? null : p.value)}>
+              Пріоритет {p.value}
+            </button>
+          ))}
+        </div>
         <div className="spacer" />
         <ViewToggle mode={mode} onChange={setMode} />
         <button className="btn" onClick={() => setAdding(true)}>+ Додати ящик</button>
@@ -4374,6 +4386,7 @@ function WarehouseView({ setState, focusCode, onOpen }) {
                 </div>
                 <select
                   className="pill"
+                  aria-label="Статус"
                   style={{ color: statusColor(it.status) }}
                   defaultValue={it.status}
                   onChange={(e) => save(it.row, 'status', e.target.value, it.status, it.code)}
@@ -4424,7 +4437,7 @@ function WarehouseView({ setState, focusCode, onOpen }) {
                 <div className="drow">
                   <span className="drow-k">Пріоритет</span>
                   <span className="drow-v">
-                    <select className="ghost" defaultValue={it.priority}
+                    <select className="ghost" aria-label="Пріоритет" defaultValue={it.priority}
                       onChange={(e) => save(it.row, 'priority', e.target.value, it.priority, it.code)}
                       title={data.priorities.find((p) => p.value === it.priority)?.label}>
                       {data.priorities.map((p) => (
@@ -4679,9 +4692,13 @@ function LogView({ setState, initialQuery }) {
       ) : (
         <div className="log-list">
           {list.map((e, i) => (
-            <div className="log-row" key={i}>
+            <Fragment key={i}>
+            {/* дата над групою, а не в кожному рядку: так видно, що сталося за день */}
+            {(i === 0 || list[i - 1].date !== e.date) && (
+              <h3 className="log-day">{e.date}</h3>
+            )}
+            <div className="log-row">
               <div className="log-when">
-                <span>{e.date}</span>
                 <span className="log-time">{e.time}</span>
               </div>
               <div className="log-what">
@@ -4705,6 +4722,7 @@ function LogView({ setState, initialQuery }) {
                   onClick={() => setBig(e)} title="Натисніть, щоб збільшити" />
               )}
             </div>
+            </Fragment>
           ))}
         </div>
       )}
@@ -4886,7 +4904,7 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
             <div className="act-item-sub">
               {subFields.map((f) => (
                 <input key={f.col} type={f.mask ? 'password' : 'text'}
-                  placeholder={f.label} title={f.label} autoComplete="off"
+                  placeholder={f.label} title={f.label} aria-label={f.label} autoComplete="off"
                   value={cellOf(it, f.col)}
                   onChange={(e) => upCell(i, f.col, e.target.value)} />
               ))}

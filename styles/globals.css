@@ -5615,3 +5615,129 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 .err-act { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
 .err-act .btn { text-decoration: none; }
 .err-link { color: var(--ob-accent); font-size: .9rem; }
+
+/* ==========================================================================
+ * Єдиний ритм екранів
+ *
+ * Головний екран фонду показує суть вгорі, а решта застосунку витрачала
+ * перший екран телефона на панель із трьох-чотирьох рядків і чотири
+ * величезні картки: самі записи починались за двома прокрутками. Тут усі
+ * екрани приводяться до однієї щільності — без правок розмітки кожного.
+ * ========================================================================== */
+a.nav-item { text-decoration: none; }
+
+/* Кнопки в рядку списку не розтягуються на всю ширину */
+.sp-item .act-btn, .sp-item .btn { flex: 0 0 auto; min-width: 0; }
+.sp-item { align-items: center; }
+.sp-item .act-btn { min-height: 38px; padding: 0 14px; }
+.toolbar .pill { flex: 0 0 auto; max-width: none; }
+.toolbar input[type="text"] { min-height: 44px; }
+
+@media (max-width: 720px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+  .stat { padding: 12px 14px 11px; border-radius: var(--ob-radius-md); }
+  .stat-l { font-size: .72rem; line-height: 1.25; }
+  .stat-v { margin-top: 6px; font-size: 1.75rem; }
+  /* виноска — другорядне: два рядки, не більше */
+  .stat-s {
+    margin-top: 5px; font-size: .66rem; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  /* Фільтри — один рядок, що гортається вбік, а не три рядки чипів */
+  .chips, .filters {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin-left: -16px; margin-right: -16px; padding: 2px 16px;
+    scroll-padding: 0 16px;
+  }
+  .chips::-webkit-scrollbar, .filters::-webkit-scrollbar { display: none; }
+  .chips > *, .filters > * { flex: none; }
+
+  /* Панель дій: пошук на весь рядок, кнопки під ним однакової висоти */
+  .toolbar > .btn, .toolbar > .act-btn, .toolbar > button:not(.chip) { min-height: 44px; }
+  .toolbar > .btn { flex: 1 1 auto; }
+}
+
+/* Журнал: дата стоїть над групою, у рядку лишається лише час */
+.log-day {
+  margin: 14px 2px 4px; font-size: .64rem; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ob-muted);
+}
+.log-day:first-child { margin-top: 0; }
+.log-when { min-width: 46px; }
+.log-time { opacity: 1; }
+@media (max-width: 720px) { .log-row { flex-direction: row; gap: 10px; } }
+
+/* Підсумки над списками — спокійна смуга замість рядка моноширинного тексту */
+.totals {
+  gap: 4px 14px; margin: 0 0 14px; padding: 9px 14px;
+  font-family: var(--ob-font); font-size: .8rem; color: var(--ob-secondary);
+  background: var(--ob-surface); border: 1px solid var(--ob-line); border-radius: var(--ob-radius-md);
+}
+.totals b { color: var(--ob-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.totals-sep { display: none; }
+.totals-of { color: var(--ob-muted); }
+
+/* Порожній стан — окрема рамка, а не текст, що висить посеред екрана */
+.empty {
+  padding: 28px 20px; margin: 4px 0 16px; border: 1px dashed var(--ob-line);
+  border-radius: var(--ob-radius-lg); color: var(--ob-muted); font-size: .88rem; line-height: 1.5;
+}
+.loading { padding: 40px 20px; }
+
+/* Чипи у панелі інструментів: на широкому екрані стоять у тому ж рядку,
+   на телефоні — окремий рядок, що гортається вбік */
+@media (min-width: 721px) {
+  .toolbar > .tb-chips { display: contents; }
+}
+@media (max-width: 720px) {
+  .toolbar > .tb-chips { flex: 1 1 100%; order: 2; margin-top: 0; margin-bottom: 0; }
+  .toolbar > .tb-chips ~ * { order: 3; }
+  .toolbar .btn-group { flex: 1 1 auto; }
+}
+
+/* Рядки картки: підпис і значення на одній осі, однакової висоти.
+   Раніше підпис стояв за базовою лінією, а поле-привид було нижчим за
+   текстове — «Отримав» і «Дата» розʼїжджались зі своїми значеннями. */
+.card-body { gap: 0; }
+.drow { align-items: flex-start; }
+.drow-k { display: flex; align-items: center; min-height: 34px; }
+.drow-v { display: flex; align-items: center; min-height: 34px; }
+.drow-v > .ghost, .drow-v > input, .drow-v > select { min-height: 34px; }
+textarea.ghost { min-height: 34px; resize: none; line-height: 1.4; padding-top: 6px; padding-bottom: 6px; }
+
+/* Лічильник «3 з 3 у переліку» — підпис, а не кнопка-пігулка */
+.toolbar > .pill {
+  border: 0; padding: 0 2px; text-transform: none; letter-spacing: 0;
+  font-weight: 500; font-size: .78rem; color: var(--ob-muted); cursor: default;
+}
+@media (max-width: 720px) { .toolbar > .pill { flex: 1 1 100%; } }
+
+/* Сторінки-заглушки (/me без доступу, /zbir без ключа): така сама картка,
+   як у 404 і в збої показу, а не голий текст посеред порожнього екрана */
+.h-gate, .z-gate {
+  max-width: 420px; margin: 16vh auto 0; padding: 26px 24px;
+  border: 1px solid var(--ob-line); border-radius: var(--ob-radius-xl);
+  background: var(--ob-surface); box-shadow: var(--ob-shadow);
+  text-align: left; line-height: 1.6;
+}
+.h-gate h1, .z-gate h1 {
+  margin: 0 0 8px; font-size: 1.1rem; font-weight: 600;
+  letter-spacing: 0; text-transform: none; color: var(--ob-text);
+}
+.h-gate p, .z-gate p { margin: 0 0 16px; font-size: .9rem; color: var(--ob-secondary); }
+.z-gate p:last-child, .h-gate p:last-child { margin-bottom: 0; }
+.h-gate .h-btn { margin: 0 8px 0 0; }
+@media (max-width: 480px) { .h-gate, .z-gate { margin: 10vh 16px 0; } }
+
+/* Чип — кнопка, а не div: його можна дістати Tab-ом і натиснути з клавіатури */
+button.chip { font: inherit; font-size: .78rem; line-height: 1.2; }
+button.chip:focus-visible { outline: none; box-shadow: var(--ob-focus); }
+
+/* Відступи по краях: бічне меню обнулило `.wrap`, а /me стоїть поза ним —
+   на телефоні картки й вкладки впиралися в край екрана */
+.h-wrap {
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-top: 8px;
+}
