@@ -513,3 +513,91 @@ test('налаштування власника каси читається', ()
   assert.equal(cfgParse([['Ключ', 'Значення'], ['owner', 'alex']]).owner, 'alex');
   assert.equal(cfgParse([]).owner, '');
 });
+
+/* ---------- Розподіл за днями ---------- */
+import { daysOf, monthBounds, spreadByDays, newMember } from '../lib/fund.js';
+
+const mk = (id, order, periods, vacations = []) => ({ id, name: id, order, opening: 0, periods, vacations });
+const FULL = [{ start: '2000-01-01' }];
+const rent = (amount, ids, extra = {}) => ({
+  type: 'expense', amount: kop(amount), category: 'fixed', payer: 'cash', mode: 'manual',
+  participants: ids, periodFrom: '2026-10-01', periodTo: '2026-10-31', status: 'active', ...extra,
+});
+
+test('дні періоду рахуються включно, хибні дати дають порожньо', () => {
+  assert.equal(daysOf('2026-10-01', '2026-10-31').length, 31);
+  assert.deepEqual(daysOf('2026-10-05', '2026-10-05'), ['2026-10-05']);
+  assert.deepEqual(daysOf('2026-10-05', '2026-10-01'), []);
+  assert.deepEqual(daysOf('x', '2026-10-01'), []);
+  assert.deepEqual(daysOf('2026-01-01', '2027-12-31'), [], 'задовгий період відсікається');
+});
+
+test('межі місяця — перший і останній день, у тому числі лютий', () => {
+  assert.deepEqual(monthBounds('2026-10-17'), { from: '2026-10-01', to: '2026-10-31' });
+  assert.deepEqual(monthBounds('2028-02-10'), { from: '2028-02-01', to: '2028-02-29' });
+});
+
+test('той, хто був 20 днів із 31, платить лише за свої дні (приклад із 14 769)', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL), mk('c', 3, FULL), mk('d', 4, FULL),
+    mk('x', 5, [{ start: '2000-01-01', end: '2026-10-21' }])];
+  const r = spreadByDays(rent('14769', ['a', 'b', 'c', 'd', 'x']), ms);
+  assert.equal(Object.values(r.shares).reduce((s, v) => s + v, 0), kop('14769'), 'сума не губиться');
+  assert.ok(Math.abs(r.shares.x - kop('1905.68')) <= 1, `той, хто пішов: ${r.shares.x}`);
+  assert.ok(Math.abs(r.shares.a - kop('3215.83')) <= 1, `решта: ${r.shares.a}`);
+});
+
+test('новий учасник платить лише з дня вступу', () => {
+  const ms = [mk('a', 1, FULL), mk('n', 2, [{ start: '2026-10-21' }])];
+  const r = spreadByDays(rent('3100', ['a', 'n']), ms);
+  // 20 днів один, 11 днів удвох
+  assert.equal(r.shares.a + r.shares.n, kop('3100'));
+  assert.ok(r.shares.n < r.shares.a / 2, 'новий платить менше половини');
+});
+
+test('доба без жодного учасника не рахується, сума повністю лягає на решту днів', () => {
+  const ms = [mk('a', 1, [{ start: '2026-10-11' }])];
+  const r = spreadByDays(rent('100', ['a']), ms);
+  assert.equal(r.shares.a, kop('100'));
+});
+
+test('відпустка не звільняє від постійних витрат, але звільняє від їжі', () => {
+  const ms = [mk('a', 1, FULL), mk('v', 2, FULL, [{ start: '2026-10-01', end: '2026-10-31' }])];
+  const fixed = spreadByDays(rent('100', ['a', 'v']), ms);
+  assert.equal(fixed.shares.v, kop('50'));
+  const food = spreadByDays(rent('100', ['a', 'v'], { category: 'var' }), ms);
+  assert.equal(food.shares.v, undefined);
+  assert.equal(food.shares.a, kop('100'));
+});
+
+test('витрата за період із каси: каса мінус уся сума, частки сходяться в баланси', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL)];
+  const e = effect(rent('100', ['a', 'b']), ms);
+  assert.equal(e.cash, -kop('100'));
+  assert.equal(e.bal.a + e.bal.b, -kop('100'));
+});
+
+test('ручна витрата без періоду рахується, як і раніше', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL)];
+  const e = effect({ type: 'expense', amount: kop('100'), category: 'var', payer: 'a', mode: 'manual', participants: ['a', 'b'], date: '2026-10-10' }, ms);
+  assert.deepEqual(e.shares, { a: kop('50'), b: kop('50') });
+});
+
+test('після розкладу по днях інваріант каси тримається, зайві копійки не губляться', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL), mk('n', 3, [{ start: '2026-10-13' }])];
+  const cfg = { openingCash: kop('1000'), openingDiff: 0 };
+  const s = compute(ms, [rent('333.33', ['a', 'b', 'n'], { date: '2026-10-31', createdAt: 'x' })], cfg);
+  assert.equal(s.diff, kop('1000') - kop('1000') + s.diff);
+  assert.equal(s.cash, kop('1000') - kop('333.33'));
+  assert.equal(Object.values(s.bal).reduce((x, y) => x + y, 0), -kop('333.33'));
+});
+
+test('новий учасник: імʼя, дата й унікальність перевіряються, порядок наступний', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 5, FULL)];
+  assert.ok(newMember(ms, { name: '', start: '2026-10-01', id: 'n' }).error);
+  assert.ok(newMember(ms, { name: 'Х', start: '', id: 'n' }).error);
+  assert.ok(newMember(ms, { name: ' A ', start: '2026-10-01', id: 'n' }).error, 'повтор без урахування регістру');
+  const ok = newMember(ms, { name: 'Новий', start: '2026-10-21', id: 'n1' });
+  assert.equal(ok.member.order, 6);
+  assert.equal(ok.member.opening, 0);
+  assert.deepEqual(ok.member.periods, [{ start: '2026-10-21' }]);
+});
