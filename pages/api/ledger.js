@@ -1,5 +1,5 @@
 import { withAuth } from '../../lib/auth';
-import { readSheet, writeCells, appendRow, deleteRow, insertRowAt } from '../../lib/sheets';
+import { readSheet, writeCells, appendRow, deleteRow, insertRowAt, sheetConfig } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
 
 /** Знаходить структуру відомості: рядок заголовків і ключові колонки */
@@ -82,6 +82,9 @@ function parseItems(values, meta) {
 
 export default withAuth(async (req, res) => {
   const sheet = req.query.sheet || req.body?.sheet || 'Майно роти';
+  if (!sheetConfig(sheet, 'ledger')) {
+    return res.status(404).json({ error: `Немає відомості «${sheet}»` });
+  }
   const values = await readSheet(sheet);
   const meta = getMeta(values);
 

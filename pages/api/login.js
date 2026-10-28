@@ -1,10 +1,20 @@
 import {
-  setSessionCookie, clearSessionCookie, session, isChief, signingReady,
+  setSessionCookie, clearSessionCookie, session, isChief, signingReady, authRequired, sameSecret,
 } from '../../lib/auth';
 import { readPeople, verifyPin } from '../../lib/people';
 
+/*
+ * Пауза після невдалої спроби.
+ *
+ * Позивні екран входу показує всім, а PIN короткий — без паузи його
+ * перебирають за хвилини. Секунда на кожну помилку людині непомітна, а
+ * перебір робить у тисячі разів довшим. Від багатьох паралельних запитів
+ * це не рятує — для того потрібне сховище лічильників, якого тут немає.
+ */
+const slowDown = () => new Promise((r) => setTimeout(r, 1000));
+
 export default async function handler(req, res) {
-  const required = !!process.env.APP_PASSWORD;
+  const required = authRequired();
 
   if (req.method === 'GET') {
     const who = session(req);
@@ -35,6 +45,11 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!required) return res.json({ ok: true });
+  if (!process.env.APP_PASSWORD) {
+    return res.status(500).json({
+      error: 'APP_PASSWORD не задано — вхід вимкнено. Додайте змінну в налаштуваннях і зробіть новий деплой.',
+    });
+  }
 
   /*
    * Пароль просять, а підписати сесію нічим.
@@ -55,7 +70,8 @@ export default async function handler(req, res) {
   // Спільний пароль лишається — ним заходить адміністратор, який заводить людей.
   // Поки нікого не заведено, це єдиний спосіб увійти.
   if (password) {
-    if (password !== process.env.APP_PASSWORD) {
+    if (!sameSecret(password, process.env.APP_PASSWORD)) {
+      await slowDown();
       return res.status(401).json({ error: 'Невірний пароль' });
     }
     const end = setSessionCookie(res, { callsign: '', role: 'admin' });
@@ -65,7 +81,10 @@ export default async function handler(req, res) {
   if (!callsign || !pin) return res.status(400).json({ error: 'Вкажіть позивний і PIN' });
 
   const person = verifyPin(await readPeople(), callsign, pin);
-  if (!person) return res.status(401).json({ error: 'Невірний позивний або PIN' });
+  if (!person) {
+    await slowDown();
+    return res.status(401).json({ error: 'Невірний позивний або PIN' });
+  }
 
   const end = setSessionCookie(res, { callsign: person.callsign, role: person.role });
   return res.json({ ok: true, role: person.role, callsign: person.callsign, expires: end });

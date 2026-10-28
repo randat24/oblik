@@ -13,7 +13,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { fromSerial, todayStr, findColumns } from '../lib/sheets.js';
+import { fromSerial, todayStr, findColumns, sheetConfig } from '../lib/sheets.js';
 
 /* ── дати ──────────────────────────────────────────────────────────────── */
 
@@ -121,4 +121,25 @@ test('примітка не плутається з іншими службов�
 
 test('перша примітка й виграє — друга колонка з тим самим коренем не перебиває', () => {
   assert.equal(findColumns(['Назва', 'Примітка', 'Примітка 2']).note, 1);
+});
+
+/* ── які листи можна писати ────────────────────────────────────────────── */
+
+test('лист майна з конфігурації знаходиться', () => {
+  assert.equal(sheetConfig('Радейки', 'items')?.name, 'Радейки');
+});
+
+test('«Люди» не лист майна — інакше черговий вписав би собі роль адміністратора', () => {
+  assert.equal(sheetConfig('Люди', 'items'), null);
+  assert.equal(sheetConfig('Люди'), null);
+});
+
+test('лист іншого виду не підходить: відомість — не лист майна', () => {
+  assert.equal(sheetConfig('Майно роти', 'items'), null);
+  assert.equal(sheetConfig('Майно роти', 'ledger')?.kind, 'ledger');
+});
+
+test('порожня чи відсутня назва — null, а не падіння', () => {
+  assert.equal(sheetConfig(undefined, 'items'), null);
+  assert.equal(sheetConfig('', 'items'), null);
 });
