@@ -1,5 +1,6 @@
 import { withAuth } from '../../lib/auth';
 import { getPhotoStream, driveReady } from '../../lib/drive';
+import { isImageMime } from '../../lib/mime';
 
 // Фото приватні: віддаємо їх лише тому, хто увійшов на сайт
 export default withAuth(async (req, res) => {
@@ -20,7 +21,13 @@ export default withAuth(async (req, res) => {
     return res.status(404).json({ error: 'Фото не знайдено' });
   }
 
+  if (!isImageMime(mimeType)) {
+    stream.destroy();
+    return res.status(404).json({ error: 'Фото не знайдено' });
+  }
+
   res.setHeader('Content-Type', mimeType);
+  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'private, max-age=3600');
 
