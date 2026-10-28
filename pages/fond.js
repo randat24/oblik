@@ -22,18 +22,7 @@ import {
   ownerRecalcPlan, monthBounds, daysOf,
 } from '../lib/fund';
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
-
-const TABS = [
-  ['sum', 'Зведення'],
-  ['add', 'Витрата'],
-  ['cash', 'Каса'],
-  ['log', 'Журнал'],
-  ['rep', 'Звіти'],
-  ['people', 'Учасники'],
-];
-
-// вкладки, які щось записують: без входу їх не показуємо взагалі
-const EDIT_TABS = ['add', 'cash'];
+import { BottomNav, Sheet, KindPicker, OP_KINDS, Avatar, hueOf, IcoTune } from '../components/fund-ui';
 
 const dmy = (d) => (d ? d.split('-').reverse().join('.') : '');
 
@@ -56,6 +45,8 @@ function Fund() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
   const [tab, setTab] = useState('sum');
+  // шторка «Нова операція»: null — закрита, 'pick' — вибір типу, інакше — форма цього типу
+  const [sheet, setSheet] = useState(null);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -87,20 +78,12 @@ function Fund() {
         <header className="fund-head">
           <div>
             <h1 className="fund-h1">Спільний фонд</h1>
-            <span className="fund-sub">
-              Мінус — учасник винен фондові. Плюс — фонд винен йому.
+            <span className="fund-legend">
+              <i className="is-neg">− винен фонду</i><i className="is-pos">+ фонд винен йому</i>
             </span>
           </div>
           {!canEdit && <span className="fund-ro">тільки перегляд</span>}
         </header>
-
-        <nav className="fund-tabs">
-          {TABS.filter(([k]) => canEdit || !EDIT_TABS.includes(k)).map(([k, label]) => (
-            <button key={k} className={'chip' + (tab === k ? ' on' : '')} onClick={() => setTab(k)}>
-              {label}
-            </button>
-          ))}
-        </nav>
 
         {!ok && (
           <div className="fund-bad">
@@ -114,12 +97,6 @@ function Fund() {
         )}
 
         {tab === 'sum' && !!members.length && <Summary state={state} members={members} config={config} ops={ops} nameOf={nameOf} />}
-        {tab === 'add' && (canEdit
-          ? <ExpenseForm members={members} ops={ops} config={config} onDone={load} toast={toast} />
-          : <LoginHint what="записувати витрати" />)}
-        {tab === 'cash' && (canEdit
-          ? <CashForm members={members} ops={ops} config={config} onDone={load} toast={toast} />
-          : <LoginHint what="робити операції з касою" />)}
         {tab === 'log' && (
           <Journal ops={ops} members={members} nameOf={nameOf} canEdit={canEdit}
             onDone={load} toast={toast} />
@@ -127,6 +104,26 @@ function Fund() {
         {tab === 'rep' && !!members.length && <Reports members={members} ops={ops} config={config} nameOf={nameOf} />}
         {tab === 'people' && <People members={members} state={state} ops={ops} config={config} canEdit={canEdit} onDone={load} toast={toast} />}
       </div>
+
+      <BottomNav tab={tab} onTab={setTab} canEdit={canEdit && !!members.length} onAdd={() => setSheet('pick')} />
+
+      {sheet && canEdit && (
+        <Sheet
+          title={sheet === 'pick' ? 'Нова операція' : OP_KINDS.find((x) => x.k === sheet)?.title}
+          onBack={sheet === 'pick' ? null : () => setSheet('pick')}
+          onClose={() => setSheet(null)}
+        >
+          {sheet === 'pick' && <KindPicker onPick={setSheet} />}
+          {sheet === 'expense' && (
+            <ExpenseForm members={members} ops={ops} config={config} toast={toast}
+              onDone={() => { load(); setSheet(null); }} />
+          )}
+          {sheet !== 'pick' && sheet !== 'expense' && (
+            <CashForm type={sheet} members={members} ops={ops} config={config} toast={toast}
+              onDone={() => { load(); setSheet(null); }} />
+          )}
+        </Sheet>
+      )}
     </div>
   );
 }
@@ -175,19 +172,8 @@ function Empty({ canSeed, onDone, toast }) {
 }
 
 /** Гостю кнопок не показуємо, але й не вдаємо, що їх немає взагалі */
-const LoginHint = ({ what }) => (
-  <div className="fund-card">
-    <div className="empty">
-      Щоб {what}, увійдіть у застосунок — <a className="h-link" href="/">на головну</a>.
-      Переглядати фонд можна й без входу.
-    </div>
-  </div>
-);
-
 /* ---------- Зведення ---------- */
 
-const HUES = [152, 28, 262, 205, 340, 48];
-const hueOf = (m, i) => HUES[(m.order ? m.order - 1 : i) % HUES.length];
 const longDate = (d) => {
   const [y, mo, da] = d.split('-').map(Number);
   return `${da} ${['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня',
@@ -400,6 +386,70 @@ function Reports({ members, ops, config, nameOf }) {
   );
 }
 
+/* ---------- Кирпичики форм ---------- */
+
+const shiftDay = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+
+/** Велика сума зверху: це перше й найважливіше поле будь-якої операції */
+function AmountField({ value, onChange, label = 'Сума', autoFocus = true }) {
+  return (
+    <label className="fund-amt">
+      <span>{label}</span>
+      <div>
+        <input inputMode="decimal" value={value} autoFocus={autoFocus}
+          onChange={(e) => onChange(e.target.value)} placeholder="0" aria-label={label} />
+        <i>грн</i>
+      </div>
+    </label>
+  );
+}
+
+/** Дата: швидкі «Сьогодні» і «Вчора», інша — звичайним полем */
+function DateField({ value, onChange }) {
+  const today = todayIso();
+  const yday = shiftDay(today, -1);
+  return (
+    <div className="fund-f">
+      <span>Коли</span>
+      <div className="fund-picks">
+        <button type="button" className={'fund-pchip' + (value === today ? ' on' : '')} onClick={() => onChange(today)}>Сьогодні</button>
+        <button type="button" className={'fund-pchip' + (value === yday ? ' on' : '')} onClick={() => onChange(yday)}>Вчора</button>
+        <input type="date" className="fund-date-sm" value={value} onChange={(e) => onChange(e.target.value)} aria-label="Дата" />
+      </div>
+    </div>
+  );
+}
+
+/** Вибір однієї людини (платник, отримувач): аватар + імʼя, а не випадний список */
+function PersonPick({ members, value, onChange, cash = false, label }) {
+  return (
+    <div className="fund-f">
+      <span>{label}</span>
+      <div className="fund-picks">
+        {byOrder(members).map((m, i) => (
+          <button type="button" key={m.id} className={'fund-pchip' + (value === m.id ? ' on' : '')} onClick={() => onChange(m.id)}>
+            <Avatar m={m} i={i} size={24} />{m.name}
+          </button>
+        ))}
+        {cash && (
+          <button type="button" className={'fund-pchip' + (value === 'cash' ? ' on' : '')} onClick={() => onChange('cash')}>
+            Каса
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Нижня смужка форми: завжди під рукою, із підсумком у самій кнопці */
+function SubmitBar({ busy, children }) {
+  return (
+    <div className="fund-submit">
+      <button className="btn" disabled={busy}>{busy ? 'Записуємо…' : children}</button>
+    </div>
+  );
+}
+
 /* ---------- Витрата ---------- */
 
 function ExpenseForm({ members, ops, config, onDone, toast }) {
@@ -471,57 +521,45 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
   };
 
   return (
-    <form className="fund-card" onSubmit={send}>
-      <h2 className="fund-h2">Нова витрата</h2>
-      <label className="fund-f">Сума, грн
-        <input className="fund-amount" inputMode="decimal" value={amount}
-          onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
-      </label>
-      <label className="fund-f">Що купили
-        <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Продукти" />
-      </label>
-      <div className="fund-two">
-        <label className="fund-f">Категорія
-          <select value={category} onChange={(e) => setCategory(e.target.value)}>
-            {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </label>
-        <label className="fund-f">Дата
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-      </div>
-      <label className="fund-f">Хто платив
-        <select value={payer} onChange={(e) => setPayer(e.target.value)}>
-          {ms.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          <option value="cash">Зі спільної каси (готівкою)</option>
-        </select>
-      </label>
+    <form className="fund-form" onSubmit={send}>
+      <AmountField value={amount} onChange={setAmount} />
 
-      <label className="fund-f fund-check">
-        <span><input type="checkbox" checked={byDays} onChange={(e) => { setByDays(e.target.checked); setDays({}); }} />
-          {' '}Розподілити по днях (оренда, комуналка): обрати людей і дні кожної</span>
+      <label className="fund-f">Що купили
+        <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Наприклад: продукти" />
       </label>
 
       <div className="fund-f">
-        <span>На кого ділимо</span>
-        <div className="fund-seg">
-          {flips.length > 0 && (
-            <button type="button" className="chip is-clear" onClick={() => setFlips([])}>
-              Як за налаштуванням
-            </button>
-          )}
+        <span>Категорія</span>
+        <div className="fund-picks">
+          {CATEGORIES.map((c) => (
+            <button type="button" key={c.id} className={'fund-pchip' + (category === c.id ? ' on' : '')}
+              onClick={() => setCategory(c.id)} title={c.name}>{c.short}</button>
+          ))}
         </div>
+        <span className="fund-hint">{categoryOf(category).hint}</span>
+      </div>
+
+      <DateField value={date} onChange={setDate} />
+      <PersonPick members={members} value={payer} onChange={setPayer} cash label="Хто платив" />
+
+      <div className="fund-f">
+        <span>На кого ділимо</span>
+        <label className="fund-switch">
+          <input type="checkbox" checked={byDays} onChange={(e) => { setByDays(e.target.checked); setDays({}); }} />
+          <i aria-hidden="true" />
+          <span><b>По днях</b> — оренда, комуналка: кожен платить за свої дні</span>
+        </label>
+
         {byDays ? (
           <div className="fund-days">
-            {ms.map((m) => {
+            {ms.map((m, i) => {
               const on = use.includes(m.id);
               const r = rangeOf(m.id);
               return (
                 <div className="fund-day-row" key={m.id}>
-                  <label className={'chip' + (on ? ' on' : '')}>
-                    <input type="checkbox" checked={on} onChange={() => toggle(m.id)} />
-                    {m.name}
-                  </label>
+                  <button type="button" className={'fund-pchip' + (on ? ' on' : '')} onClick={() => toggle(m.id)}>
+                    <Avatar m={m} i={i} size={24} />{m.name}
+                  </button>
                   {on && (
                     <>
                       <input type="date" value={r.from} aria-label={`${m.name}: з`}
@@ -535,33 +573,35 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
             })}
           </div>
         ) : (
-          <div className="fund-parts">
-            {ms.map((m) => {
+          <div className="fund-picks">
+            {ms.map((m, i) => {
               const on = use.includes(m.id);
               const st = statusOn(m, date);
               return (
-                <label key={m.id} className={'chip' + (on ? ' on' : '')}>
-                  <input type="checkbox" checked={on} onChange={() => toggle(m.id)} />
-                  {m.name}
-                  {st !== 'in' && <i> · {st === 'vac' ? 'відпустка' : 'не в групі'}</i>}
-                  {st === 'in' && excluded.includes(m.id) && <i> · не рахуємо</i>}
-                </label>
+                <button type="button" key={m.id} className={'fund-pchip' + (on ? ' on' : '')} onClick={() => toggle(m.id)}>
+                  <Avatar m={m} i={i} size={24} />{m.name}
+                  {st !== 'in' && <i>{st === 'vac' ? 'відпустка' : 'поза групою'}</i>}
+                  {st === 'in' && excluded.includes(m.id) && <i>не рахуємо</i>}
+                </button>
               );
             })}
+            {flips.length > 0 && (
+              <button type="button" className="fund-pchip is-clear" onClick={() => setFlips([])}>Скинути</button>
+            )}
           </div>
         )}
         <span className="fund-hint">
           {byDays
             ? 'Кожна доба ділиться порівну між тими, чиї дні її охоплюють. Кому дні не змінювали, рахується весь місяць дати витрати.'
             : excluded.length > 0
-            ? 'Хто в «Не рахуємо» — знятий за замовчуванням. Назавжди міняється на вкладці «Учасники»; галочка тут діє лише на цю витрату.'
-            : categoryOf(category).hint}
+              ? 'Хто в «Не рахуємо» — знятий за замовчуванням (Люди → Склад). Відмітка тут діє лише на цю витрату.'
+              : 'Відмічені ділять витрату порівну.'}
         </span>
       </div>
 
       {preview && (
         <div className="fund-prev">
-          <span className="fund-k">Частки</span>
+          <span className="fund-k">Хто скільки</span>
           {preview.parts.map((id) => (
             <div className="fund-row" key={id}>
               <span>{members.find((m) => m.id === id)?.name}</span>
@@ -575,24 +615,15 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
         </div>
       )}
 
-      <button className="btn" disabled={busy}>{busy ? 'Записуємо…' : 'Записати витрату'}</button>
+      <SubmitBar busy={busy}>Записати{Number.isFinite(sum) && sum > 0 ? ` ${money(sum)} грн` : ''}</SubmitBar>
     </form>
   );
 }
 
 /* ---------- Каса ---------- */
 
-const CASH_KINDS = [
-  ['deposit', 'Учасник вніс готівку в касу'],
-  ['reimburse', 'З каси видали гроші учаснику'],
-  ['transfer', 'Один учасник віддав гроші іншому'],
-  ['setcash', 'Вказати суму в касі вручну'],
-  ['adjust', 'Перерахували касу: коригування'],
-];
-
-function CashForm({ members, ops, config, onDone, toast }) {
+function CashForm({ type, members, ops, config, onDone, toast }) {
   const ms = byOrder(members);
-  const [type, setType] = useState('deposit');
   const [member, setMember] = useState(ms[0]?.id || '');
   const [to, setTo] = useState(ms[1]?.id || '');
   const [sign, setSign] = useState('1');
@@ -644,51 +675,30 @@ function CashForm({ members, ops, config, onDone, toast }) {
     } catch (ex) { saveFailed(toast, ex); } finally { setBusy(false); }
   };
 
+  const who = type === 'transfer' ? 'Хто віддав' : type === 'reimburse' ? 'Кому видали' : 'Хто вніс';
   return (
-    <form className="fund-card" onSubmit={send}>
-      <h2 className="fund-h2">Операція з грошима</h2>
-      <label className="fund-f">Що сталося
-        <select value={type} onChange={(e) => setType(e.target.value)}>
-          {CASH_KINDS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
-        </select>
-      </label>
+    <form className="fund-form" onSubmit={send}>
+      <AmountField value={amount} onChange={setAmount}
+        label={isSet ? 'Скільки зараз у касі' : 'Сума'} />
 
       {type !== 'adjust' && !isSet && (
-        <div className="fund-two">
-          <label className="fund-f">
-            {type === 'transfer' ? 'Хто віддав' : type === 'reimburse' ? 'Кому видали' : 'Хто вніс'}
-            <select value={member} onChange={(e) => setMember(e.target.value)}>
-              {ms.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          </label>
-          {type === 'transfer' && (
-            <label className="fund-f">Кому
-              <select value={to} onChange={(e) => setTo(e.target.value)}>
-                {ms.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-            </label>
-          )}
-        </div>
+        <PersonPick members={members} value={member} onChange={setMember} label={who} />
+      )}
+      {type === 'transfer' && (
+        <PersonPick members={members} value={to} onChange={setTo} label="Кому" />
       )}
 
       {type === 'adjust' && (
-        <label className="fund-f">Напрямок
-          <select value={sign} onChange={(e) => setSign(e.target.value)}>
-            <option value="1">У касі виявилось більше</option>
-            <option value="-1">У касі виявилось менше</option>
-          </select>
-        </label>
+        <div className="fund-f">
+          <span>Що з касою</span>
+          <div className="fund-picks">
+            <button type="button" className={'fund-pchip' + (sign === '1' ? ' on' : '')} onClick={() => setSign('1')}>У касі більше</button>
+            <button type="button" className={'fund-pchip' + (sign === '-1' ? ' on' : '')} onClick={() => setSign('-1')}>У касі менше</button>
+          </div>
+        </div>
       )}
 
-      <div className="fund-two">
-        <label className="fund-f">{isSet ? 'Скільки зараз у касі, грн' : 'Сума, грн'}
-          <input className="fund-amount" inputMode="decimal" value={amount}
-            onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />
-        </label>
-        <label className="fund-f">Дата
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-      </div>
+      <DateField value={date} onChange={setDate} />
 
       {isSet && (
         <div className="fund-prev">
@@ -725,88 +735,136 @@ function CashForm({ members, ops, config, onDone, toast }) {
         </div>
       )}
 
-      <button className="btn" disabled={busy}>{busy ? 'Записуємо…' : 'Записати'}</button>
+      <SubmitBar busy={busy}>Записати{Number.isFinite(sum) && sum > 0 ? ` ${money(sum)} грн` : ''}</SubmitBar>
     </form>
   );
 }
 
 /* ---------- Журнал ---------- */
 
+const FILTERS = [
+  ['all', 'Усі'], ['exp', 'Витрати'], ['cash', 'Каса'], ['off', 'Скасовані'],
+];
+const WEEKDAYS = ['неділя', 'понеділок', 'вівторок', 'середа', 'четвер', 'пʼятниця', 'субота'];
+const dayTitle = (iso) => {
+  if (iso === todayIso()) return 'Сьогодні';
+  const [y, mo, da] = iso.split('-').map(Number);
+  const wd = WEEKDAYS[new Date(Date.UTC(y, mo - 1, da)).getUTCDay()];
+  return `${longDate(iso).replace(/ \d{4}$/, '')} · ${wd}`;
+};
+
+/** Знак суми в журналі: що операція робить з грошима каси */
+const signOf = (op) => {
+  if (op.type === 'deposit') return { cls: 'is-pos', pre: '+' };
+  if (op.type === 'reimburse') return { cls: 'is-warn', pre: '−' };
+  if (op.type === 'expense' && op.payer === 'cash') return { cls: 'is-neg', pre: '−' };
+  return { cls: '', pre: '' };
+};
+
 function Journal({ ops, members, nameOf, canEdit, onDone, toast }) {
-  const [all, setAll] = useState(false);
+  const [filter, setFilter] = useState('all');
   const [open, setOpen] = useState(null);
+  const [asking, setAsking] = useState(null);
   const [reason, setReason] = useState('');
 
-  const list = [...ops]
-    .filter((o) => all || o.status !== 'cancelled')
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const pass = (o) => {
+    if (filter === 'off') return o.status === 'cancelled';
+    if (o.status === 'cancelled') return false;
+    if (filter === 'exp') return o.type === 'expense';
+    if (filter === 'cash') return o.type !== 'expense';
+    return true;
+  };
+  const list = [...ops].filter(pass).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1
+    : String(b.createdAt || '') < String(a.createdAt || '') ? -1 : 1));
+  const groups = [];
+  list.forEach((o) => {
+    const g = groups[groups.length - 1];
+    if (g && g.date === o.date) g.items.push(o); else groups.push({ date: o.date, items: [o] });
+  });
 
   const cancel = async (op) => {
     if (!reason.trim()) return toast('Напишіть причину скасування', { type: 'err' });
     try {
       await api('/api/fund', { method: 'POST', label: 'скасування', body: { action: 'cancel', row: op.row, reason } });
       toast('Скасовано');
-      setOpen(null); setReason('');
+      setOpen(null); setAsking(null); setReason('');
       onDone();
     } catch (e) { saveFailed(toast, e); }
   };
 
   return (
-    <div className="fund-card">
-      <div className="fund-cash">
-        <h2 className="fund-h2">Журнал</h2>
-        <button className="chip" onClick={() => setAll(!all)}>
-          {all ? 'Лише чинні' : 'Разом зі скасованими'}
-        </button>
+    <>
+      <div className="fund-filters">
+        {FILTERS.map(([k, label]) => (
+          <button key={k} type="button" className={'fund-pchip' + (filter === k ? ' on' : '')} onClick={() => setFilter(k)}>{label}</button>
+        ))}
       </div>
 
-      {!list.length && <div className="empty">Операцій ще немає.</div>}
+      {!list.length && <div className="empty">{filter === 'off' ? 'Скасованих операцій немає.' : 'Операцій ще немає.'}</div>}
 
-      {list.map((op) => {
-        const e = effect(op, members);
-        return (
-          <div className={'fund-op' + (op.status === 'cancelled' ? ' is-off' : '')} key={op.id || op.row}>
-            <div className="fund-row">
-              <span className="fund-who">
-                {opTitle(op, nameOf)}
-                <i>{dmy(op.date)}{op.author && ` · ${op.author}`}</i>
-              </span>
-              <b className="fund-v">{money(op.amount)}</b>
-            </div>
-            {op.type === 'expense' && !!e.parts.length && (
-              <div className="fund-small">
-                {categoryOf(op.category).name} ·{' '}
-                {op.payer === 'cash' ? 'з каси фонду' : `платив ${nameOf(op.payer)}`} ·{' '}
-                {op.mode === 'manual' ? 'вручну' : 'за правилами'}
-                {op.periodFrom && <> · по днях {dmy(op.periodFrom)}–{dmy(op.periodTo)}</>}
-                {op.periodFrom && Object.keys(op.ranges || {}).length > 0 && (
-                  <> · окремі дні: {Object.entries(op.ranges).map(([id, r]) => `${nameOf(id)} ${dmy(r.from)}–${dmy(r.to)}`).join(', ')}</>
-                )}
-                <br />
-                Частки: {e.parts.map((id) => `${nameOf(id)} ${money(e.shares[id])}`).join(', ')}
-              </div>
-            )}
-            {!!e.cash && <div className="fund-small">Каса: {signed(e.cash)}</div>}
-            {op.note && <div className="fund-small">{op.note}</div>}
-            {op.status === 'cancelled' && (
-              <div className="fund-small is-off-t">Скасовано: {op.cancelReason}</div>
-            )}
-            {canEdit && op.status !== 'cancelled' && (
-              open === op.row ? (
-                <div className="fund-cancel">
-                  <input value={reason} onChange={(ev) => setReason(ev.target.value)}
-                    placeholder="Чому скасовуємо" />
-                  <button className="act-btn act-del" onClick={() => cancel(op)}>Підтвердити</button>
-                  <button className="act-btn" onClick={() => { setOpen(null); setReason(''); }}>Ні</button>
+      {groups.map((g) => (
+        <section className="fund-day" key={g.date}>
+          <h3 className="fund-day-h">{dayTitle(g.date)}</h3>
+          <div className="fund-feed">
+            {g.items.map((op) => {
+              const e = effect(op, members);
+              const sg = signOf(op);
+              const isOpen = open === (op.id || op.row);
+              return (
+                <div className={'fund-jrow' + (op.status === 'cancelled' ? ' is-off' : '')} key={op.id || op.row}>
+                  <button type="button" className="fund-jmain" onClick={() => setOpen(isOpen ? null : (op.id || op.row))}>
+                    <span className={'fund-mark t-' + op.type}>{OP_MARK[op.type] || '·'}</span>
+                    <span className="fund-who">
+                      {opTitle(op, nameOf)}
+                      <i>
+                        {op.type === 'expense'
+                          ? `${categoryOf(op.category).short} · ${op.payer === 'cash' ? 'з каси' : `платив ${nameOf(op.payer)}`}`
+                          : op.author}
+                      </i>
+                    </span>
+                    <b className={'fund-v ' + sg.cls}>{sg.pre}{money(op.amount)}</b>
+                  </button>
+
+                  {isOpen && (
+                    <div className="fund-jmore">
+                      {op.type === 'expense' && !!e.parts.length && (
+                        <div className="fund-small">
+                          Частки: {e.parts.map((id) => `${nameOf(id)} ${money(e.shares[id])}`).join(', ')}
+                        </div>
+                      )}
+                      {op.periodFrom && (
+                        <div className="fund-small">
+                          По днях {dmy(op.periodFrom)}–{dmy(op.periodTo)}
+                          {Object.keys(op.ranges || {}).length > 0 && ` · дні: ${Object.entries(op.ranges).map(([id, r]) => `${nameOf(id)} ${dmy(r.from)}–${dmy(r.to)}`).join(', ')}`}
+                        </div>
+                      )}
+                      {!!e.cash && <div className="fund-small">Каса: {signed(e.cash)}</div>}
+                      {op.note && <div className="fund-small">{op.note}</div>}
+                      <div className="fund-small">Вніс: {op.author || '—'}{op.mode === 'manual' && op.type === 'expense' ? ' · склад вибрано вручну' : ''}</div>
+                      {op.status === 'cancelled' && (
+                        <div className="fund-small is-off-t">Скасовано: {op.cancelReason}</div>
+                      )}
+                      {canEdit && op.status !== 'cancelled' && (
+                        asking === op.row ? (
+                          <div className="fund-cancel">
+                            <input value={reason} onChange={(ev) => setReason(ev.target.value)}
+                              placeholder="Чому скасовуємо" autoFocus />
+                            <button type="button" className="act-btn act-del" onClick={() => cancel(op)}>Підтвердити</button>
+                            <button type="button" className="act-btn" onClick={() => { setAsking(null); setReason(''); }}>Ні</button>
+                          </div>
+                        ) : (
+                          <button type="button" className="act-btn act-del" onClick={() => setAsking(op.row)}>Скасувати</button>
+                        )
+                      )}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <button className="act-btn act-del" onClick={() => setOpen(op.row)}>Скасувати</button>
-              )
-            )}
+              );
+            })}
           </div>
-        );
-      })}
-    </div>
+        </section>
+      ))}
+    </>
   );
 }
 
@@ -999,48 +1057,66 @@ function ExcludeCard({ members, config, canEdit, onDone, toast }) {
 }
 
 function People({ members, state, ops, config, canEdit, onDone, toast }) {
+  const [setup, setSetup] = useState(false);
+  const ms = byOrder(members);
+  const today = todayIso();
   return (
     <>
-      <AddMemberCard canEdit={canEdit} onDone={onDone} toast={toast} />
-      <OwnerCard members={members} ops={ops} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
-      <ExcludeCard members={members} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
-      {byOrder(members).map((m) => {
-        let run = m.opening || 0;
-        const lines = [{ date: '', what: 'Початковий баланс', v: null, run }];
-        for (const op of livedOps(ops)) {
-          const v = effect(op, members).bal[m.id];
-          if (!v) continue;
-          run += v;
-          lines.push({ date: op.date, what: opTitle(op, (id) => members.find((x) => x.id === id)?.name || '—'), v, run });
-        }
-        const b = state.bal[m.id] || 0;
-        return (
-          <div className="fund-card" key={m.id}>
-            <div className="fund-cash">
-              <span className="fund-who">{m.name}<i>{balanceWord(b)}</i></span>
-              <b className={'fund-big ' + (b < 0 ? 'is-neg' : b > 0 ? 'is-pos' : '')}>{signed(b)}</b>
+      <div className="fund-people">
+        {ms.map((m, i) => {
+          let run = m.opening || 0;
+          const lines = [{ date: '', what: 'Початковий баланс', v: null, run }];
+          for (const op of livedOps(ops)) {
+            const v = effect(op, members).bal[m.id];
+            if (!v) continue;
+            run += v;
+            lines.push({ date: op.date, what: opTitle(op, (id) => members.find((x) => x.id === id)?.name || '—'), v, run });
+          }
+          const b = state.bal[m.id] || 0;
+          const st = statusOn(m, today);
+          const note = m.id === config.owner ? 'власник каси'
+            : st === 'out' ? `поза групою з ${dmy(m.periods[m.periods.length - 1]?.end)}`
+              : st === 'vac' ? 'у відпустці'
+                : (config.excluded || []).includes(m.id) ? 'не рахуємо в нових витратах' : 'у групі';
+          return (
+            <div className="fund-pcard" key={m.id}>
+              <div className="fund-pcard-h">
+                <Avatar m={m} i={i} size={44} />
+                <span className="fund-who">{m.name}<i>{note}</i></span>
+                <b className={'fund-big ' + (b < 0 ? 'is-neg' : b > 0 ? 'is-pos' : '')}>{signed(b)}</b>
+              </div>
+              <details className="fund-exp">
+                <summary>Як вийшов баланс</summary>
+                <div className="fund-rows">
+                  {lines.map((l, k) => (
+                    <div className="fund-row" key={k}>
+                      <span className="fund-who">{l.what}<i>{dmy(l.date)}</i></span>
+                      <b className="fund-v">{l.v === null ? '' : signed(l.v)} <i>{signed(l.run)}</i></b>
+                    </div>
+                  ))}
+                </div>
+              </details>
+              {!!(m.vacations || []).length && (
+                <div className="fund-small">
+                  Відпустки: {m.vacations.map((v) => `${dmy(v.start)} — ${dmy(v.end)}`).join('; ')}
+                </div>
+              )}
+              {canEdit && <MemberEdit m={m} onDone={onDone} toast={toast} />}
             </div>
-            <details className="fund-exp">
-              <summary>Як вийшов баланс</summary>
-              <div className="fund-rows">
-                {lines.map((l, i) => (
-                  <div className="fund-row" key={i}>
-                    <span className="fund-who">{l.what}<i>{dmy(l.date)}</i></span>
-                    <b className="fund-v">{l.v === null ? '' : signed(l.v)} <i>{signed(l.run)}</i></b>
-                  </div>
-                ))}
-              </div>
-            </details>
-            {!!(m.vacations || []).length && (
-              <div className="fund-small">
-                Відпустки: {m.vacations.map((v) => `${dmy(v.start)} — ${dmy(v.end)}`).join('; ')}
-              </div>
-            )}
-            {openPeriod(m) ? null : <div className="fund-small">Поза групою з {dmy(m.periods[m.periods.length - 1]?.end)}</div>}
-            {canEdit && <MemberEdit m={m} onDone={onDone} toast={toast} />}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      <button type="button" className={'fund-setup' + (setup ? ' on' : '')} onClick={() => setSetup(!setup)}>
+        <IcoTune size={18} /> Склад і налаштування <i>{setup ? '▴' : '▾'}</i>
+      </button>
+      {setup && (
+        <>
+          <AddMemberCard canEdit={canEdit} onDone={onDone} toast={toast} />
+          <OwnerCard members={members} ops={ops} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
+          <ExcludeCard members={members} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
+        </>
+      )}
     </>
   );
 }
