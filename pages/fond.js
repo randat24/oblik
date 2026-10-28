@@ -22,6 +22,7 @@ import {
   ownerRecalcPlan, monthBounds, daysOf,
 } from '../lib/fund';
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
+import { DatePicker } from '../components/date-picker';
 import { BottomNav, Sheet, KindPicker, OP_KINDS, Avatar, hueOf, IcoTune } from '../components/fund-ui';
 
 const dmy = (d) => (d ? d.split('-').reverse().join('.') : '');
@@ -414,7 +415,7 @@ function DateField({ value, onChange }) {
       <div className="fund-picks">
         <button type="button" className={'fund-pchip' + (value === today ? ' on' : '')} onClick={() => onChange(today)}>Сьогодні</button>
         <button type="button" className={'fund-pchip' + (value === yday ? ' on' : '')} onClick={() => onChange(yday)}>Вчора</button>
-        <input type="date" className="fund-date-sm" value={value} onChange={(e) => onChange(e.target.value)} aria-label="Дата" />
+        <DatePicker value={value} onChange={onChange} label="Дата" />
       </div>
     </div>
   );
@@ -562,10 +563,8 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
                   </button>
                   {on && (
                     <>
-                      <input type="date" value={r.from} aria-label={`${m.name}: з`}
-                        onChange={(e) => setDay(m.id, 'from', e.target.value)} />
-                      <input type="date" value={r.to} aria-label={`${m.name}: по`}
-                        onChange={(e) => setDay(m.id, 'to', e.target.value)} />
+                      <DatePicker value={r.from} label={`${m.name}: з`} onChange={(v) => setDay(m.id, 'from', v)} />
+                      <DatePicker value={r.to} label={`${m.name}: по`} onChange={(v) => setDay(m.id, 'to', v)} />
                     </>
                   )}
                 </div>
@@ -900,7 +899,7 @@ function MemberEdit({ m, onDone, toast }) {
           {open ? 'Зараз у групі.' : 'Зараз поза групою — витрати на нього не діляться, баланс лишається.'}
         </div>
         <div className="fund-edit-row">
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DatePicker value={date} onChange={setDate} label="Дата" />
           {open
             ? <button type="button" className="act-btn" disabled={busy} onClick={() => save(leaveGroup(m, date), 'Записано: вийшов з групи')}>Вийшов з цієї дати</button>
             : <button type="button" className="act-btn" disabled={busy} onClick={() => save(rejoinGroup(m, date), 'Записано: повернувся')}>Повернувся з цієї дати</button>}
@@ -915,8 +914,8 @@ function MemberEdit({ m, onDone, toast }) {
           </div>
         ))}
         <div className="fund-edit-row">
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Початок" />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="Кінець" />
+          <DatePicker value={from} onChange={setFrom} label="Початок" />
+          <DatePicker value={to} onChange={setTo} label="Кінець" />
           <button type="button" className="act-btn" disabled={busy}
             onClick={() => save(addVacation(m, from, to), 'Відпустку додано')}>Додати</button>
         </div>
@@ -951,7 +950,7 @@ function AddMemberCard({ canEdit, onDone, toast }) {
       </span>
       <div className="fund-edit-row">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Імʼя" aria-label="Імʼя" />
-        <input type="date" value={start} onChange={(e) => setStart(e.target.value)} aria-label="У групі з" />
+        <DatePicker value={start} onChange={setStart} label="У групі з" />
         <button type="button" className="act-btn" disabled={busy || !name.trim()} onClick={add}>Додати</button>
       </div>
     </div>
