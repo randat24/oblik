@@ -418,39 +418,34 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
     () => newExpenseParts(members, category, date, excluded, flips),
     [members, category, date, excluded, flips],
   );
-  // за період: кожен день ділиться між тими, хто був у цей день; склад на дату тут не потрібен
+  // по днях: обираємо людей і для кожної — її дні; дні, яких не змінювали, — увесь місяць дати витрати
   const [byDays, setByDays] = useState(false);
-  const [pFrom, setPFrom] = useState(monthBounds(todayIso()).from);
-  const [pTo, setPTo] = useState(monthBounds(todayIso()).to);
+  const [days, setDays] = useState({});
+  const month = useMemo(() => monthBounds(date), [date]);
+  const rangeOf = (id) => days[id] || month;
   const pool = useMemo(
     () => byOrder(members).map((m) => m.id).filter((id) => excluded.includes(id) === flips.includes(id)),
     [members, excluded, flips],
   );
-  // окремі дні людини: хто тут вказаний, платить лише за них і потрапляє в коло, навіть якщо був знятий
-  const [ranges, setRanges] = useState({});
-  const [rWho, setRWho] = useState(ms[0]?.id || '');
-  const [rFrom, setRFrom] = useState(monthBounds(todayIso()).from);
-  const [rTo, setRTo] = useState(monthBounds(todayIso()).to);
-  const poolAll = useMemo(
-    () => byOrder(members).map((m) => m.id).filter((id) => pool.includes(id) || id in ranges),
-    [members, pool, ranges],
-  );
-  const addRange = () => {
-    if (!rWho || !rFrom || !rTo || rFrom > rTo) return toast('Вкажіть людину й дні: «з» не пізніше за «по»', { type: 'err' });
-    setRanges((r) => ({ ...r, [rWho]: { from: rFrom, to: rTo } }));
-  };
-  const use = byDays ? poolAll : parts;
+  const use = byDays ? pool : parts;
   const manual = byDays || parts.length !== auto.length || parts.some((id) => !auto.includes(id));
   const toggle = (id) => setFlips((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]));
-  const periodDays = byDays ? daysOf(pFrom, pTo).length : 0;
+  const setDay = (id, key, value) => setDays((d) => ({ ...d, [id]: { ...rangeOf(id), [key]: value } }));
+  // дні кожної вибраної людини; період витрати — від найранішого дня до найпізнішого
+  const ranges = byDays ? Object.fromEntries(use.map((id) => [id, rangeOf(id)])) : {};
+  const rangeList = Object.values(ranges);
+  const daysOk = !byDays || (rangeList.length > 0
+    && rangeList.every((r) => daysOf(r.from, r.to).length > 0));
+  const periodFrom = rangeList.map((r) => r.from).sort()[0];
+  const periodTo = rangeList.map((r) => r.to).sort().slice(-1)[0];
 
   const sum = kop(amount);
   const draft = {
     type: 'expense', amount: sum, date, category, payer,
     mode: manual ? 'manual' : 'auto', participants: use,
-    ...(byDays ? { periodFrom: pFrom, periodTo: pTo, ranges } : {}),
+    ...(byDays && daysOk ? { periodFrom, periodTo, ranges } : {}),
   };
-  const preview = Number.isFinite(sum) && sum > 0 && use.length && (!byDays || periodDays)
+  const preview = Number.isFinite(sum) && sum > 0 && use.length && daysOk
     ? effect(draft, members) : null;
 
   const send = async (e) => {
@@ -458,7 +453,7 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
     if (busy) return;
     if (!Number.isFinite(sum) || sum <= 0) return toast('Вкажіть суму більшу за нуль', { type: 'err' });
     if (!use.length) return toast('Відмітьте хоча б одного учасника', { type: 'err' });
-    if (byDays && !periodDays) return toast('Вкажіть період: «з» не пізніше за «по»', { type: 'err' });
+    if (!daysOk) return toast('Вкажіть дні кожної людини: «з» не пізніше за «по»', { type: 'err' });
     setBusy(true);
     try {
       await api('/api/fund', {
@@ -466,11 +461,11 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
         body: {
           action: 'expense', amount, desc, category, date, payer,
           mode: manual ? 'manual' : 'auto', participants: use,
-          ...(byDays ? { periodFrom: pFrom, periodTo: pTo, ranges } : {}),
+          ...(byDays ? { periodFrom, periodTo, ranges } : {}),
         },
       });
       toast(`Записано: ${money(sum)} грн`);
-      setAmount(''); setDesc(''); setFlips([]); setRanges({});
+      setAmount(''); setDesc(''); setFlips([]); setDays({});
       onDone();
     } catch (ex) { saveFailed(toast, ex); } finally { setBusy(false); }
   };
@@ -503,48 +498,9 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
       </label>
 
       <label className="fund-f fund-check">
-        <span><input type="checkbox" checked={byDays} onChange={(e) => {
-          setByDays(e.target.checked);
-          if (e.target.checked) { const b = monthBounds(date); setPFrom(b.from); setPTo(b.to); }
-        }} /> Розподілити по днях за період (оренда, комуналка)</span>
+        <span><input type="checkbox" checked={byDays} onChange={(e) => { setByDays(e.target.checked); setDays({}); }} />
+          {' '}Розподілити по днях (оренда, комуналка): обрати людей і дні кожної</span>
       </label>
-      {byDays && (
-        <div className="fund-two">
-          <label className="fund-f">Період з
-            <input type="date" value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
-          </label>
-          <label className="fund-f">по (включно)
-            <input type="date" value={pTo} onChange={(e) => setPTo(e.target.value)} />
-          </label>
-          <span className="fund-hint">
-            {periodDays
-              ? `Діб: ${periodDays}. Кожна доба ділиться між тими, хто був у групі цього дня: хто прожив частину періоду, платить лише за свої дні.`
-              : 'Вкажіть період: «з» не пізніше за «по».'}
-          </span>
-          <div className="fund-f">
-            <span>Окремі дні для людини</span>
-            <div className="fund-edit-row">
-              <select value={rWho} onChange={(e) => setRWho(e.target.value)} aria-label="Людина">
-                {ms.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-              <input type="date" value={rFrom} onChange={(e) => setRFrom(e.target.value)} aria-label="З" />
-              <input type="date" value={rTo} onChange={(e) => setRTo(e.target.value)} aria-label="По" />
-              <button type="button" className="act-btn" onClick={addRange}>Задати</button>
-            </div>
-            {Object.entries(ranges).map(([id, r]) => (
-              <div className="fund-edit-row" key={id}>
-                <span>{members.find((m) => m.id === id)?.name}: {dmy(r.from)} — {dmy(r.to)}</span>
-                <button type="button" className="act-btn act-del"
-                  onClick={() => setRanges((x) => { const n = { ...x }; delete n[id]; return n; })}>Прибрати</button>
-              </div>
-            ))}
-            <span className="fund-hint">
-              Хто тут вказаний, платить лише за ці дні, навіть якщо в групі був довше чи коротше.
-              Решта рахується за складом групи.
-            </span>
-          </div>
-        </div>
-      )}
 
       <div className="fund-f">
         <span>На кого ділимо</span>
@@ -555,22 +511,49 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
             </button>
           )}
         </div>
-        <div className="fund-parts">
-          {ms.map((m) => {
-            const on = use.includes(m.id);
-            const st = statusOn(m, date);
-            return (
-              <label key={m.id} className={'chip' + (on ? ' on' : '')}>
-                <input type="checkbox" checked={on} onChange={() => toggle(m.id)} />
-                {m.name}
-                {st !== 'in' && <i> · {st === 'vac' ? 'відпустка' : 'не в групі'}</i>}
-                {st === 'in' && excluded.includes(m.id) && <i> · не рахуємо</i>}
-              </label>
-            );
-          })}
-        </div>
+        {byDays ? (
+          <div className="fund-days">
+            {ms.map((m) => {
+              const on = use.includes(m.id);
+              const r = rangeOf(m.id);
+              return (
+                <div className="fund-day-row" key={m.id}>
+                  <label className={'chip' + (on ? ' on' : '')}>
+                    <input type="checkbox" checked={on} onChange={() => toggle(m.id)} />
+                    {m.name}
+                  </label>
+                  {on && (
+                    <>
+                      <input type="date" value={r.from} aria-label={`${m.name}: з`}
+                        onChange={(e) => setDay(m.id, 'from', e.target.value)} />
+                      <input type="date" value={r.to} aria-label={`${m.name}: по`}
+                        onChange={(e) => setDay(m.id, 'to', e.target.value)} />
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="fund-parts">
+            {ms.map((m) => {
+              const on = use.includes(m.id);
+              const st = statusOn(m, date);
+              return (
+                <label key={m.id} className={'chip' + (on ? ' on' : '')}>
+                  <input type="checkbox" checked={on} onChange={() => toggle(m.id)} />
+                  {m.name}
+                  {st !== 'in' && <i> · {st === 'vac' ? 'відпустка' : 'не в групі'}</i>}
+                  {st === 'in' && excluded.includes(m.id) && <i> · не рахуємо</i>}
+                </label>
+              );
+            })}
+          </div>
+        )}
         <span className="fund-hint">
-          {excluded.length > 0
+          {byDays
+            ? 'Кожна доба ділиться порівну між тими, чиї дні її охоплюють. Кому дні не змінювали, рахується весь місяць дати витрати.'
+            : excluded.length > 0
             ? 'Хто в «Не рахуємо» — знятий за замовчуванням. Назавжди міняється на вкладці «Учасники»; галочка тут діє лише на цю витрату.'
             : categoryOf(category).hint}
         </span>
