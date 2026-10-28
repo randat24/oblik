@@ -4463,7 +4463,7 @@ export default function Osobyste() {
     return (
       <>
         <Head><title>Особисте</title></Head>
-        <div className="h-gate">
+        <div className="h-gate" role="main">
           <h1>Особисте</h1>
           <p>{error.status === 401 ? 'Спершу увійдіть у застосунок.' : error.message}</p>
           {error.status !== 401 && error.status !== 403 && (
@@ -4479,7 +4479,7 @@ export default function Osobyste() {
     return (
       <>
         <Head><title>Особисте</title></Head>
-        <div className="h-gate">
+        <div className="h-gate" role="main">
           <p>Завантаження…</p>
           {slow && (
             <>

@@ -67,6 +67,7 @@ CI (`.github/workflows/test.yml`, Node 22) runs lint → test → build on every
 ## Quality checks worth re-running
 
 - Accessibility: load a page in Playwright and run `axe-core` (`window.axe.run(document)`); the fund screens and the home page are clean. Keep `lang="uk"` in `pages/_document.js`, a `main` landmark and one `h1` per page.
+- Підписи полів: форми писали як `<label>…</label><input/>` без звʼязку, тому `components/label-links.js` (підключений у `_app.js`) сам ставить `for`/`aria-labelledby` для підписів, що стоять поруч із полем, і для рядків картки (`.drow`). Нове поле з власним `aria-label` або `htmlFor` він не чіпає. Чипи-фільтри — це `<button class="chip">`, а не `div`.
 - `npm audit --omit=dev` should show no critical/high findings; update `next`/`react` within their ranges rather than pinning old versions.
 - Security headers are set in `next.config.js`. `X-Frame-Options` is `SAMEORIGIN`, not `DENY`, because the lesson sandbox iframe in `/me` is same-origin. The camera is the only permission the app needs.
 - A render crash shows `components/error-boundary.js` (wrapped in `pages/_app.js`) instead of a white screen; `pages/404.js` is the custom 404.
