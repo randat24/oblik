@@ -111,7 +111,7 @@ export default function Zbir() {
   if (!key) {
     return (
       <Shell>
-        <div className="z-gate">
+        <div className="z-gate" role="main">
           <h1>Пункт збору</h1>
           <p>Відкрийте сторінку за посиланням із ключем — його дає черговий.</p>
         </div>
@@ -122,7 +122,7 @@ export default function Zbir() {
   if (error) {
     return (
       <Shell>
-        <div className="z-gate">
+        <div className="z-gate" role="main">
           <h1>Пункт збору</h1>
           <p>{error.status === 401 ? 'Ключ не підходить. Попросіть у чергового свіже посилання.'
             : error.status === 404 ? 'Пункт збору вимкнено.'
@@ -133,7 +133,7 @@ export default function Zbir() {
     );
   }
 
-  if (!data) return <Shell><div className="z-gate"><p>Завантаження…</p></div></Shell>;
+  if (!data) return <Shell><div className="z-gate" role="main"><p>Завантаження…</p></div></Shell>;
 
   /*
    * Дві купки: те, що чекає водія, і те, що вже їде. Обидві правляться —
@@ -279,7 +279,7 @@ function HelpSheet({ onClose }) {
     <div className="z-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="z-sheet">
         <div className="z-sheet-h">Як заповнювати</div>
-        <div className="z-sheet-b">
+        <div className="z-sheet-b" tabIndex={0}>
           <ol className="z-steps">
             {HELP.map((s) => (
               <li key={s.t}>
@@ -554,7 +554,7 @@ function Sheet({ title, children, onCancel, onSave, saveLabel = 'Зберегт�
     <div className="z-back" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="z-sheet">
         <div className="z-sheet-h">{title}</div>
-        <div className="z-sheet-b">{children}</div>
+        <div className="z-sheet-b" tabIndex={0}>{children}</div>
         {error && <div className="z-err">{error}</div>}
         <div className="z-sheet-f">
           <button className="z-btn" onClick={onCancel} disabled={busy}>Скасувати</button>
