@@ -38,6 +38,7 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
   );
   const [pin, setPin] = useState('');
   const [pw, setPw] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -90,9 +91,11 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
               <div className="login-field">
                 <label htmlFor="login-pin">PIN</label>
                 <input
-                  id="login-pin" type="password" inputMode="numeric" autoComplete="off"
+                  id="login-pin" type="password" inputMode="numeric" autoComplete="current-password"
                   value={pin}
-                  onChange={(e) => setPin(e.target.value)}
+                  aria-invalid={!!err}
+                  aria-describedby={err ? 'login-err' : undefined}
+                  onChange={(e) => { setPin(e.target.value); setErr(''); }}
                   autoFocus
                 />
               </div>
@@ -100,19 +103,28 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
           ) : (
             <div className="login-field">
               <label htmlFor="login-password">Спільний пароль</label>
-              <input
-                id="login-password" type="password"
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                autoFocus
-              />
+              <div className="login-pw">
+                <input
+                  id="login-password" type={showPw ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={pw}
+                  aria-invalid={!!err}
+                  aria-describedby={err ? 'login-err' : undefined}
+                  onChange={(e) => { setPw(e.target.value); setErr(''); }}
+                  autoFocus
+                />
+                <button type="button" className="login-eye" aria-pressed={showPw}
+                  onClick={() => setShowPw((v) => !v)}>
+                  {showPw ? 'Сховати' : 'Показати'}
+                </button>
+              </div>
             </div>
           )}
 
           <button type="submit" className="btn login-submit" disabled={busy}>
             {busy ? 'Входимо…' : 'Увійти'}
           </button>
-          {err && <div className="err" role="alert">{err}</div>}
+          {err && <div className="err" id="login-err" role="alert">{err}</div>}
 
           {callsigns.length > 0 && (
             <button
