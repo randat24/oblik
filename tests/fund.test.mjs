@@ -601,3 +601,52 @@ test('новий учасник: імʼя, дата й унікальність 
   assert.equal(ok.member.opening, 0);
   assert.deepEqual(ok.member.periods, [{ start: '2026-10-21' }]);
 });
+
+/* ---------- Окремі дні людей у витраті ---------- */
+import { parseRanges as parseOwn, rangesToText as ownText } from '../lib/fund.js';
+
+test('окремі дні пишуться рядком і читаються назад без втрат', () => {
+  const r = { x: { from: '2026-10-01', to: '2026-10-20' }, y: { from: '2026-10-05', to: '2026-10-05' } };
+  assert.deepEqual(parseOwn(ownText(r)), r);
+});
+
+test('зіпсований рядок окремих днів не валить розрахунок, хибні шматки відкидаються', () => {
+  assert.deepEqual(parseOwn('x=2026-10-20..2026-10-01;y=сміття;z=2026-10-01..2026-10-02'),
+    { z: { from: '2026-10-01', to: '2026-10-02' } });
+  assert.deepEqual(parseOwn(''), {});
+  assert.deepEqual(parseOwn(null), {});
+});
+
+test('людині можна задати «з 1 по 20», і платить вона лише за ці дні', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL), mk('x', 3, FULL)];
+  const op = rent('3100', ['a', 'b', 'x'], { ranges: { x: { from: '2026-10-01', to: '2026-10-20' } } });
+  const r = spreadByDays(op, ms);
+  assert.equal(r.shares.a + r.shares.b + r.shares.x, kop('3100'));
+  // 20 днів утрьох і 11 днів удвох
+  assert.ok(r.shares.x < r.shares.a, 'x платить менше за тих, хто був увесь місяць');
+  assert.equal(r.shares.a, r.shares.b);
+});
+
+test('окремі дні сильніші за склад групи: людину поза групою можна врахувати', () => {
+  const ms = [mk('a', 1, FULL), mk('out', 2, [{ start: '2000-01-01', end: '2026-10-01' }])];
+  const without = spreadByDays(rent('100', ['a', 'out']), ms);
+  assert.equal(without.shares.out, undefined, 'поза групою не платить');
+  const forced = spreadByDays(rent('100', ['a', 'out'], { ranges: { out: { from: '2026-10-01', to: '2026-10-31' } } }), ms);
+  assert.equal(forced.shares.out, kop('50'));
+});
+
+test('людина з окремими днями у відпустці платить за свої дні, відпустка не втручається', () => {
+  const ms = [mk('a', 1, FULL), mk('v', 2, FULL, [{ start: '2026-10-01', end: '2026-10-31' }])];
+  const op = rent('100', ['a', 'v'], { category: 'var', ranges: { v: { from: '2026-10-01', to: '2026-10-31' } } });
+  assert.equal(spreadByDays(op, ms).shares.v, kop('50'));
+});
+
+test('кілька людей з окремими днями, решта — за складом групи; сума завжди сходиться', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL), mk('c', 3, FULL), mk('d', 4, FULL)];
+  const op = rent('1000.01', ['a', 'b', 'c', 'd'], {
+    ranges: { c: { from: '2026-10-01', to: '2026-10-10' }, d: { from: '2026-10-25', to: '2026-10-31' } },
+  });
+  const r = spreadByDays(op, ms);
+  assert.equal(Object.values(r.shares).reduce((s, v) => s + v, 0), kop('1000.01'));
+  assert.ok(r.shares.c < r.shares.a && r.shares.d < r.shares.a);
+});
