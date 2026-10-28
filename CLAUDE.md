@@ -40,7 +40,9 @@ CI (`.github/workflows/test.yml`, Node 22) runs lint → test → build on every
 - Without `APP_PASSWORD`, the app is open locally but nobody can get in on Vercel (`authRequired()`).
 - Every API route is wrapped in `withAuth(handler, { adminOnly, openGet })`. It also runs the handler inside an `AsyncLocalStorage`, so `currentActor()` / `logChange()` know who made the change without passing it through every call.
 - Write routes must check the sheet name from the request body against `SHEET_CONFIGS` via `sheetConfig(name, kind)`. «Люди» (roles), «Журнал» (audit log) and the personal sheets live in the same spreadsheet; without this check any logged-in user could promote themselves to admin.
-- Public link-key routes (`/zbir` via `PACK_TOKEN`, iPhone Shortcuts via `/api/health-in`) (`HEALTH_INGEST_TOKEN`) compare keys in constant time. A route returns 404 when its env key is missing.
+- Two routes also accept a key from the link instead of a session: `/api/pack` (the `/zbir` packing page, key in `PACK_TOKEN`; a normal session works there too) and `/api/health-in` (iPhone Shortcuts, key in `HEALTH_INGEST_TOKEN`). Keys are compared in constant time. A route returns 404 when its env key is missing **or shorter than 16 characters**.
+- `openGet` only lets anonymous `GET` requests through to the handler; it does not make the route read-only. The handler must keep its GET branch free of writes for guests and decide what they see via `isGuest()`. Only `/api/fund` uses it, for the shared fund page `/fond`.
+- The "chief" (`isChief`) is a level above admin, used for irreversible delivery edits. Its callsign is the raw env `OWNER`, or else the raw env `HEALTH_OWNER`. `healthOwner()`'s code default (`'Fantomas'`) does not apply here, so with both vars unset there is no chief at all. It comes from env rather than the «Люди» sheet on purpose: anyone with spreadsheet access could otherwise grant it to themselves.
 
 **Audit log** (`lib/log.js`): every change goes through `logChange` into the «Журнал» sheet (date, time, sheet, row, action, field, before → after, who).
 
