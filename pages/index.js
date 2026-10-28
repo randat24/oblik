@@ -57,7 +57,7 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
   };
 
   return (
-    <div className="login-wrap">
+    <main className="login-wrap">
       <div className="login-box">
         <div className="login-brand">
           <span className="brand-mark" aria-hidden="true">О</span>
@@ -125,7 +125,7 @@ function Login({ onOk, callsigns = [], expired = false, lastCallsign = '' }) {
           )}
         </form>
       </div>
-    </div>
+    </main>
   );
 }
 
