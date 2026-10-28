@@ -22,6 +22,8 @@ import { logChange } from '../../lib/log';
  */
 
 const ALLOWED = ['expense', 'deposit', 'reimburse', 'transfer', 'adjust'];
+/** Вільний текст — з обмеженням довжини: у клітинці таблиці він не має розростатись безмежно */
+const clip = (v, n) => String(v ?? '').trim().slice(0, n);
 const today = () => new Date().toISOString().slice(0, 10);
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 
@@ -78,7 +80,7 @@ export default withAuth(async (req, res) => {
   /* ---------- Скасування ---------- */
   if (action === 'cancel') {
     const { row, reason } = req.body;
-    if (!reason || !String(reason).trim()) {
+    if (!clip(reason, 300)) {
       return res.status(400).json({ error: 'Напишіть причину скасування' });
     }
     const { ops } = await readFund();
@@ -87,10 +89,10 @@ export default withAuth(async (req, res) => {
     if (op.status === 'cancelled') {
       return res.status(400).json({ error: 'Цю операцію вже скасовано' });
     }
-    await cancelOp(op.row, { reason: String(reason).trim(), at: new Date().toISOString(), who });
+    await cancelOp(op.row, { reason: clip(reason, 300), at: new Date().toISOString(), who });
     await logChange({
       sheet: 'Фонд', row: op.row, action: 'Скасовано операцію',
-      field: op.type, before: (op.amount / 100).toFixed(2), after: String(reason).trim(),
+      field: op.type, before: (op.amount / 100).toFixed(2), after: clip(reason, 300),
     });
     return res.json({ ok: true });
   }
@@ -196,12 +198,12 @@ export default withAuth(async (req, res) => {
 
   const op = {
     id: newId(), type: action, date, amount,
-    note: String(body.note || '').trim(),
+    note: clip(body.note, 500),
     status: 'active', createdAt: new Date().toISOString(), author: who,
   };
 
   if (action === 'expense') {
-    op.desc = String(body.desc || '').trim();
+    op.desc = clip(body.desc, 200);
     op.category = categoryOf(body.category).id;
     op.payer = body.payer === 'cash' ? 'cash' : String(body.payer || '');
     if (op.payer !== 'cash' && !has(op.payer)) {

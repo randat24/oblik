@@ -86,24 +86,26 @@ function Fund() {
           {!canEdit && <span className="fund-ro">тільки перегляд</span>}
         </header>
 
-        {!ok && (
-          <div className="fund-bad">
-            Каса не сходиться з балансами. Перевірте журнал — показані цифри
-            можуть бути неправильні.
-          </div>
-        )}
+        <main className="fund-main">
+          {!ok && (
+            <div className="fund-bad">
+              Каса не сходиться з балансами. Перевірте журнал — показані цифри
+              можуть бути неправильні.
+            </div>
+          )}
 
-        {!members.length && (
-          <Empty canSeed={data.canSeed} onDone={load} toast={toast} />
-        )}
+          {!members.length && (
+            <Empty canSeed={data.canSeed} onDone={load} toast={toast} />
+          )}
 
-        {tab === 'sum' && !!members.length && <Summary state={state} members={members} config={config} ops={ops} nameOf={nameOf} />}
-        {tab === 'log' && (
-          <Journal ops={ops} members={members} nameOf={nameOf} canEdit={canEdit}
-            onDone={load} toast={toast} />
-        )}
-        {tab === 'rep' && !!members.length && <Reports members={members} ops={ops} config={config} nameOf={nameOf} />}
-        {tab === 'people' && <People members={members} state={state} ops={ops} config={config} canEdit={canEdit} onDone={load} toast={toast} />}
+          {tab === 'sum' && !!members.length && <Summary state={state} members={members} config={config} ops={ops} nameOf={nameOf} />}
+          {tab === 'log' && (
+            <Journal ops={ops} members={members} nameOf={nameOf} canEdit={canEdit}
+              onDone={load} toast={toast} />
+          )}
+          {tab === 'rep' && !!members.length && <Reports members={members} ops={ops} config={config} nameOf={nameOf} />}
+          {tab === 'people' && <People members={members} state={state} ops={ops} config={config} canEdit={canEdit} onDone={load} toast={toast} />}
+        </main>
       </div>
 
       <BottomNav tab={tab} onTab={setTab} canEdit={canEdit && !!members.length} onAdd={() => setSheet('pick')} />
@@ -803,7 +805,7 @@ function Journal({ ops, members, nameOf, canEdit, onDone, toast }) {
 
       {groups.map((g) => (
         <section className="fund-day" key={g.date}>
-          <h3 className="fund-day-h">{dayTitle(g.date)}</h3>
+          <h2 className="fund-day-h">{dayTitle(g.date)}</h2>
           <div className="fund-feed">
             {g.items.map((op) => {
               const e = effect(op, members);

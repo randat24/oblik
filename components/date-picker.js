@@ -28,6 +28,10 @@ const CalIcon = () => (
   </svg>
 );
 
+/** «28 жовтня 2026» — повна дата для екранного читача: цифра «28» без місяця нічого не каже */
+const GENITIVE = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
+const fullDate = (iso) => { const p = parseIso(iso); return `${p.d} ${GENITIVE[p.m - 1]} ${p.y}`; };
+
 /** Зсув дати на кількість днів: для стрілок клавіатури */
 const addDays = (iso, n) => {
   const p = parseIso(iso);
@@ -131,12 +135,13 @@ export function DatePicker({
           <div className="dp-week" aria-hidden="true">
             {WEEKDAY_NAMES.map((d) => <span key={d}>{d}</span>)}
           </div>
-          <div className="dp-grid" role="grid">
+          <div className="dp-grid">
             {weeks.flat().map((c) => (
-              <button type="button" key={c.iso} data-iso={c.iso} role="gridcell"
+              <button type="button" key={c.iso} data-iso={c.iso}
                 tabIndex={c.iso === focus ? 0 : -1}
                 disabled={!allowed(c.iso)}
-                aria-selected={c.iso === value}
+                aria-label={fullDate(c.iso)}
+                aria-pressed={c.iso === value}
                 aria-current={c.today ? 'date' : undefined}
                 className={'dp-day' + (c.out ? ' is-out' : '') + (c.today ? ' is-today' : '') + (c.iso === value ? ' is-sel' : '')}
                 onClick={() => pick(c.iso)}>

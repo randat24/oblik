@@ -5588,7 +5588,7 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 .dp-week span { padding: 6px 0; text-align: center; font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--ob-muted); }
 .dp-day { aspect-ratio: 1; min-height: 38px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--ob-text); font: inherit; font-size: .88rem; cursor: pointer; }
 .dp-day:hover:not(:disabled) { background: var(--ob-hover); }
-.dp-day.is-out { color: var(--ob-muted); opacity: .55; }
+.dp-day.is-out { color: var(--ob-muted); }
 .dp-day.is-today { border-color: var(--ob-accent-dim-line); color: var(--ob-accent); }
 .dp-day.is-sel { background: var(--ob-accent); border-color: var(--ob-accent); color: var(--ob-accent-ink); font-weight: 700; opacity: 1; }
 .dp-day:disabled { opacity: .25; cursor: not-allowed; }
@@ -5601,3 +5601,8 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 .fund-picks .dp { flex: 1; min-width: 150px; }
 .fund-day-row .dp { min-width: 0; }
 .fund-edit-row .dp { flex: 1; min-width: 140px; }
+
+.fund-main { display: block; }
+
+/* текст лише для екранного читача: на екрані його немає, а в дереві доступності він є */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }

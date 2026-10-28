@@ -769,7 +769,7 @@ function CardDeck({ cards }) {
 
   return (
     <div className="h-deck">
-      <div className="h-deck-t" ref={ref} onScroll={onScroll}>
+      <div className="h-deck-t" ref={ref} onScroll={onScroll} tabIndex={0}>
         {list.map((c, i) => (
           <div className="h-deck-c" key={i}>
             <div className="h-deck-h">{c.title}</div>
@@ -4524,7 +4524,8 @@ export default function Osobyste() {
   return (
     <>
       <Head><title>Особисте</title></Head>
-      <div className={'h-wrap' + (busy ? ' is-busy' : '')}>
+      <div className={'h-wrap' + (busy ? ' is-busy' : '')} role="main">
+        <h1 className="sr-only">Особисте</h1>
         {/* Звʼязку немає однаково і тут, і на головній — мовчати про це в
             одному з двох розділів немає жодної причини. */}
         <OfflineBar onSynced={(n) => toast(`Надіслано відкладені записи: ${n}`)} />
@@ -4539,7 +4540,7 @@ export default function Osobyste() {
         {/* Угорі лише те, без чого не обійтися: вихід, який день дивимось і
             серія. Назва сторінки, номер збірки й перелік вкладок звідси
             прибрані — вкладки живуть унизу, під великим пальцем. */}
-        <header className="h-head">
+        <header className="h-head" role="presentation">
           <a className="h-back" href="/" title="До обліку майна">←</a>
           {tab === 'day' ? (
             <div className="h-hdate">
