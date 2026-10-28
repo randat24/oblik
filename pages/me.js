@@ -4,6 +4,7 @@ import {
   api, today, stamp, short, num, plural, plur, mayEdit, setCanEdit,
 } from '../components/util';
 import { OfflineBar } from '../components/offline-bar';
+import { DatePicker } from '../components/date-picker';
 import { MultTab, CodeTab, AbcTab, PlanTab, lessonsDone, lessonsTotal } from '../components/navch';
 // Чиста логіка тренажера — без звернень до таблиць, тому їде і в браузер
 import { pace, forecast, verdicts, smooth, trend } from '../lib/weight';
@@ -4134,7 +4135,7 @@ function MedModal({ med, slots, onClose, onSave }) {
       <div className="h-row2">
         <div>
           <label>Початок</label>
-          <input type="date" value={f.start} onChange={(e) => up('start', e.target.value)} />
+          <DatePicker value={f.start} label="Початок курсу" onChange={(v) => up('start', v)} />
         </div>
         <div>
           <label>Днів курсу</label>
