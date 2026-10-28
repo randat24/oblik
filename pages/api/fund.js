@@ -216,6 +216,16 @@ export default withAuth(async (req, res) => {
       op.periodFrom = body.periodFrom;
       op.periodTo = body.periodTo;
       op.mode = 'manual';
+      // окремі дні для окремих людей: «з» не пізніше за «по», люди — з фонду
+      const ranges = {};
+      for (const [id, r] of Object.entries(body.ranges || {})) {
+        if (!has(id)) continue;
+        if (!isDate(r?.from) || !isDate(r?.to) || r.from > r.to) {
+          return res.status(400).json({ error: 'Дні для людини вказано неправильно' });
+        }
+        ranges[id] = { from: r.from, to: r.to };
+      }
+      op.ranges = ranges;
     }
     if (op.mode === 'manual') {
       op.participants = (body.participants || []).filter(has);
