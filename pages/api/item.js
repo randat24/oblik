@@ -8,10 +8,15 @@ import {
   insertRowAt,
   findColumns,
   todayStr,
+  sheetConfig,
 } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
 
 export default withAuth(async (req, res) => {
+  if (!sheetConfig(req.body?.sheet, 'items')) {
+    return res.status(404).json({ error: `Немає листа «${req.body?.sheet || ''}»` });
+  }
+
   if (req.method === 'PATCH') {
     const { sheet, row, col, value, prev } = req.body;
     await writeCell(sheet, row, col + 1, value);

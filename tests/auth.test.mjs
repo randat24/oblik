@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 import {
   makeToken, readToken, sameSecret, keyFrom, parseCookies,
   session, withAuth, windowEnd, isChief, chiefName, currentActor, signingReady,
-  WINDOW_HOURS, COOKIE_NAME,
+  WINDOW_HOURS, COOKIE_NAME, authRequired,
 } from '../lib/auth.js';
 
 /* ── оточення тримаємо під контролем ───────────────────────────────────── */
@@ -292,9 +292,30 @@ test('без APP_PASSWORD застосунок відкритий — і це м
   // не помилка, а свідоме рішення: поки пароля немає, застосунок ще не
   // налаштований. Тест стоїть тут, щоб цього не забули: варто змінній
   // зникнути з Vercel — і вхід перестає щось означати
-  await withEnv({ APP_PASSWORD: undefined }, () => {
+  await withEnv({ APP_PASSWORD: undefined, VERCEL: undefined }, () => {
     const who = session(reqWith(null));
     assert.equal(who.role, 'admin');
+  });
+});
+
+test('на Vercel без APP_PASSWORD не пускає нікого — зникла змінна не відкриває таблицю', async () => {
+  await withEnv({ APP_PASSWORD: undefined, VERCEL: '1', SESSION_SECRET: SECRET }, async () => {
+    assert.equal(authRequired(), true);
+    assert.equal(session(reqWith(null)), null);
+    // і навіть справжня кука не допомагає: пароля немає — входу немає
+    assert.equal(session(reqWith(makeToken({ callsign: 'Сокіл', role: 'admin' }))), null);
+    const { res, reached } = await run({}, reqWith(null));
+    assert.equal(res.code, 401);
+    assert.equal(reached, false);
+  });
+});
+
+test('локально без APP_PASSWORD вхід не потрібен, з паролем — потрібен', async () => {
+  await withEnv({ APP_PASSWORD: undefined, VERCEL: undefined }, () => {
+    assert.equal(authRequired(), false);
+  });
+  await withEnv({ APP_PASSWORD: 'пароль', VERCEL: undefined }, () => {
+    assert.equal(authRequired(), true);
   });
 });
 
