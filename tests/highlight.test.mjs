@@ -5,7 +5,6 @@ import { tokenize, modeOf, lineCount } from '../lib/highlight.js';
 import { CODE_LESSONS } from '../lib/code.js';
 
 const join = (code, mode) => tokenize(code, mode).map((x) => x.s).join('');
-const kinds = (code, mode) => tokenize(code, mode).map((x) => x.t);
 const of = (code, mode, type) => tokenize(code, mode).filter((x) => x.t === type).map((x) => x.s);
 
 /* ── головне правило ───────────────────────────────────────────────────── */

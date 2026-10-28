@@ -35,7 +35,7 @@ export const api = async (url, opts = {}) => {
       ...opts,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
-  } catch (netErr) {
+  } catch {
     // Зв'язку немає. Запис не втрачаємо — він піде, щойно мережа зʼявиться.
     if (method !== 'GET') {
       enqueue({ url, method, body: opts.body, label: opts.label || '' });

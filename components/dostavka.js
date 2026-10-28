@@ -109,7 +109,6 @@ export function DeliveryView({ setState, me = '', chief = false }) {
   const week = deliveredWithin(all, 7);
   const pilots = byPilot(all);
   const points = byPoint(all);
-  const left = partsLeft(all);
   const atbaseLeft = partsLeft(atbase);
   const places = placesOf(inTransit);
   const gone = lostOf(all);

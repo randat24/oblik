@@ -40,7 +40,7 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const text = await res.text();
-  let data = {};
+  let data;
   try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
   if (!res.ok) {
     const err = new Error(data.error || `Помилка ${res.status}`);
