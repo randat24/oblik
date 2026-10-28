@@ -54,7 +54,9 @@ export const api = async (url, opts = {}) => {
     throw e;
   }
 
-  if (res.status === 401) {
+  // Невірний пароль на екрані входу — теж 401, але сесія тут ні до чого:
+  // показувати «сесія завершилась» тому, хто просто схибив, неправда
+  if (res.status === 401 && !url.startsWith('/api/login')) {
     onUnauthed?.();
     throw new Error('Сесія завершилась — увійдіть знову');
   }
