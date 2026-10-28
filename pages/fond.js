@@ -19,7 +19,7 @@ import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
   byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk, shortReport,
   openPeriod, leaveGroup, rejoinGroup, addVacation, newExpenseParts, cashAdjustment,
-  ownerRecalcPlan,
+  ownerRecalcPlan, monthBounds, daysOf,
 } from '../lib/fund';
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
 
@@ -418,27 +418,43 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
     () => newExpenseParts(members, category, date, excluded, flips),
     [members, category, date, excluded, flips],
   );
-  const manual = parts.length !== auto.length || parts.some((id) => !auto.includes(id));
+  // за період: кожен день ділиться між тими, хто був у цей день; склад на дату тут не потрібен
+  const [byDays, setByDays] = useState(false);
+  const [pFrom, setPFrom] = useState(monthBounds(todayIso()).from);
+  const [pTo, setPTo] = useState(monthBounds(todayIso()).to);
+  const pool = useMemo(
+    () => byOrder(members).map((m) => m.id).filter((id) => excluded.includes(id) === flips.includes(id)),
+    [members, excluded, flips],
+  );
+  const use = byDays ? pool : parts;
+  const manual = byDays || parts.length !== auto.length || parts.some((id) => !auto.includes(id));
   const toggle = (id) => setFlips((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]));
+  const periodDays = byDays ? daysOf(pFrom, pTo).length : 0;
 
   const sum = kop(amount);
   const draft = {
     type: 'expense', amount: sum, date, category, payer,
-    mode: manual ? 'manual' : 'auto', participants: parts,
+    mode: manual ? 'manual' : 'auto', participants: use,
+    ...(byDays ? { periodFrom: pFrom, periodTo: pTo } : {}),
   };
-  const preview = Number.isFinite(sum) && sum > 0 && parts.length
+  const preview = Number.isFinite(sum) && sum > 0 && use.length && (!byDays || periodDays)
     ? effect(draft, members) : null;
 
   const send = async (e) => {
     e.preventDefault();
     if (busy) return;
     if (!Number.isFinite(sum) || sum <= 0) return toast('Вкажіть суму більшу за нуль', { type: 'err' });
-    if (!parts.length) return toast('Відмітьте хоча б одного учасника', { type: 'err' });
+    if (!use.length) return toast('Відмітьте хоча б одного учасника', { type: 'err' });
+    if (byDays && !periodDays) return toast('Вкажіть період: «з» не пізніше за «по»', { type: 'err' });
     setBusy(true);
     try {
       await api('/api/fund', {
         method: 'POST', label: 'витрата фонду',
-        body: { action: 'expense', amount, desc, category, date, payer, mode: manual ? 'manual' : 'auto', participants: parts },
+        body: {
+          action: 'expense', amount, desc, category, date, payer,
+          mode: manual ? 'manual' : 'auto', participants: use,
+          ...(byDays ? { periodFrom: pFrom, periodTo: pTo } : {}),
+        },
       });
       toast(`Записано: ${money(sum)} грн`);
       setAmount(''); setDesc(''); setFlips([]);
@@ -473,6 +489,28 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
         </select>
       </label>
 
+      <label className="fund-f fund-check">
+        <span><input type="checkbox" checked={byDays} onChange={(e) => {
+          setByDays(e.target.checked);
+          if (e.target.checked) { const b = monthBounds(date); setPFrom(b.from); setPTo(b.to); }
+        }} /> Розподілити по днях за період (оренда, комуналка)</span>
+      </label>
+      {byDays && (
+        <div className="fund-two">
+          <label className="fund-f">Період з
+            <input type="date" value={pFrom} onChange={(e) => setPFrom(e.target.value)} />
+          </label>
+          <label className="fund-f">по (включно)
+            <input type="date" value={pTo} onChange={(e) => setPTo(e.target.value)} />
+          </label>
+          <span className="fund-hint">
+            {periodDays
+              ? `Діб: ${periodDays}. Кожна доба ділиться між тими, хто був у групі цього дня: хто прожив частину періоду, платить лише за свої дні.`
+              : 'Вкажіть період: «з» не пізніше за «по».'}
+          </span>
+        </div>
+      )}
+
       <div className="fund-f">
         <span>На кого ділимо</span>
         <div className="fund-seg">
@@ -484,7 +522,7 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
         </div>
         <div className="fund-parts">
           {ms.map((m) => {
-            const on = parts.includes(m.id);
+            const on = use.includes(m.id);
             const st = statusOn(m, date);
             return (
               <label key={m.id} className={'chip' + (on ? ' on' : '')}>
@@ -722,6 +760,7 @@ function Journal({ ops, members, nameOf, canEdit, onDone, toast }) {
                 {categoryOf(op.category).name} ·{' '}
                 {op.payer === 'cash' ? 'з каси фонду' : `платив ${nameOf(op.payer)}`} ·{' '}
                 {op.mode === 'manual' ? 'вручну' : 'за правилами'}
+                {op.periodFrom && <> · по днях {dmy(op.periodFrom)}–{dmy(op.periodTo)}</>}
                 <br />
                 Частки: {e.parts.map((id) => `${nameOf(id)} ${money(e.shares[id])}`).join(', ')}
               </div>
@@ -804,6 +843,39 @@ function MemberEdit({ m, onDone, toast }) {
         </div>
       </div>
     </details>
+  );
+}
+
+/** Новий учасник: з якої дати він у групі, з тієї й починає платити */
+function AddMemberCard({ canEdit, onDone, toast }) {
+  const [name, setName] = useState('');
+  const [start, setStart] = useState(todayIso());
+  const [busy, setBusy] = useState(false);
+  if (!canEdit) return null;
+  const add = async () => {
+    if (busy) return;
+    if (!name.trim()) return toast('Вкажіть імʼя', { type: 'err' });
+    setBusy(true);
+    try {
+      await api('/api/fund', { method: 'POST', label: 'новий учасник', body: { action: 'addMember', name, start } });
+      toast(`Додано: ${name.trim()}`);
+      setName('');
+      onDone();
+    } catch (e) { saveFailed(toast, e); } finally { setBusy(false); }
+  };
+  return (
+    <div className="fund-card">
+      <h2 className="fund-h2">Додати учасника</h2>
+      <span className="fund-hint">
+        Платитиме лише з дати вступу, а витрати за період (оренда) ділитимуться по днях.
+        Забрати людину з групи можна нижче, у її картці: «Вийшов з цієї дати».
+      </span>
+      <div className="fund-edit-row">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Імʼя" aria-label="Імʼя" />
+        <input type="date" value={start} onChange={(e) => setStart(e.target.value)} aria-label="У групі з" />
+        <button type="button" className="act-btn" disabled={busy || !name.trim()} onClick={add}>Додати</button>
+      </div>
+    </div>
   );
 }
 
@@ -908,6 +980,7 @@ function ExcludeCard({ members, config, canEdit, onDone, toast }) {
 function People({ members, state, ops, config, canEdit, onDone, toast }) {
   return (
     <>
+      <AddMemberCard canEdit={canEdit} onDone={onDone} toast={toast} />
       <OwnerCard members={members} ops={ops} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
       <ExcludeCard members={members} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
       {byOrder(members).map((m) => {

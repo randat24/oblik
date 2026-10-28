@@ -3,7 +3,7 @@ import {
   readFund, addOp, addOps, cancelOp, cancelOps, saveMember, seedFund, setConfig, addMember,
 } from '../../lib/fund-store';
 import {
-  kop, compute, invariantOk, categoryOf, ownerRecalcPlan, withOwner, byOrder,
+  kop, compute, invariantOk, categoryOf, ownerRecalcPlan, withOwner, byOrder, daysOf, newMember,
 } from '../../lib/fund';
 import { OPENING_DATE } from '../../lib/fund-seed';
 import { logChange } from '../../lib/log';
@@ -149,6 +149,23 @@ export default withAuth(async (req, res) => {
     return res.json({ ok: true, recalculated: old.length, members: byOrder(members).length });
   }
 
+  /* ---------- Новий учасник ---------- */
+  if (action === 'addMember') {
+    const { members } = await readFund();
+    const made = newMember(members, {
+      name: req.body.name,
+      start: isDate(req.body.start) ? req.body.start : today(),
+      id: `p${Date.now().toString(36)}`,
+    });
+    if (made.error) return res.status(400).json({ error: made.error });
+    await addMember(made.member);
+    await logChange({
+      sheet: 'Фонд', action: 'Новий учасник', field: made.member.name,
+      after: `у групі з ${made.member.periods[0].start}`,
+    });
+    return res.json({ ok: true, id: made.member.id });
+  }
+
   /* ---------- Кого не рахуємо у нових витратах ---------- */
   if (action === 'excluded') {
     const { members } = await readFund();
@@ -191,6 +208,15 @@ export default withAuth(async (req, res) => {
       return res.status(400).json({ error: 'Оберіть, хто платив' });
     }
     op.mode = body.mode === 'manual' ? 'manual' : 'auto';
+    if (body.periodFrom || body.periodTo) {
+      // за період: ділиться по днях, а коло людей задається списком
+      if (!isDate(body.periodFrom) || !isDate(body.periodTo) || !daysOf(body.periodFrom, body.periodTo).length) {
+        return res.status(400).json({ error: 'Період вказано неправильно' });
+      }
+      op.periodFrom = body.periodFrom;
+      op.periodTo = body.periodTo;
+      op.mode = 'manual';
+    }
     if (op.mode === 'manual') {
       op.participants = (body.participants || []).filter(has);
       if (!op.participants.length) {
