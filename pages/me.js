@@ -6,15 +6,6 @@ import {
 import { OfflineBar } from '../components/offline-bar';
 import { MultTab, CodeTab, AbcTab, PlanTab, lessonsDone, lessonsTotal } from '../components/navch';
 // Чиста логіка тренажера — без звернень до таблиць, тому їде і в браузер
-import {
-  LESSONS, FACTS, RUN, FAST_SEC, keyOf, known, auto, runOf, tipFor, options, question, factOf,
-  problems, slows, dayQueue, daily, dayStreak, hardest, hookFor, practiceDays, DAY_SIZE,
-  QUICK_TILES, QUICK_SIZE, quickQueue, HARD, hardDone, stats, nextNew, NEW_PER_DAY,
-  arcadeLevel, arcadeNext, ARCADE_LIVES, ARCADE_PER_LEVEL, ask, formFor,
-  lessonFacts, freshFacts, partsOf, partMultipliers, modesOf,
-  lessonProgress, partProgress, unlockedLessons,
-  buildSession, partQueue, applyResults,
-} from '../lib/mult';
 import { pace, forecast, verdicts, smooth, trend } from '../lib/weight';
 import {
   weightOn, split, composition, compositionVerdict, oddValue,
@@ -635,24 +626,6 @@ function Modal({ title, children, onClose, onSave, saveLabel = 'Зберегти
   );
 }
 
-/* ---------- Смуга норми ---------- */
-
-function Bar({ label, value, goal, unit = 'г', tone }) {
-  const pct = goal > 0 ? Math.min(100, (value / goal) * 100) : 0;
-  const over = goal > 0 && value > goal;
-  return (
-    <div className="h-bar">
-      <div className="h-bar-l">{label}</div>
-      <div className="h-bar-t">
-        <div className={'h-bar-f' + (over ? ' is-over' : '')} style={{ width: `${pct}%`, background: tone }} />
-      </div>
-      <div className="h-bar-v">
-        <b>{n1(value)}</b>{goal > 0 ? <span> / {n1(goal)} {unit}</span> : <span> {unit}</span>}
-      </div>
-    </div>
-  );
-}
-
 /* ---------- Вкладка «День» ---------- */
 
 const DOW = ['НД', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
@@ -769,7 +742,7 @@ function CardDeck({ cards }) {
 
   return (
     <div className="h-deck">
-      <div className="h-deck-t" ref={ref} onScroll={onScroll}>
+      <div className="h-deck-t" ref={ref} onScroll={onScroll} tabIndex={0}>
         {list.map((c, i) => (
           <div className="h-deck-c" key={i}>
             <div className="h-deck-h">{c.title}</div>
@@ -4524,7 +4497,8 @@ export default function Osobyste() {
   return (
     <>
       <Head><title>Особисте</title></Head>
-      <div className={'h-wrap' + (busy ? ' is-busy' : '')}>
+      <div className={'h-wrap' + (busy ? ' is-busy' : '')} role="main">
+        <h1 className="sr-only">Особисте</h1>
         {/* Звʼязку немає однаково і тут, і на головній — мовчати про це в
             одному з двох розділів немає жодної причини. */}
         <OfflineBar onSynced={(n) => toast(`Надіслано відкладені записи: ${n}`)} />
@@ -4539,7 +4513,7 @@ export default function Osobyste() {
         {/* Угорі лише те, без чого не обійтися: вихід, який день дивимось і
             серія. Назва сторінки, номер збірки й перелік вкладок звідси
             прибрані — вкладки живуть унизу, під великим пальцем. */}
-        <header className="h-head">
+        <header className="h-head" role="presentation">
           <a className="h-back" href="/" title="До обліку майна">←</a>
           {tab === 'day' ? (
             <div className="h-hdate">

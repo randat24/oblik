@@ -82,7 +82,7 @@ export async function api(path, opts = {}) {
     if (bell) clearTimeout(bell);
   }
   const text = await res.text();
-  let data = {};
+  let data;
   try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
   if (!res.ok) {
     const err = new Error(data.error || `Помилка ${res.status}`);

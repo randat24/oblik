@@ -1,5 +1,5 @@
 import { withAuth, currentActor } from '../../lib/auth';
-import { writeCell, writeCells, appendRow, deleteRow, todayStr, readSheet } from '../../lib/sheets';
+import { writeCells, appendRow, deleteRow, todayStr, readSheet } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
 import { appendAct, CONDITIONS } from '../../lib/acts';
 import {

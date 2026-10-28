@@ -72,7 +72,7 @@ export function AuditView({ setState }) {
     try {
       await api('/api/audit', { method: 'POST', body: { action: 'tick', lines } });
       setState('синхронізовано');
-    } catch (e) {
+    } catch {
       // не втрачаємо позначки: повертаємо в чергу й спробуємо ще раз
       queue.current = [...lines, ...queue.current];
       setState('не збережено — спробуємо ще раз');
