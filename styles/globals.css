@@ -5629,7 +5629,7 @@ a.nav-item { text-decoration: none; }
 /* Кнопки в рядку списку не розтягуються на всю ширину */
 .sp-item .act-btn, .sp-item .btn { flex: 0 0 auto; min-width: 0; }
 .sp-item { align-items: center; }
-.sp-item .act-btn { min-height: 38px; padding: 0 14px; }
+.sp-item .act-btn { min-height: var(--ctl-h); padding: 0 14px; }
 .toolbar .pill { flex: 0 0 auto; max-width: none; }
 .toolbar input[type="text"] { min-height: 44px; }
 
@@ -5688,7 +5688,12 @@ a.nav-item { text-decoration: none; }
 /* Чипи у панелі інструментів: на широкому екрані стоять у тому ж рядку,
    на телефоні — окремий рядок, що гортається вбік */
 @media (min-width: 721px) {
-  .toolbar > .tb-chips { display: contents; }
+  /* чипи — окремий рядок під пошуком і кнопками, а не посеред них:
+     інакше одна кнопка лишалась сама в першому рядку, решта падала в другий */
+  .toolbar > .tb-chips { flex: 1 1 100%; order: 2; margin: 0; }
+  .stat { padding: 16px 18px 14px; }
+  .stat-v { margin-top: 12px; font-size: 2.1rem; }
+  .stat-s { margin-top: 10px; }
 }
 @media (max-width: 720px) {
   .toolbar > .tb-chips { flex: 1 1 100%; order: 2; margin-top: 0; margin-bottom: 0; }
@@ -5740,4 +5745,93 @@ button.chip:focus-visible { outline: none; box-shadow: var(--ob-focus); }
   padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(16px, env(safe-area-inset-right));
   padding-top: 8px;
+}
+
+/* Вхід: показати пароль, мʼякша тінь картки */
+.login-box { box-shadow: 0 18px 48px #0006; }
+.login-pw { position: relative; }
+.login-pw input { padding-right: 96px; }
+.login-eye {
+  position: absolute; top: 0; right: 0; height: 100%; min-width: 44px; padding: 0 14px;
+  background: none; border: 0; border-radius: 0 var(--ob-radius-md) var(--ob-radius-md) 0;
+  color: var(--ob-secondary); font: inherit; font-size: .76rem; cursor: pointer;
+}
+.login-eye:hover { color: var(--ob-text); }
+.login-box input[aria-invalid="true"] { border-color: var(--ob-danger); }
+
+/* ==========================================================================
+ * Контроли: один шрифт, один радіус, одна висота
+ *
+ * Заміри по всіх екранах показали розбіжності, які око вловлює як
+ * «нерівність»: `.btn` і `icon-btn` малювались Arial, бо кнопка не
+ * успадковує шрифт; кнопки мали радіус 10px, поля — 6px; картковий
+ * `act-btn` був 37px заввишки, `.btn` — 44px, поля в модалках — 40px, у
+ * пошуку — 44px; чип 31px, селектор тега 22px.
+ *
+ * Висота — зміна: на телефоні палець (44px), на мишці трохи нижче (40px).
+ * ========================================================================== */
+:root {
+  --ctl-h: 44px;
+  --ctl-r: var(--ob-radius-md);
+}
+@media (pointer: fine) { :root { --ctl-h: 40px; } }
+
+button, input, select, textarea { font-family: var(--ob-font); }
+input.mono, input.ghost.mono { font-family: var(--ob-mono); }
+
+.btn, .act-btn, .btn-save, .btn-cancel, .icon-btn,
+button.btn-2, button.sd-place {
+  min-height: var(--ctl-h); border-radius: var(--ctl-r);
+  font-size: .82rem;
+}
+.act-btn { padding-top: 0; padding-bottom: 0; }
+
+input[type="text"]:not(.ghost), input[type="number"]:not(.ghost), input[type="password"], input[type="search"],
+input[type="tel"], input[type="email"], input[type="date"], input:not([type]):not(.ghost),
+select:not(.ghost):not(.pill):not(.tag-pick), textarea:not(.ghost) {
+  min-height: var(--ctl-h); border-radius: var(--ctl-r);
+}
+textarea:not(.ghost) { padding-top: 10px; padding-bottom: 10px; }
+
+/* Чипи й пігулки: нижче кнопки, але не нижче, ніж дістає палець */
+.chip { min-height: 36px; }
+select.pill { min-height: 36px; }
+@media (pointer: coarse) {
+  .chip { min-height: 40px; }
+  .tag { min-height: 28px; }
+  .dlv-part, .kit-off, .box-con-add { min-height: 38px; }
+  .drow-k, .drow-v, .drow-v > .ghost, textarea.ghost { min-height: 40px; }
+  input, select, textarea { font-size: max(16px, 1em); }
+}
+
+/* Правила нижче мають вищу специфічність, ніж загальні, тож повторені тут */
+.modal-actions button { min-height: var(--ctl-h); border-radius: var(--ctl-r); font-size: .82rem; }
+.search-wrap .search-input { min-height: var(--ctl-h); border-radius: var(--ctl-r); }
+.box-b, .box-con-add, .kit-off, .dlv-part { border-radius: var(--ctl-r); }
+.dlv-part { border-radius: 999px; }
+.modal { border-radius: var(--ob-radius-xl); }
+
+/* Поля-привиди (правка на місці) — однакові між собою й тонші за звичайні */
+input.ghost, select.ghost, textarea.ghost { border-radius: var(--ob-radius-sm); }
+@media (pointer: coarse) { select.ghost, input.ghost, textarea.ghost { font-size: 16px; } }
+
+/* Назва в картці стоїть на одній лівій межі з бейджем і серійником: поле-привид
+   має власні 7px відступу, і без цієї поправки текст зсувався вправо */
+.card-title input.ghost.big { margin-left: -7px; width: calc(100% + 7px); }
+.title-line input.ghost.big { width: auto; flex: 1 1 auto; }
+.box-line-n { margin-left: -7px; }
+
+/* Модалка: кнопки не тікають під прокрутку, а лишаються внизу видимими */
+.modal-actions {
+  position: sticky; bottom: -20px; z-index: 2;
+  margin-left: -20px; margin-right: -20px; margin-bottom: -20px;
+  padding: 14px 20px 20px; background: var(--ob-surface);
+}
+
+/* Рядок чипів, що гортається: підказка, що за краєм є ще */
+@media (max-width: 720px) {
+  .chips, .filters {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
 }
