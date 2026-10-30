@@ -5451,6 +5451,389 @@ tbody tr:hover .cat-i { color: var(--ob-accent); border-color: var(--ob-accent-d
 .dup-fields dd { margin: 0; text-align: right; color: var(--ob-text); overflow-wrap: anywhere; }
 .dup-act { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 6px; }
 .dup-head .act-btn { flex: none; }
+.fund-edit-row input:not([type="date"]) { flex: 1; min-width: 120px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--ob-control-line); border-radius: var(--ob-radius-md); background: var(--ob-bg); color: var(--ob-text); font: inherit; }
+.fund-check { flex-direction: row; align-items: center; }
+.fund-check input { width: auto; min-height: 0; margin-right: 8px; }
+.fund-days { display: flex; flex-direction: column; gap: 10px; }
+/* имя на всю ширину, ниже две даты рядом; чекбокс — той самої величини, що й у звичайних чипах */
+.fund-day-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fund-day-row .chip, .fund-day-row .fund-pchip { grid-column: 1 / -1; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; justify-self: start; }
+.fund-day-row .chip input { width: auto; min-height: 0; margin: 0; }
+.fund-day-row input[type="date"] { min-width: 0; min-height: 40px; padding: 6px 10px; border: 1px solid var(--ob-control-line); border-radius: var(--ob-radius-md); background: var(--ob-bg); color: var(--ob-text); font: inherit; }
+
+/* ======================================================================
+   Фонд: нова навігація, шторка й форми
+   ====================================================================== */
+.fund-wrap { padding-bottom: 120px; }
+.fund-legend { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.fund-legend i { font-style: normal; font-size: .72rem; padding: 3px 10px; border-radius: 999px; background: var(--ob-hover); color: var(--ob-secondary); }
+.fund-legend .is-neg { color: var(--ob-danger); background: var(--ob-danger-bg); }
+.fund-legend .is-pos { color: var(--ob-success); background: var(--ob-success-bg); }
+
+/* нижня панель */
+.fund-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; padding: 0 12px calc(10px + env(safe-area-inset-bottom)); pointer-events: none; }
+.fund-nav-in { pointer-events: auto; max-width: 560px; margin: 0 auto; display: flex; align-items: center; justify-content: space-around; padding: 8px 6px; border: 1px solid var(--ob-line); border-radius: 22px; background: color-mix(in srgb, var(--ob-elevated) 92%, transparent); backdrop-filter: blur(14px); box-shadow: 0 12px 40px #0009; }
+.fund-nav-i { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px; border: 0; background: transparent; color: var(--ob-muted); font: inherit; font-size: .66rem; cursor: pointer; border-radius: 14px; }
+.fund-nav-i.on { color: var(--ob-accent); }
+.fund-nav-i.on svg { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--ob-accent) 55%, transparent)); }
+.fund-nav-add { flex: none; width: 56px; height: 56px; margin: -22px 4px 0; display: grid; place-items: center; border: 0; border-radius: 50%; background: linear-gradient(145deg, #bcf7df, #7be0b6); color: var(--ob-accent-ink); box-shadow: 0 10px 28px color-mix(in srgb, var(--ob-accent) 40%, transparent); cursor: pointer; transition: transform .15s; }
+.fund-nav-add:active { transform: scale(.93); }
+
+/* шторка */
+.fund-sheet-bg { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: #000a; animation: fund-fade .18s ease; }
+.fund-sheet { width: 100%; max-width: 560px; max-height: 94vh; display: flex; flex-direction: column; border: 1px solid var(--ob-line); border-bottom: 0; border-radius: 24px 24px 0 0; background: var(--ob-surface); box-shadow: 0 -20px 60px #000b; animation: fund-up .24s cubic-bezier(.2,.8,.2,1); }
+@media (min-width: 720px) { .fund-sheet-bg { align-items: center; } .fund-sheet { border-bottom: 1px solid var(--ob-line); border-radius: 24px; max-height: 88vh; } }
+.fund-sheet-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 14px 10px; }
+.fund-sheet-h h2 { margin: 0; font-size: 1.05rem; font-weight: 600; letter-spacing: -.02em; text-transform: none; }
+.fund-sheet-h h2::before { display: none; }
+.fund-sheet-b { overflow-y: auto; padding: 4px 16px 16px; overscroll-behavior: contain; }
+.fund-icon-btn { width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 12px; background: var(--ob-hover); color: var(--ob-text); cursor: pointer; }
+.fund-icon-btn.is-ghost { background: transparent; cursor: default; }
+@keyframes fund-fade { from { opacity: 0; } }
+@keyframes fund-up { from { transform: translateY(40px); opacity: 0; } }
+
+/* вибір типу операції */
+.fund-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-bottom: 8px; }
+.fund-kind { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px; text-align: left; border: 1px solid var(--ob-line); border-radius: var(--ob-radius-lg); background: var(--ob-elevated); color: var(--ob-text); font: inherit; cursor: pointer; transition: transform .12s, border-color .12s; }
+.fund-kind:active { transform: scale(.97); }
+.fund-kind:hover { border-color: var(--ob-accent-dim-line); }
+.fund-kind b { font-size: .92rem; font-weight: 600; }
+.fund-kind > span:last-child { font-size: .72rem; line-height: 1.4; color: var(--ob-muted); }
+.fund-kind-i { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; background: var(--ob-hover); color: var(--ob-secondary); }
+.fund-kind.t-neg .fund-kind-i { background: var(--ob-danger-bg); color: var(--ob-danger); }
+.fund-kind.t-pos .fund-kind-i { background: var(--ob-success-bg); color: var(--ob-success); }
+.fund-kind.t-warn .fund-kind-i { background: var(--ob-warning-bg); color: var(--ob-warning); }
+.fund-kind.t-info .fund-kind-i { background: var(--ob-info-bg); color: var(--ob-info); }
+
+/* форми */
+.fund-form { display: flex; flex-direction: column; gap: 16px; }
+.fund-form .fund-f { gap: 8px; }
+.fund-form .fund-f > span:first-child, .fund-amt > span { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--ob-muted); }
+.fund-amt { display: flex; flex-direction: column; gap: 6px; align-items: center; padding: 18px 12px 14px; border-radius: var(--ob-radius-lg); background: var(--ob-elevated); border: 1px solid var(--ob-line); }
+.fund-amt div { display: flex; align-items: baseline; justify-content: center; gap: 8px; width: 100%; }
+.fund-amt input { width: 100%; max-width: 280px; text-align: center; border: 0 !important; background: transparent !important; font-family: var(--ob-mono); font-size: 2.4rem; font-weight: 600; letter-spacing: -.03em; color: var(--ob-text); outline: none; padding: 0; min-height: 0; }
+.fund-amt i { font-style: normal; color: var(--ob-muted); font-size: 1rem; }
+.fund-amt:focus-within { border-color: var(--ob-accent-dim-line); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ob-accent) 14%, transparent); }
+
+.fund-picks { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fund-pchip { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 14px 6px 8px; border: 1px solid var(--ob-line); border-radius: 999px; background: var(--ob-elevated); color: var(--ob-secondary); font: inherit; font-size: .84rem; cursor: pointer; transition: background .12s, border-color .12s, color .12s; }
+.fund-pchip:not(:has(.fund-ava)) { padding-left: 14px; }
+.fund-pchip.on { border-color: var(--ob-accent-dim-line); background: var(--ob-accent-bg); color: var(--ob-accent); font-weight: 600; }
+.fund-pchip i { font-style: normal; font-size: .64rem; color: var(--ob-muted); font-weight: 400; }
+.fund-pchip.is-clear { color: var(--ob-muted); border-style: dashed; padding-left: 14px; }
+.fund-pchip .fund-ava { flex: none; }
+.fund-date-sm { flex: 1; min-width: 130px; min-height: 40px; padding: 6px 12px; border: 1px solid var(--ob-line); border-radius: 999px; background: var(--ob-elevated); color: var(--ob-text); font: inherit; font-size: .84rem; }
+
+.fund-switch { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--ob-line); border-radius: var(--ob-radius-lg); background: var(--ob-elevated); cursor: pointer; font-size: .78rem; color: var(--ob-secondary); line-height: 1.4; }
+.fund-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.fund-switch i { flex: none; position: relative; width: 44px; height: 26px; border-radius: 999px; background: var(--ob-hover); transition: background .15s; }
+.fund-switch i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--ob-muted); transition: transform .18s, background .15s; }
+.fund-switch input:checked + i { background: var(--ob-accent-bg); }
+.fund-switch input:checked + i::after { transform: translateX(18px); background: var(--ob-accent); }
+.fund-switch input:focus-visible + i { box-shadow: var(--ob-focus); }
+.fund-switch b { color: var(--ob-text); }
+
+.fund-submit { position: sticky; bottom: -16px; margin: 0 -16px -16px; padding: 12px 16px calc(14px + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--ob-surface) 70%, transparent); }
+.fund-submit .btn { width: 100%; min-height: 52px; font-size: 1rem; font-weight: 600; border-radius: var(--ob-radius-lg); }
+
+/* поправки до форм */
+.fund-amt input, .fund-amt input:focus { border: 0 !important; box-shadow: none !important; outline: none !important; }
+.fund-switch { text-transform: none; letter-spacing: 0; }
+.fund-switch span { text-transform: none; letter-spacing: 0; }
+
+/* журнал */
+.fund-filters { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
+.fund-filters::-webkit-scrollbar { display: none; }
+.fund-filters .fund-pchip { flex: none; padding-left: 14px; }
+.fund-day { margin-bottom: 14px; }
+.fund-day-h { margin: 0 0 8px; font-size: .74rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ob-secondary); }
+.fund-day-h::before { display: none; }
+.fund-jrow + .fund-jrow { border-top: 1px solid var(--ob-line); }
+.fund-jmain { width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 14px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.fund-jmain .fund-who { flex: 1; min-width: 0; }
+.fund-jmain .fund-v { flex: none; }
+.fund-jmore { display: flex; flex-direction: column; gap: 6px; padding: 0 14px 12px 56px; }
+.fund-jrow.is-off { opacity: .55; }
+.fund-jrow.is-off .fund-v { text-decoration: line-through; }
+.fund-v.is-warn { color: var(--ob-warning); }
+
+/* люди */
+.fund-people { display: grid; gap: 10px; margin-bottom: 16px; }
+.fund-pcard { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--ob-line); border-radius: var(--ob-radius-lg); background: var(--ob-surface); }
+.fund-pcard-h { display: flex; align-items: center; gap: 12px; }
+.fund-pcard-h .fund-who { flex: 1; min-width: 0; }
+.fund-pcard-h .fund-who { font-size: 1rem; font-weight: 600; }
+.fund-pcard-h .fund-big { font-size: 1.15rem; }
+.fund-setup { width: 100%; display: flex; align-items: center; gap: 10px; padding: 14px; margin-bottom: 12px; border: 1px dashed var(--ob-line); border-radius: var(--ob-radius-lg); background: transparent; color: var(--ob-secondary); font: inherit; font-size: .88rem; cursor: pointer; }
+.fund-setup i { margin-left: auto; font-style: normal; }
+.fund-setup.on { border-style: solid; color: var(--ob-text); }
+
+/* ======================================================================
+   Календар (components/date-picker.js)
+   ====================================================================== */
+.dp { position: relative; min-width: 0; }
+.dp-field { width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; border: 1px solid var(--ob-line); border-radius: var(--ob-radius-md); background: var(--ob-elevated); color: var(--ob-text); font: inherit; font-size: .9rem; text-align: left; cursor: pointer; transition: border-color .12s; }
+.dp-field:hover { border-color: var(--ob-control-line); }
+.dp-field[aria-expanded="true"] { border-color: var(--ob-accent-dim-line); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ob-accent) 14%, transparent); }
+.dp-field.is-empty span { color: var(--ob-muted); }
+.dp-field svg { flex: none; color: var(--ob-muted); }
+.dp-panel { position: absolute; top: calc(100% + 8px); left: 0; z-index: 70; width: 304px; max-width: calc(100vw - 16px); padding: 12px; border: 1px solid var(--ob-line); border-radius: 18px; background: var(--ob-surface); box-shadow: 0 18px 50px #000c; animation: dp-in .14s ease; }
+@keyframes dp-in { from { opacity: 0; transform: translateY(-4px); } }
+.dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.dp-head b { font-size: .95rem; font-weight: 600; letter-spacing: -.01em; }
+.dp-nav { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 10px; background: var(--ob-hover); color: var(--ob-text); cursor: pointer; }
+.dp-nav:active { transform: scale(.94); }
+.dp-week, .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dp-week span { padding: 6px 0; text-align: center; font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--ob-muted); }
+.dp-day { aspect-ratio: 1; min-height: 38px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--ob-text); font: inherit; font-size: .88rem; cursor: pointer; }
+.dp-day:hover:not(:disabled) { background: var(--ob-hover); }
+.dp-day.is-out { color: var(--ob-muted); }
+.dp-day.is-today { border-color: var(--ob-accent-dim-line); color: var(--ob-accent); }
+.dp-day.is-sel { background: var(--ob-accent); border-color: var(--ob-accent); color: var(--ob-accent-ink); font-weight: 700; opacity: 1; }
+.dp-day:disabled { opacity: .25; cursor: not-allowed; }
+.dp-day:focus-visible { outline: none; box-shadow: var(--ob-focus); }
+.dp-foot { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--ob-line); }
+.dp-link { padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--ob-accent); font: inherit; font-size: .84rem; font-weight: 600; cursor: pointer; }
+.dp-link.is-muted { color: var(--ob-muted); font-weight: 400; }
+.dp-link:hover { background: var(--ob-hover); }
+/* поля дати в сітках: без старих стилів системного інпуту */
+.fund-picks .dp { flex: 1; min-width: 150px; }
+.fund-day-row .dp { min-width: 0; }
+.fund-edit-row .dp { flex: 1; min-width: 140px; }
+
+.fund-main { display: block; }
+
+/* текст лише для екранного читача: на екрані його немає, а в дереві доступності він є */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* екран помилки й 404 */
+.err-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--ob-bg); color: var(--ob-text); }
+.err-card { width: 100%; max-width: 420px; padding: 24px; border: 1px solid var(--ob-line); border-radius: var(--ob-radius-xl); background: var(--ob-surface); box-shadow: var(--ob-shadow); }
+.err-title { display: block; margin-bottom: 8px; font-size: 1.25rem; font-weight: 600; letter-spacing: -.02em; }
+.err-card p { margin: 0 0 18px; font-size: .9rem; line-height: 1.6; color: var(--ob-secondary); }
+.err-act { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.err-act .btn { text-decoration: none; }
+.err-link { color: var(--ob-accent); font-size: .9rem; }
+
+/* ==========================================================================
+ * Єдиний ритм екранів
+ *
+ * Головний екран фонду показує суть вгорі, а решта застосунку витрачала
+ * перший екран телефона на панель із трьох-чотирьох рядків і чотири
+ * величезні картки: самі записи починались за двома прокрутками. Тут усі
+ * екрани приводяться до однієї щільності — без правок розмітки кожного.
+ * ========================================================================== */
+a.nav-item { text-decoration: none; }
+
+/* Кнопки в рядку списку не розтягуються на всю ширину */
+.sp-item .act-btn, .sp-item .btn { flex: 0 0 auto; min-width: 0; }
+.sp-item { align-items: center; }
+.sp-item .act-btn { min-height: var(--ctl-h); padding: 0 14px; }
+.toolbar .pill { flex: 0 0 auto; max-width: none; }
+.toolbar input[type="text"] { min-height: 44px; }
+
+@media (max-width: 720px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+  .stat { padding: 12px 14px 11px; border-radius: var(--ob-radius-md); }
+  .stat-l { font-size: .72rem; line-height: 1.25; }
+  .stat-v { margin-top: 6px; font-size: 1.75rem; }
+  /* виноска — другорядне: два рядки, не більше */
+  .stat-s {
+    margin-top: 5px; font-size: .66rem; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  /* Фільтри — один рядок, що гортається вбік, а не три рядки чипів */
+  .chips, .filters {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin-left: -16px; margin-right: -16px; padding: 2px 16px;
+    scroll-padding: 0 16px;
+  }
+  .chips::-webkit-scrollbar, .filters::-webkit-scrollbar { display: none; }
+  .chips > *, .filters > * { flex: none; }
+
+  /* Панель дій: пошук на весь рядок, кнопки під ним однакової висоти */
+  .toolbar > .btn, .toolbar > .act-btn, .toolbar > button:not(.chip) { min-height: 44px; }
+  .toolbar > .btn { flex: 1 1 auto; }
+}
+
+/* Журнал: дата стоїть над групою, у рядку лишається лише час */
+.log-day {
+  margin: 14px 2px 4px; font-size: .64rem; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ob-muted);
+}
+.log-day:first-child { margin-top: 0; }
+.log-when { min-width: 46px; }
+.log-time { opacity: 1; }
+@media (max-width: 720px) { .log-row { flex-direction: row; gap: 10px; } }
+
+/* Підсумки над списками — спокійна смуга замість рядка моноширинного тексту */
+.totals {
+  gap: 4px 14px; margin: 0 0 14px; padding: 9px 14px;
+  font-family: var(--ob-font); font-size: .8rem; color: var(--ob-secondary);
+  background: var(--ob-surface); border: 1px solid var(--ob-line); border-radius: var(--ob-radius-md);
+}
+.totals b { color: var(--ob-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.totals-sep { display: none; }
+.totals-of { color: var(--ob-muted); }
+
+/* Порожній стан — окрема рамка, а не текст, що висить посеред екрана */
+.empty {
+  padding: 28px 20px; margin: 4px 0 16px; border: 1px dashed var(--ob-line);
+  border-radius: var(--ob-radius-lg); color: var(--ob-muted); font-size: .88rem; line-height: 1.5;
+}
+.loading { padding: 40px 20px; }
+
+/* Чипи у панелі інструментів: на широкому екрані стоять у тому ж рядку,
+   на телефоні — окремий рядок, що гортається вбік */
+@media (min-width: 721px) {
+  /* чипи — окремий рядок під пошуком і кнопками, а не посеред них:
+     інакше одна кнопка лишалась сама в першому рядку, решта падала в другий */
+  .toolbar > .tb-chips { flex: 1 1 100%; order: 2; margin: 0; }
+  .stat { padding: 16px 18px 14px; }
+  .stat-v { margin-top: 12px; font-size: 2.1rem; }
+  .stat-s { margin-top: 10px; }
+}
+@media (max-width: 720px) {
+  .toolbar > .tb-chips { flex: 1 1 100%; order: 2; margin-top: 0; margin-bottom: 0; }
+  .toolbar > .tb-chips ~ * { order: 3; }
+  .toolbar .btn-group { flex: 1 1 auto; }
+}
+
+/* Рядки картки: підпис і значення на одній осі, однакової висоти.
+   Раніше підпис стояв за базовою лінією, а поле-привид було нижчим за
+   текстове — «Отримав» і «Дата» розʼїжджались зі своїми значеннями. */
+.card-body { gap: 0; }
+.drow { align-items: flex-start; }
+.drow-k { display: flex; align-items: center; min-height: 34px; }
+.drow-v { display: flex; align-items: center; min-height: 34px; }
+.drow-v > .ghost, .drow-v > input, .drow-v > select { min-height: 34px; }
+textarea.ghost { min-height: 34px; resize: none; line-height: 1.4; padding-top: 6px; padding-bottom: 6px; }
+
+/* Лічильник «3 з 3 у переліку» — підпис, а не кнопка-пігулка */
+.toolbar > .pill {
+  border: 0; padding: 0 2px; text-transform: none; letter-spacing: 0;
+  font-weight: 500; font-size: .78rem; color: var(--ob-muted); cursor: default;
+}
+@media (max-width: 720px) { .toolbar > .pill { flex: 1 1 100%; } }
+
+/* Сторінки-заглушки (/me без доступу, /zbir без ключа): така сама картка,
+   як у 404 і в збої показу, а не голий текст посеред порожнього екрана */
+.h-gate, .z-gate {
+  max-width: 420px; margin: 16vh auto 0; padding: 26px 24px;
+  border: 1px solid var(--ob-line); border-radius: var(--ob-radius-xl);
+  background: var(--ob-surface); box-shadow: var(--ob-shadow);
+  text-align: left; line-height: 1.6;
+}
+.h-gate h1, .z-gate h1 {
+  margin: 0 0 8px; font-size: 1.1rem; font-weight: 600;
+  letter-spacing: 0; text-transform: none; color: var(--ob-text);
+}
+.h-gate p, .z-gate p { margin: 0 0 16px; font-size: .9rem; color: var(--ob-secondary); }
+.z-gate p:last-child, .h-gate p:last-child { margin-bottom: 0; }
+.h-gate .h-btn { margin: 0 8px 0 0; }
+@media (max-width: 480px) { .h-gate, .z-gate { margin: 10vh 16px 0; } }
+
+/* Чип — кнопка, а не div: його можна дістати Tab-ом і натиснути з клавіатури */
+button.chip { font: inherit; font-size: .78rem; line-height: 1.2; }
+button.chip:focus-visible { outline: none; box-shadow: var(--ob-focus); }
+
+/* Відступи по краях: бічне меню обнулило `.wrap`, а /me стоїть поза ним —
+   на телефоні картки й вкладки впиралися в край екрана */
+.h-wrap {
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-top: 8px;
+}
+
+/* Вхід: показати пароль, мʼякша тінь картки */
+.login-box { box-shadow: 0 18px 48px #0006; }
+.login-pw { position: relative; }
+.login-pw input { padding-right: 96px; }
+.login-eye {
+  position: absolute; top: 0; right: 0; height: 100%; min-width: 44px; padding: 0 14px;
+  background: none; border: 0; border-radius: 0 var(--ob-radius-md) var(--ob-radius-md) 0;
+  color: var(--ob-secondary); font: inherit; font-size: .76rem; cursor: pointer;
+}
+.login-eye:hover { color: var(--ob-text); }
+.login-box input[aria-invalid="true"] { border-color: var(--ob-danger); }
+
+/* ==========================================================================
+ * Контроли: один шрифт, один радіус, одна висота
+ *
+ * Заміри по всіх екранах показали розбіжності, які око вловлює як
+ * «нерівність»: `.btn` і `icon-btn` малювались Arial, бо кнопка не
+ * успадковує шрифт; кнопки мали радіус 10px, поля — 6px; картковий
+ * `act-btn` був 37px заввишки, `.btn` — 44px, поля в модалках — 40px, у
+ * пошуку — 44px; чип 31px, селектор тега 22px.
+ *
+ * Висота — зміна: на телефоні палець (44px), на мишці трохи нижче (40px).
+ * ========================================================================== */
+:root {
+  --ctl-h: 44px;
+  --ctl-r: var(--ob-radius-md);
+}
+@media (pointer: fine) { :root { --ctl-h: 40px; } }
+
+button, input, select, textarea { font-family: var(--ob-font); }
+input.mono, input.ghost.mono { font-family: var(--ob-mono); }
+
+.btn, .act-btn, .btn-save, .btn-cancel, .icon-btn,
+button.btn-2, button.sd-place {
+  min-height: var(--ctl-h); border-radius: var(--ctl-r);
+  font-size: .82rem;
+}
+.act-btn { padding-top: 0; padding-bottom: 0; }
+
+input[type="text"]:not(.ghost), input[type="number"]:not(.ghost), input[type="password"], input[type="search"],
+input[type="tel"], input[type="email"], input[type="date"], input:not([type]):not(.ghost),
+select:not(.ghost):not(.pill):not(.tag-pick), textarea:not(.ghost) {
+  min-height: var(--ctl-h); border-radius: var(--ctl-r);
+}
+textarea:not(.ghost) { padding-top: 10px; padding-bottom: 10px; }
+
+/* Чипи й пігулки: нижче кнопки, але не нижче, ніж дістає палець */
+.chip { min-height: 36px; }
+select.pill { min-height: 36px; }
+@media (pointer: coarse) {
+  .chip { min-height: 40px; }
+  .tag { min-height: 28px; }
+  .dlv-part, .kit-off, .box-con-add { min-height: 38px; }
+  .drow-k, .drow-v, .drow-v > .ghost, textarea.ghost { min-height: 40px; }
+  input, select, textarea { font-size: max(16px, 1em); }
+}
+
+/* Правила нижче мають вищу специфічність, ніж загальні, тож повторені тут */
+.modal-actions button { min-height: var(--ctl-h); border-radius: var(--ctl-r); font-size: .82rem; }
+.search-wrap .search-input { min-height: var(--ctl-h); border-radius: var(--ctl-r); }
+.box-b, .box-con-add, .kit-off, .dlv-part { border-radius: var(--ctl-r); }
+.dlv-part { border-radius: 999px; }
+.modal { border-radius: var(--ob-radius-xl); }
+
+/* Поля-привиди (правка на місці) — однакові між собою й тонші за звичайні */
+input.ghost, select.ghost, textarea.ghost { border-radius: var(--ob-radius-sm); }
+@media (pointer: coarse) { select.ghost, input.ghost, textarea.ghost { font-size: 16px; } }
+
+/* Назва в картці стоїть на одній лівій межі з бейджем і серійником: поле-привид
+   має власні 7px відступу, і без цієї поправки текст зсувався вправо */
+.card-title input.ghost.big { margin-left: -7px; width: calc(100% + 7px); }
+.title-line input.ghost.big { width: auto; flex: 1 1 auto; }
+.box-line-n { margin-left: -7px; }
+
+/* Модалка: кнопки не тікають під прокрутку, а лишаються внизу видимими */
+.modal-actions {
+  position: sticky; bottom: -20px; z-index: 2;
+  margin-left: -20px; margin-right: -20px; margin-bottom: -20px;
+  padding: 14px 20px 20px; background: var(--ob-surface);
+}
+
+/* Рядок чипів, що гортається: підказка, що за краєм є ще */
+@media (max-width: 720px) {
+  .chips, .filters {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+}
 
 /* ---------- Спільні поправки ---------- */
 

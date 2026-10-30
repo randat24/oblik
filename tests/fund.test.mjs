@@ -453,3 +453,200 @@ test('налаштування «не рахуємо» читається зі �
   assert.deepEqual(c.excluded, ['denis', 'petya']);
   assert.deepEqual(cfgParse([]).excluded, []);
 });
+
+/* ---------- Власник каси ---------- */
+import { ownerRecalcPlan, withOwner } from '../lib/fund.js';
+
+const OWNER = { id: 'alex', name: 'Алекс', order: 7, opening: 0, periods: [{ start: '2000-01-01' }], vacations: [] };
+const mkExp = (id, sum, participants, extra = {}) => ({
+  id, type: 'expense', date: '2026-10-21', amount: kop(sum), category: 'var', payer: 'fess',
+  mode: 'manual', participants, status: 'active', createdAt: id, ...extra,
+});
+
+test('у перерахунок потрапляють лише чинні ручні витрати без власника', () => {
+  const ops = [
+    mkExp('a', '100', ['vanya', 'fess']),
+    mkExp('b', '100', ['vanya', 'alex']),
+    mkExp('c', '100', ['vanya'], { status: 'cancelled' }),
+    mkExp('d', '100', [], { mode: 'auto' }),
+    { id: 'e', type: 'deposit', date: '2026-10-21', amount: 1, member: 'vanya', status: 'active', createdAt: 'e' },
+  ];
+  assert.deepEqual(ownerRecalcPlan(ops, 'alex').map((o) => o.id), ['a']);
+});
+
+test('новий запис зберігає склад і додає власника, примітка не губиться', () => {
+  const old = mkExp('a', '100', ['vanya', 'fess'], { note: 'магазин' });
+  const n = withOwner(old, 'alex', { id: 'n1', at: 'T', who: 'F' });
+  assert.deepEqual(n.participants, ['vanya', 'fess', 'alex']);
+  assert.equal(n.note, 'магазин · Перерахунок: додано власника каси');
+  assert.equal(n.status, 'active');
+  assert.equal(n.id, 'n1');
+  assert.deepEqual(old.participants, ['vanya', 'fess'], 'старий запис не змінюється');
+});
+
+test('після перерахунку з власником усе сходиться, інваріант тримається', () => {
+  const cfg = CFG;
+  const before = [mkExp('a', '600', ['vanya', 'fess'])];
+  const members = [...MEMBERS, OWNER];
+  const old = ownerRecalcPlan(before, 'alex');
+  const after = [
+    { ...before[0], status: 'cancelled' },
+    ...old.map((o, i) => withOwner(o, 'alex', { id: `n${i}`, at: 'T', who: 'F' })),
+  ];
+  const s = compute(members, after, cfg);
+  assert.equal(s.bal.vanya, MEMBERS.find((m) => m.id === 'vanya').opening - kop('200'));
+  assert.equal(s.bal.alex, -kop('200'));
+  assert.equal(s.bal.fess, MEMBERS.find((m) => m.id === 'fess').opening + kop('600') - kop('200'));
+  assert.ok(invariantOk(s, cfg));
+});
+
+test('короткий звіт не показує власника каси, а решта лишається', () => {
+  const members = [...MEMBERS, OWNER];
+  const s = compute(members, [mkExp('a', '600', ['vanya', 'fess', 'alex'])], { openingCash: 0 });
+  const text = shortReport(s, members, 'alex');
+  assert.ok(!text.includes('Алекс'));
+  assert.ok(text.includes('Ваня'));
+  assert.ok(shortReport(s, members).includes('Алекс'), 'без вказаного власника він як усі');
+});
+
+test('налаштування власника каси читається', () => {
+  assert.equal(cfgParse([['Ключ', 'Значення'], ['owner', 'alex']]).owner, 'alex');
+  assert.equal(cfgParse([]).owner, '');
+});
+
+/* ---------- Розподіл за днями ---------- */
+import { daysOf, monthBounds, spreadByDays, newMember } from '../lib/fund.js';
+
+const mk = (id, order, periods, vacations = []) => ({ id, name: id, order, opening: 0, periods, vacations });
+const FULL = [{ start: '2000-01-01' }];
+const rent = (amount, ids, extra = {}) => ({
+  type: 'expense', amount: kop(amount), category: 'fixed', payer: 'cash', mode: 'manual',
+  participants: ids, periodFrom: '2026-10-01', periodTo: '2026-10-31', status: 'active', ...extra,
+});
+
+test('дні періоду рахуються включно, хибні дати дають порожньо', () => {
+  assert.equal(daysOf('2026-10-01', '2026-10-31').length, 31);
+  assert.deepEqual(daysOf('2026-10-05', '2026-10-05'), ['2026-10-05']);
+  assert.deepEqual(daysOf('2026-10-05', '2026-10-01'), []);
+  assert.deepEqual(daysOf('x', '2026-10-01'), []);
+  assert.deepEqual(daysOf('2026-01-01', '2027-12-31'), [], 'задовгий період відсікається');
+});
+
+test('межі місяця — перший і останній день, у тому числі лютий', () => {
+  assert.deepEqual(monthBounds('2026-10-17'), { from: '2026-10-01', to: '2026-10-31' });
+  assert.deepEqual(monthBounds('2028-02-10'), { from: '2028-02-01', to: '2028-02-29' });
+});
+
+test('той, хто був 20 днів із 31, платить лише за свої дні (приклад із 14 769)', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL), mk('c', 3, FULL), mk('d', 4, FULL),
+    mk('x', 5, [{ start: '2000-01-01', end: '2026-10-21' }])];
+  const r = spreadByDays(rent('14769', ['a', 'b', 'c', 'd', 'x']), ms);
+  assert.equal(Object.values(r.shares).reduce((s, v) => s + v, 0), kop('14769'), 'сума не губиться');
+  assert.ok(Math.abs(r.shares.x - kop('1905.68')) <= 1, `той, хто пішов: ${r.shares.x}`);
+  assert.ok(Math.abs(r.shares.a - kop('3215.83')) <= 1, `решта: ${r.shares.a}`);
+});
+
+test('новий учасник платить лише з дня вступу', () => {
+  const ms = [mk('a', 1, FULL), mk('n', 2, [{ start: '2026-10-21' }])];
+  const r = spreadByDays(rent('3100', ['a', 'n']), ms);
+  // 20 днів один, 11 днів удвох
+  assert.equal(r.shares.a + r.shares.n, kop('3100'));
+  assert.ok(r.shares.n < r.shares.a / 2, 'новий платить менше половини');
+});
+
+test('доба без жодного учасника не рахується, сума повністю лягає на решту днів', () => {
+  const ms = [mk('a', 1, [{ start: '2026-10-11' }])];
+  const r = spreadByDays(rent('100', ['a']), ms);
+  assert.equal(r.shares.a, kop('100'));
+});
+
+test('відпустка не звільняє від постійних витрат, але звільняє від їжі', () => {
+  const ms = [mk('a', 1, FULL), mk('v', 2, FULL, [{ start: '2026-10-01', end: '2026-10-31' }])];
+  const fixed = spreadByDays(rent('100', ['a', 'v']), ms);
+  assert.equal(fixed.shares.v, kop('50'));
+  const food = spreadByDays(rent('100', ['a', 'v'], { category: 'var' }), ms);
+  assert.equal(food.shares.v, undefined);
+  assert.equal(food.shares.a, kop('100'));
+});
+
+test('витрата за період із каси: каса мінус уся сума, частки сходяться в баланси', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL)];
+  const e = effect(rent('100', ['a', 'b']), ms);
+  assert.equal(e.cash, -kop('100'));
+  assert.equal(e.bal.a + e.bal.b, -kop('100'));
+});
+
+test('ручна витрата без періоду рахується, як і раніше', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL)];
+  const e = effect({ type: 'expense', amount: kop('100'), category: 'var', payer: 'a', mode: 'manual', participants: ['a', 'b'], date: '2026-10-10' }, ms);
+  assert.deepEqual(e.shares, { a: kop('50'), b: kop('50') });
+});
+
+test('після розкладу по днях інваріант каси тримається, зайві копійки не губляться', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL), mk('n', 3, [{ start: '2026-10-13' }])];
+  const cfg = { openingCash: kop('1000'), openingDiff: 0 };
+  const s = compute(ms, [rent('333.33', ['a', 'b', 'n'], { date: '2026-10-31', createdAt: 'x' })], cfg);
+  assert.equal(s.diff, kop('1000') - kop('1000') + s.diff);
+  assert.equal(s.cash, kop('1000') - kop('333.33'));
+  assert.equal(Object.values(s.bal).reduce((x, y) => x + y, 0), -kop('333.33'));
+});
+
+test('новий учасник: імʼя, дата й унікальність перевіряються, порядок наступний', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 5, FULL)];
+  assert.ok(newMember(ms, { name: '', start: '2026-10-01', id: 'n' }).error);
+  assert.ok(newMember(ms, { name: 'Х', start: '', id: 'n' }).error);
+  assert.ok(newMember(ms, { name: ' A ', start: '2026-10-01', id: 'n' }).error, 'повтор без урахування регістру');
+  const ok = newMember(ms, { name: 'Новий', start: '2026-10-21', id: 'n1' });
+  assert.equal(ok.member.order, 6);
+  assert.equal(ok.member.opening, 0);
+  assert.deepEqual(ok.member.periods, [{ start: '2026-10-21' }]);
+});
+
+/* ---------- Окремі дні людей у витраті ---------- */
+import { parseRanges as parseOwn, rangesToText as ownText } from '../lib/fund.js';
+
+test('окремі дні пишуться рядком і читаються назад без втрат', () => {
+  const r = { x: { from: '2026-10-01', to: '2026-10-20' }, y: { from: '2026-10-05', to: '2026-10-05' } };
+  assert.deepEqual(parseOwn(ownText(r)), r);
+});
+
+test('зіпсований рядок окремих днів не валить розрахунок, хибні шматки відкидаються', () => {
+  assert.deepEqual(parseOwn('x=2026-10-20..2026-10-01;y=сміття;z=2026-10-01..2026-10-02'),
+    { z: { from: '2026-10-01', to: '2026-10-02' } });
+  assert.deepEqual(parseOwn(''), {});
+  assert.deepEqual(parseOwn(null), {});
+});
+
+test('людині можна задати «з 1 по 20», і платить вона лише за ці дні', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL), mk('x', 3, FULL)];
+  const op = rent('3100', ['a', 'b', 'x'], { ranges: { x: { from: '2026-10-01', to: '2026-10-20' } } });
+  const r = spreadByDays(op, ms);
+  assert.equal(r.shares.a + r.shares.b + r.shares.x, kop('3100'));
+  // 20 днів утрьох і 11 днів удвох
+  assert.ok(r.shares.x < r.shares.a, 'x платить менше за тих, хто був увесь місяць');
+  assert.equal(r.shares.a, r.shares.b);
+});
+
+test('окремі дні сильніші за склад групи: людину поза групою можна врахувати', () => {
+  const ms = [mk('a', 1, FULL), mk('out', 2, [{ start: '2000-01-01', end: '2026-10-01' }])];
+  const without = spreadByDays(rent('100', ['a', 'out']), ms);
+  assert.equal(without.shares.out, undefined, 'поза групою не платить');
+  const forced = spreadByDays(rent('100', ['a', 'out'], { ranges: { out: { from: '2026-10-01', to: '2026-10-31' } } }), ms);
+  assert.equal(forced.shares.out, kop('50'));
+});
+
+test('людина з окремими днями у відпустці платить за свої дні, відпустка не втручається', () => {
+  const ms = [mk('a', 1, FULL), mk('v', 2, FULL, [{ start: '2026-10-01', end: '2026-10-31' }])];
+  const op = rent('100', ['a', 'v'], { category: 'var', ranges: { v: { from: '2026-10-01', to: '2026-10-31' } } });
+  assert.equal(spreadByDays(op, ms).shares.v, kop('50'));
+});
+
+test('кілька людей з окремими днями, решта — за складом групи; сума завжди сходиться', () => {
+  const ms = [mk('a', 1, FULL), mk('b', 2, FULL), mk('c', 3, FULL), mk('d', 4, FULL)];
+  const op = rent('1000.01', ['a', 'b', 'c', 'd'], {
+    ranges: { c: { from: '2026-10-01', to: '2026-10-10' }, d: { from: '2026-10-25', to: '2026-10-31' } },
+  });
+  const r = spreadByDays(op, ms);
+  assert.equal(Object.values(r.shares).reduce((s, v) => s + v, 0), kop('1000.01'));
+  assert.ok(r.shares.c < r.shares.a && r.shares.d < r.shares.a);
+});

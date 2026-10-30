@@ -205,3 +205,37 @@ test('порожній фонд дає рівно той стан, що в сп�
   assert.equal(state.diff, kop('2'));
   assert.ok(invariantOk(state, { openingDiff: OPENING_DIFF }));
 });
+
+/* ---------- Період витрати ---------- */
+test('період витрати читається з рядка й пишеться назад без втрат', () => {
+  const op = { id: 'p1', type: 'expense', date: '2026-10-31', amount: kop('100'), category: 'fixed',
+    payer: 'cash', mode: 'manual', participants: ['a'], periodFrom: '2026-10-01', periodTo: '2026-10-31',
+    status: 'active', createdAt: 'T', author: 'F' };
+  const [back] = parseOps([OP_HEADERS, opRow(op)]);
+  assert.equal(back.periodFrom, '2026-10-01');
+  assert.equal(back.periodTo, '2026-10-31');
+});
+
+test('старий рядок без колонок періоду читається як звичайна витрата', () => {
+  const old = ['o', 'expense', '2026-10-15', '100.00', '', 'var', 'a', 'manual', 'a', '', '', '', '', 'active', 'T', 'F', '', ''];
+  const [o] = parseOps([OP_HEADERS.slice(0, 18), old]);
+  assert.equal(o.periodFrom, '');
+  assert.equal(o.periodTo, '');
+});
+
+test('нові колонки листа операцій — лише в кінці', () => {
+  assert.deepEqual(OP_HEADERS.slice(-3), ['Період з', 'Період по', 'Дні учасників']);
+  assert.equal(OP_HEADERS[17], 'Причина скасування');
+});
+
+test('окремі дні людей у витраті читаються з рядка й пишуться назад', () => {
+  const op = { id: 'p2', type: 'expense', date: '2026-10-31', amount: kop('100'), category: 'fixed',
+    payer: 'cash', mode: 'manual', participants: ['a', 'x'], periodFrom: '2026-10-01', periodTo: '2026-10-31',
+    ranges: { x: { from: '2026-10-01', to: '2026-10-20' } }, status: 'active', createdAt: 'T', author: 'F' };
+  const [back] = parseOps([OP_HEADERS, opRow(op)]);
+  assert.deepEqual(back.ranges, { x: { from: '2026-10-01', to: '2026-10-20' } });
+});
+
+test('колонка окремих днів — остання в листі операцій', () => {
+  assert.equal(OP_HEADERS[OP_HEADERS.length - 1], 'Дні учасників');
+});
