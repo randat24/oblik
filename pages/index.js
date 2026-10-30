@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import {
   api, setOnUnauthed, saveFailed, todayStr, statusColor, photoSrc,
-  ToastCtx, useToast, ToastHost, useToasts, IconSearch, IconQr, parseCode, hhmm,
+  ToastCtx, useToast, ToastHost, useToasts, IconSearch, IconQr, parseCode, hhmm, rowLink,
   QrScanner, Stat, Modal, PhotoField, useViewMode, ViewToggle, TableWrap,
   DataTable, Totals, countBy, Combo, SearchBox, useNewRecordHotkey, useGrow,
   bagWord, dayWord, plural,
@@ -399,7 +399,7 @@ function HomeView({ setState, onOpen, me }) {
             </thead>
             <tbody>
               {d.items.perSheet.filter((s) => s.count > 0).map((s) => (
-                <tr key={s.name} onClick={() => onOpen({ kind: 'items', name: s.name })}>
+                <tr key={s.name} {...rowLink(() => onOpen({ kind: 'items', name: s.name }))}>
                   <td className="col-name">
                     <span className="cat"><i className="cat-i"><SheetIcon name={s.name} size={17} /></i>{s.name}</span>
                   </td>
@@ -537,7 +537,7 @@ function HomeView({ setState, onOpen, me }) {
                 </thead>
                 <tbody>
                   {d.delivery.open.map((x, i) => (
-                    <tr key={i} onClick={() => onOpen(DELIVERY_VIEW)}>
+                    <tr key={i} {...rowLink(() => onOpen(DELIVERY_VIEW))}>
                       <td className="col-name">{x.what}</td>
                       <td>{x.to || '—'}</td>
                       <td className="col-num col-strong" style={{ color: 'var(--amber)' }}>
@@ -1244,7 +1244,7 @@ export default function Home({ startView }) {
   const [params] = useState(() => {
     if (typeof window === 'undefined') return {};
     const p = new URLSearchParams(window.location.search);
-    return { box: p.get('box'), id: p.get('id') };
+    return { box: p.get('box'), id: p.get('id'), sheet: p.get('sheet'), row: Number(p.get('row')) || null };
   });
 
   // /rybakivka?id=Р-004 — відкрити склад одразу на потрібній позиції
@@ -1319,6 +1319,13 @@ export default function Home({ startView }) {
     const wh = sheets.find((s) => s.kind === 'warehouse');
     if (wh) setView({ kind: 'warehouse', name: wh.name, box: params.box });
   }, [sheets, params.box]);
+
+  // /?sheet=ПНВ&row=7 — посилання з розширення веде одразу на рядок
+  useEffect(() => {
+    if (!params.sheet) return;
+    const s = sheets.find((x) => x.name === params.sheet && x.kind === 'items');
+    if (s) setView({ kind: 'items', name: s.name, row: params.row });
+  }, [sheets, params.sheet, params.row]);
 
   const commands = [
     { label: 'Сканувати QR', hint: 'дія', run: () => setPalette(false) || setScan(true) },
@@ -1442,7 +1449,7 @@ export default function Home({ startView }) {
                 <span className="top-search-t">Знайти в просторі</span>
                 <kbd>⌘K</kbd>
               </button>
-              <button className="icon-btn" onClick={() => setScan(true)} title="Сканувати QR">
+              <button className="icon-btn" onClick={() => setScan(true)} title="Сканувати QR" aria-label="Сканувати QR">
                 <IconQr size={17} />
               </button>
               <div className="who">
@@ -4100,9 +4107,9 @@ function BoxContents({ box, lines, loading, title = 'Вміст', addLabel = '+ 
           />
           <BoxLeft line={l} />
           <div className="box-line-b">
-            <button className="box-b" disabled={l.left <= 0} title="Взяти" onClick={() => onMove(l, 'take')}>−</button>
-            <button className="box-b" disabled={l.taken <= 0} title="Повернути" onClick={() => onMove(l, 'give')}>+</button>
-            <button className="box-b box-b-x" title="Прибрати з ящика" onClick={() => onDelete(l)}>×</button>
+            <button className="box-b" disabled={l.left <= 0} title="Взяти" aria-label="Взяти" onClick={() => onMove(l, 'take')}>−</button>
+            <button className="box-b" disabled={l.taken <= 0} title="Повернути" aria-label="Повернути" onClick={() => onMove(l, 'give')}>+</button>
+            <button className="box-b box-b-x" title="Прибрати з ящика" aria-label="Прибрати з ящика" onClick={() => onDelete(l)}>×</button>
           </div>
           {(l.accounting || l.note) && (
             <div className="box-line-m">
@@ -4921,7 +4928,7 @@ function ActModal({ kind, sheets, conditions, initialSheet, bindRow, me = '', on
                   onChange={(e) => upCell(i, f.col, e.target.value)} />
               ))}
               {items.length > 1 && (
-                <button type="button" className="act-btn act-del"
+                <button type="button" className="act-btn act-del" aria-label="Прибрати рядок"
                   onClick={() => setItems((p) => p.filter((_, j) => j !== i))}>✕</button>
               )}
             </div>

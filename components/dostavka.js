@@ -13,7 +13,7 @@ import {
   splitParts, joinParts, partsOf, partsLeft, weightOf, weightLeft, parsePart,
   placesOf, lostOf, orderForRoad, hotOf, PRIO_FIRST,
 } from '../lib/delivery';
-import { api, Modal, SearchBox, Stat, bagWord, dayWord } from './base';
+import { api, Modal, SearchBox, Stat, bagWord, dayWord, useToast, saveFailed } from './base';
 
 /**
  * Шлях посилки: зібрали → передали на відправку → відправник довіз до точки вильоту →
@@ -36,6 +36,7 @@ const DLV_STAGE_KEYS = [
 ];
 
 export function DeliveryView({ setState, me = '', chief = false }) {
+  const toast = useToast();
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
   const [only, setOnly] = useState('');
@@ -64,7 +65,7 @@ export function DeliveryView({ setState, me = '', chief = false }) {
       return true;
     } catch (e) {
       setState('помилка: ' + e.message);
-      alert(e.message);
+      saveFailed(toast, e);
       return false;
     }
   };

@@ -1,0 +1,62 @@
+/* Значення з `styles/globals.css` сайту: панель має читатись як той самий застосунок */
+:root {
+  color-scheme: dark;
+  --ob-bg: #101214;
+  --ob-surface: #171a1d;
+  --ob-elevated: #1d2125;
+  --ob-hover: #242a2f;
+  --ob-line: #2a3036;
+  --ob-control-line: #6c7988;
+  --ob-text: #f1f4f6;
+  --ob-secondary: #a6afb9;
+  --ob-muted: #929ca8;
+  --ob-accent: #a3f0cf;
+  --ob-accent-ink: #101c17;
+  --ob-danger: #ff9b9b;
+  --ob-font: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  --ob-radius-sm: 6px;
+  --ob-radius-md: 10px;
+  --ob-focus: 0 0 0 2px var(--ob-bg), 0 0 0 4px var(--ob-accent);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 12px;
+  background: var(--ob-bg); color: var(--ob-text);
+  font: 15px/1.5 var(--ob-font);
+}
+:where(a, input, button):focus-visible { outline: none; box-shadow: var(--ob-focus); }
+.lab { display: block; margin-bottom: 6px; font-size: .74rem; color: var(--ob-secondary); }
+input {
+  width: 100%; min-height: 44px; padding: 0 12px;
+  background: var(--ob-elevated); border: 1px solid var(--ob-control-line);
+  border-radius: var(--ob-radius-md); color: var(--ob-text); font: inherit;
+}
+.note { margin: 8px 0; min-height: 1.2em; font-size: .78rem; color: var(--ob-muted); }
+.note.is-err { color: var(--ob-danger); }
+.btn {
+  display: flex; align-items: center; justify-content: center; min-height: 44px;
+  border-radius: var(--ob-radius-md); background: var(--ob-accent); color: var(--ob-accent-ink);
+  font-size: .79rem; font-weight: 600; text-decoration: none;
+}
+.btn[hidden], .msg[hidden] { display: none; }
+.gh { margin: 14px 0 6px; font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ob-secondary); }
+.hit {
+  display: block; padding: 10px 12px; border: 1px solid var(--ob-line); border-radius: var(--ob-radius-sm);
+  background: var(--ob-surface); color: inherit; text-decoration: none;
+}
+.msg { margin-top: 14px; }
+.msg-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.msg-head .gh { margin: 0; }
+.act {
+  flex: none; min-height: 36px; padding: 0 12px; border: 1px solid var(--ob-line); border-radius: var(--ob-radius-sm);
+  background: transparent; color: var(--ob-secondary); font: 500 .8rem var(--ob-font); cursor: pointer;
+}
+.act:hover { background: var(--ob-elevated); border-color: var(--ob-muted); }
+.bubble {
+  margin: 0; padding: 12px 14px; border-radius: var(--ob-radius-md); background: var(--ob-elevated);
+  font: inherit; font-size: .9rem; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.hit + .hit { margin-top: 6px; }
+.hit:hover { background: var(--ob-hover); }
+.hit b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+.hit span { display: block; font-size: .74rem; color: var(--ob-muted); overflow-wrap: anywhere; }

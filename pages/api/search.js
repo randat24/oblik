@@ -209,6 +209,7 @@ export default withAuth(async (req, res) => {
         const entry = {
           sheet: cfg.name,
           row: i + 2,
+          name: safeRow[cols.name] || '',
           headers,
           values: safeRow,
           status: cfg.hideStatus || cols.status < 0 ? '' : row[cols.status] || '',
