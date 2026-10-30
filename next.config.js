@@ -14,4 +14,35 @@ module.exports = {
    * незамкненими немає жодної причини.
    */
   images: { unoptimized: true },
+
+  /*
+   * Заголовки безпеки на кожну відповідь. Кожен тут з причини, а не «про
+   * всяк випадок»:
+   *
+   *  - nosniff: браузер не вгадує тип файлу, тож завантажене фото не
+   *    виконається як скрипт;
+   *  - SAMEORIGIN, а не DENY: пісочниця уроків у `/me` вбудовується з того
+   *    самого походження, DENY її зламав би;
+   *  - Permissions-Policy: камера потрібна лише сканеру QR на нашій сторінці,
+   *    мікрофон, геолокація й оплата не потрібні нікому;
+   *  - noindex: застосунок закритий, і пошуковику в ньому робити нічого
+   *    (відкритий лише /fond, і той не для індексації).
+   *
+   * Content-Security-Policy поки не вмикаємо: Next вставляє власні вбудовані
+   * скрипти, і сувора політика без перевірки на живому застосунку зламала б
+   * сторінки. Це окрема робота зі звітуванням, а не рядок у конфігу.
+   * HSTS додає Vercel, дублювати його тут не треба.
+   */
+  async headers() {
+    return [{
+      source: '/:path*',
+      headers: [
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+        { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(), payment=(), usb=()' },
+        { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+      ],
+    }];
+  },
 };

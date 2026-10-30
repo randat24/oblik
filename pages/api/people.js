@@ -1,4 +1,4 @@
-import { withAuth, currentActor } from '../../lib/auth';
+import { withAuth } from '../../lib/auth';
 import { readPeople, findPerson, addPerson, updatePerson, ROLES } from '../../lib/people';
 import { logChange } from '../../lib/log';
 

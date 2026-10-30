@@ -1,6 +1,12 @@
 import { withAuth, currentActor, isGuest, session } from '../../lib/auth';
-import { readFund, addOp, cancelOp, saveMember, seedFund, setConfig } from '../../lib/fund-store';
-import { kop, compute, invariantOk, categoryOf, shortReport } from '../../lib/fund';
+import {
+  readFund, addOp, addOps, cancelOp, cancelOps, saveMember, seedFund, setConfig, addMember,
+} from '../../lib/fund-store';
+import {
+  kop, compute, invariantOk, categoryOf, ownerRecalcPlan, withOwner, byOrder, daysOf, newMember,
+  shortReport,
+} from '../../lib/fund';
+import { OPENING_DATE } from '../../lib/fund-seed';
 import { logChange } from '../../lib/log';
 
 /**
@@ -17,6 +23,8 @@ import { logChange } from '../../lib/log';
  */
 
 const ALLOWED = ['expense', 'deposit', 'reimburse', 'transfer', 'adjust'];
+/** Вільний текст — з обмеженням довжини: у клітинці таблиці він не має розростатись безмежно */
+const clip = (v, n) => String(v ?? '').trim().slice(0, n);
 const today = () => new Date().toISOString().slice(0, 10);
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 
@@ -41,7 +49,7 @@ export default withAuth(async (req, res) => {
       ok: invariantOk(state, data.config),
       // готовий текст для розширення: у нього немає `lib/fund.js`, а друга
       // копія підрахунку рано чи пізно розійшлась би з цією
-      report: shortReport(state, data.members),
+      report: shortReport(state, data.members, data.config.owner),
     });
   }
 
@@ -76,7 +84,7 @@ export default withAuth(async (req, res) => {
   /* ---------- Скасування ---------- */
   if (action === 'cancel') {
     const { row, reason } = req.body;
-    if (!reason || !String(reason).trim()) {
+    if (!clip(reason, 300)) {
       return res.status(400).json({ error: 'Напишіть причину скасування' });
     }
     const { ops } = await readFund();
@@ -85,10 +93,10 @@ export default withAuth(async (req, res) => {
     if (op.status === 'cancelled') {
       return res.status(400).json({ error: 'Цю операцію вже скасовано' });
     }
-    await cancelOp(op.row, { reason: String(reason).trim(), at: new Date().toISOString(), who });
+    await cancelOp(op.row, { reason: clip(reason, 300), at: new Date().toISOString(), who });
     await logChange({
       sheet: 'Фонд', row: op.row, action: 'Скасовано операцію',
-      field: op.type, before: (op.amount / 100).toFixed(2), after: String(reason).trim(),
+      field: op.type, before: (op.amount / 100).toFixed(2), after: clip(reason, 300),
     });
     return res.json({ ok: true });
   }
@@ -115,6 +123,53 @@ export default withAuth(async (req, res) => {
       after: `періодів ${next.periods.length}, відпусток ${next.vacations.length}`,
     });
     return res.json({ ok: true });
+  }
+
+  /* ---------- Власник каси ---------- */
+  if (action === 'owner') {
+    const name = String(req.body.name || 'Алекс').trim().slice(0, 40) || 'Алекс';
+    const data = await readFund();
+    if (data.config.owner) {
+      return res.status(400).json({ error: 'Власника каси вже вказано' });
+    }
+    const id = 'alex';
+    let members = data.members;
+    if (!members.some((m) => m.id === id)) {
+      const last = Math.max(0, ...members.map((m) => m.order || 0));
+      const owner = { id, name, order: last + 1, opening: 0, periods: [{ start: OPENING_DATE }], vacations: [] };
+      await addMember(owner);
+      members = [...members, owner];
+    }
+    // спершу нові записи, потім скасування старих: якщо щось урветься посередині,
+    // краще побачити зайвий дубль, ніж загубити витрату
+    const at = new Date().toISOString();
+    const old = ownerRecalcPlan(data.ops, id);
+    const fresh = old.map((o, i) => withOwner(o, id, { id: `${newId()}${i}`, at, who }));
+    await addOps(fresh);
+    await cancelOps(old.map((o) => o.row), { reason: 'Перерахунок з власником каси', at, who });
+    await setConfig('owner', id);
+    await logChange({
+      sheet: 'Фонд', action: 'Власник каси', field: name,
+      after: `перераховано витрат: ${old.length}`,
+    });
+    return res.json({ ok: true, recalculated: old.length, members: byOrder(members).length });
+  }
+
+  /* ---------- Новий учасник ---------- */
+  if (action === 'addMember') {
+    const { members } = await readFund();
+    const made = newMember(members, {
+      name: req.body.name,
+      start: isDate(req.body.start) ? req.body.start : today(),
+      id: `p${Date.now().toString(36)}`,
+    });
+    if (made.error) return res.status(400).json({ error: made.error });
+    await addMember(made.member);
+    await logChange({
+      sheet: 'Фонд', action: 'Новий учасник', field: made.member.name,
+      after: `у групі з ${made.member.periods[0].start}`,
+    });
+    return res.json({ ok: true, id: made.member.id });
   }
 
   /* ---------- Кого не рахуємо у нових витратах ---------- */
@@ -147,18 +202,37 @@ export default withAuth(async (req, res) => {
 
   const op = {
     id: newId(), type: action, date, amount,
-    note: String(body.note || '').trim(),
+    note: clip(body.note, 500),
     status: 'active', createdAt: new Date().toISOString(), author: who,
   };
 
   if (action === 'expense') {
-    op.desc = String(body.desc || '').trim();
+    op.desc = clip(body.desc, 200);
     op.category = categoryOf(body.category).id;
     op.payer = body.payer === 'cash' ? 'cash' : String(body.payer || '');
     if (op.payer !== 'cash' && !has(op.payer)) {
       return res.status(400).json({ error: 'Оберіть, хто платив' });
     }
     op.mode = body.mode === 'manual' ? 'manual' : 'auto';
+    if (body.periodFrom || body.periodTo) {
+      // за період: ділиться по днях, а коло людей задається списком
+      if (!isDate(body.periodFrom) || !isDate(body.periodTo) || !daysOf(body.periodFrom, body.periodTo).length) {
+        return res.status(400).json({ error: 'Період вказано неправильно' });
+      }
+      op.periodFrom = body.periodFrom;
+      op.periodTo = body.periodTo;
+      op.mode = 'manual';
+      // окремі дні для окремих людей: «з» не пізніше за «по», люди — з фонду
+      const ranges = {};
+      for (const [id, r] of Object.entries(body.ranges || {})) {
+        if (!has(id)) continue;
+        if (!isDate(r?.from) || !isDate(r?.to) || r.from > r.to) {
+          return res.status(400).json({ error: 'Дні для людини вказано неправильно' });
+        }
+        ranges[id] = { from: r.from, to: r.to };
+      }
+      op.ranges = ranges;
+    }
     if (op.mode === 'manual') {
       op.participants = (body.participants || []).filter(has);
       if (!op.participants.length) {

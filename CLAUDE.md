@@ -52,6 +52,26 @@ CI (`.github/workflows/test.yml`, Node 22) runs lint → test → build on every
 
 **Isolated personal section** (`/me`, `lib/health.js`, `/api/health*`): it has its own sheets, optionally its own spreadsheet (`HEALTH_SPREADSHEET_ID`). Other modules must not know about it: no search, log, dashboard or sheet-list integration. The routes `/api/health` and `/api/health-in` keep their old names on purpose, because iPhone Shortcuts call them.
 
+## Shared fund (`/fond`)
+
+`lib/fund.js` is the pure engine (no sheets, no React); `lib/fund-store.js` is the only code that talks to the three `Фонд — …` sheets; `pages/api/fund.js` is the route; `pages/fond.js` is the page (bottom nav + «Нова операція» sheet, UI pieces in `components/fund-ui.js`). Things that are easy to break:
+- Money is **integer kopecks** everywhere in `lib/`. `kop()` parses, `money()` formats. Never use floats for amounts.
+- The book is **append-only**: an operation is never edited or deleted, only cancelled with a reason (`status`, `cancelledAt`, `cancelReason`) and re-entered. Balances and cash are always replayed from the book (`compute`), never stored. `invariantOk` is the check shown to users.
+- A period's `end` is **exclusive** (first day the person is out); vacation ranges are inclusive on both sides.
+- An expense's participant list is stored explicitly and never recomputed. Auto mode (`mode: 'auto'`) is only for old rows. Day-split expenses (`periodFrom/periodTo`, `ranges`) take their days from `ranges`, which override group membership.
+- Settings live in `Фонд — налаштування` as key/value (`openingCash`, `openingDiff`, `openingDate`, `excluded`, `owner`); `setConfig` updates in place. Free text and member rows are written with `raw: true` so `=…` never becomes a formula; keep that for any new write.
+- New columns in `OP_HEADERS` go **only at the end**; `readFund` appends missing header cells itself (`ensureColumn`).
+- `seedFund` only works on an empty fund. The owner action (`owner`) rewrites manual expenses by cancelling and re-adding them, new rows first, so a failure leaves a visible duplicate instead of a lost expense.
+- Dates are `YYYY-MM-DD` strings. `components/date-picker.js` is the only date field (the native popup cannot be themed); its rules are in `lib/calendar.js`, and «today» is Kyiv time, not the user's clock.
+
+## Quality checks worth re-running
+
+- Accessibility: load a page in Playwright and run `axe-core` (`window.axe.run(document)`); the fund screens and the home page are clean. Keep `lang="uk"` in `pages/_document.js`, a `main` landmark and one `h1` per page.
+- Підписи полів: форми писали як `<label>…</label><input/>` без звʼязку, тому `components/label-links.js` (підключений у `_app.js`) сам ставить `for`/`aria-labelledby` для підписів, що стоять поруч із полем, і для рядків картки (`.drow`). Нове поле з власним `aria-label` або `htmlFor` він не чіпає. Чипи-фільтри — це `<button class="chip">`, а не `div`.
+- `npm audit --omit=dev` should show no critical/high findings; update `next`/`react` within their ranges rather than pinning old versions.
+- Security headers are set in `next.config.js`. `X-Frame-Options` is `SAMEORIGIN`, not `DENY`, because the lesson sandbox iframe in `/me` is same-origin. The camera is the only permission the app needs.
+- A render crash shows `components/error-boundary.js` (wrapped in `pages/_app.js`) instead of a white screen; `pages/404.js` is the custom 404.
+
 ## Tests
 
 `tests/README.md` sets the conventions:
