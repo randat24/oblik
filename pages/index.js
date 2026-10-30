@@ -1244,7 +1244,10 @@ export default function Home({ startView }) {
   const [params] = useState(() => {
     if (typeof window === 'undefined') return {};
     const p = new URLSearchParams(window.location.search);
-    return { box: p.get('box'), id: p.get('id'), sheet: p.get('sheet'), row: Number(p.get('row')) || null };
+    return {
+      box: p.get('box'), id: p.get('id'), sheet: p.get('sheet'), row: Number(p.get('row')) || null,
+      q: p.get('q'),
+    };
   });
 
   // /rybakivka?id=Р-004 — відкрити склад одразу на потрібній позиції
@@ -1319,6 +1322,11 @@ export default function Home({ startView }) {
     const wh = sheets.find((s) => s.kind === 'warehouse');
     if (wh) setView({ kind: 'warehouse', name: wh.name, box: params.box });
   }, [sheets, params.box]);
+
+  // /?q=АБ-123 — пошук із закладки чи швидкої команди: в Safari розширення немає
+  useEffect(() => {
+    if (params.q) setView({ kind: 'search', name: null, q: params.q });
+  }, [params.q]);
 
   // /?sheet=ПНВ&row=7 — посилання з розширення веде одразу на рядок
   useEffect(() => {
