@@ -265,7 +265,7 @@ function Summary({ state, members, config, ops, nameOf }) {
       <section className="fund-msg">
         <div className="fund-msg-head">
           <h2 className="fund-gh">Повідомлення для чату</h2>
-          <button type="button" className="fund-copy" onClick={copy}>Копіювати</button>
+          <button type="button" className="act-btn" onClick={copy}>Копіювати</button>
         </div>
         <pre className="fund-bubble">{text}</pre>
       </section>
