@@ -4,6 +4,7 @@ import {
 } from '../../lib/fund-store';
 import {
   kop, compute, invariantOk, categoryOf, ownerRecalcPlan, withOwner, byOrder, daysOf, newMember,
+  shortReport,
 } from '../../lib/fund';
 import { OPENING_DATE } from '../../lib/fund-seed';
 import { logChange } from '../../lib/log';
@@ -46,6 +47,9 @@ export default withAuth(async (req, res) => {
       // перевірку показуємо поруч із даними: якщо вона не зійшлась,
       // людина має побачити це, а не довідатись від бухгалтера
       ok: invariantOk(state, data.config),
+      // готовий текст для розширення: у нього немає `lib/fund.js`, а друга
+      // копія підрахунку рано чи пізно розійшлась би з цією
+      report: shortReport(state, data.members, data.config.owner),
     });
   }
 

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <title>Облік майна</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <label class="lab" for="q">Серійник, позивний або назва</label>
+  <input id="q" type="search" autofocus autocomplete="off" placeholder="Від 2 символів">
+  <p id="note" class="note" role="status"></p>
+  <a id="login" class="btn" target="_blank" rel="noreferrer" hidden>Увійти на сайт</a>
+  <div id="out"></div>
+  <section id="fund" class="msg" hidden>
+    <div class="msg-head">
+      <h2 class="gh">Повідомлення для чату</h2>
+      <button id="copy" type="button" class="act">Копіювати</button>
+    </div>
+    <pre id="report" class="bubble"></pre>
+  </section>
+  <script type="module" src="panel.js"></script>
+</body>
+</html>

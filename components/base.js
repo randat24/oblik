@@ -569,6 +569,16 @@ export function DataTable({ columns, rows, onPick, pickLabel = 'Картка' })
   );
 }
 
+/**
+ * Рядок зведення, який веде в розділ. Кнопки «Картка» в ньому немає, тож без
+ * цього до розділу дістається лише миша або палець.
+ */
+export const rowLink = (go) => ({
+  onClick: go,
+  tabIndex: 0,
+  onKeyDown: (e) => { if (e.key === 'Enter' && e.target === e.currentTarget) go(); },
+});
+
 /* ---------- Підсумковий рядок ---------- */
 /**
  * Числа під фільтрами: скільки видно зараз і скільки всього.

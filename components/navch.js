@@ -950,8 +950,8 @@ function AskBox({ q, state, typed, opts, onAnswer, disabled, quad, only }) {
         )}
         {showA && (
           <div className="h-mt-tf">
-            <button className="h-mt-tf-b is-no" onClick={() => onAnswer(false)} disabled={disabled}>✗</button>
-            <button className="h-mt-tf-b is-yes" onClick={() => onAnswer(true)} disabled={disabled}>✓</button>
+            <button className="h-mt-tf-b is-no" aria-label="Неправда" onClick={() => onAnswer(false)} disabled={disabled}>✗</button>
+            <button className="h-mt-tf-b is-yes" aria-label="Правда" onClick={() => onAnswer(true)} disabled={disabled}>✓</button>
           </div>
         )}
       </>
@@ -1139,9 +1139,9 @@ function MultSpeed({ prog, items, onBack, onDone }) {
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
             <button key={d} onClick={() => press(String(d))} disabled={state !== 'ask'}>{d}</button>
           ))}
-          <button className="is-soft" onClick={() => setTyped('')} disabled={state !== 'ask'}>С</button>
+          <button className="is-soft" aria-label="Очистити" onClick={() => setTyped('')} disabled={state !== 'ask'}>С</button>
           <button onClick={() => press('0')} disabled={state !== 'ask'}>0</button>
-          <button className="is-soft" onClick={() => setTyped((t) => t.slice(0, -1))} disabled={state !== 'ask'}>⌫</button>
+          <button className="is-soft" aria-label="Стерти цифру" onClick={() => setTyped((t) => t.slice(0, -1))} disabled={state !== 'ask'}>⌫</button>
         </div>
       ) : null}
     </div>
@@ -1565,9 +1565,9 @@ function MultArcade({ prog, best, bestScore, onBack, onDone }) {
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
             <button key={d} onClick={() => press(String(d))} disabled={state !== 'ask'}>{d}</button>
           ))}
-          <button className="is-soft" onClick={() => setTyped('')} disabled={state !== 'ask'}>С</button>
+          <button className="is-soft" aria-label="Очистити" onClick={() => setTyped('')} disabled={state !== 'ask'}>С</button>
           <button onClick={() => press('0')} disabled={state !== 'ask'}>0</button>
-          <button className="is-soft" onClick={() => setTyped((t) => t.slice(0, -1))} disabled={state !== 'ask'}>⌫</button>
+          <button className="is-soft" aria-label="Стерти цифру" onClick={() => setTyped((t) => t.slice(0, -1))} disabled={state !== 'ask'}>⌫</button>
         </div>
       ) : null}
     </div>

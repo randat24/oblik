@@ -478,7 +478,7 @@ function PhotoSlot({ label, value, onChange }) {
       {value ? (
         <div className="h-slot-img">
           <img src={photoSrc(value)} alt={label} />
-          <button className="h-slot-x" onClick={() => onChange('')} title="Прибрати">×</button>
+          <button className="h-slot-x" onClick={() => onChange('')} title="Прибрати" aria-label="Прибрати">×</button>
           <button
             className="h-slot-re"
             onClick={() => fileRef.current?.click()}
@@ -955,7 +955,7 @@ function DayTab({ data, date, setDate, reload, setBusy, toast }) {
                     <span>В {n1(f.carbs)}</span>
                   </div>
                 </div>
-                <button className="h-food-x" onClick={() => delFood(f.row)} title="Прибрати">×</button>
+                <button className="h-food-x" onClick={() => delFood(f.row)} title="Прибрати" aria-label="Прибрати">×</button>
               </div>
             ))}
           </div>
@@ -1107,7 +1107,7 @@ function BarcodeScanner({ onFound, onClose }) {
       <div className="h-scan">
         <div className="h-cmp-head">
           <span>Штрихкод</span>
-          <button className="h-cmp-x" onClick={onClose}>×</button>
+          <button className="h-cmp-x" onClick={onClose} aria-label="Закрити">×</button>
         </div>
 
         <div className="h-scan-view">
@@ -1789,9 +1789,9 @@ function DayStats({ day, goals, onWater, onOpen }) {
     <div className="h-quick">
       <div className="h-quick-w">
         <span className="h-quick-l">Вода</span>
-        <button className="h-quick-b" disabled={water <= 0} onClick={() => onWater(Math.max(0, water - glass))}>−</button>
+        <button className="h-quick-b" aria-label="Менше води" disabled={water <= 0} onClick={() => onWater(Math.max(0, water - glass))}>−</button>
         <span className="h-quick-v">{water}<i> мл</i></span>
-        <button className="h-quick-b" onClick={() => onWater(water + glass)}>+</button>
+        <button className="h-quick-b" aria-label="Більше води" onClick={() => onWater(water + glass)}>+</button>
         <button className="h-quick-x" onClick={() => onWater(water + 500)}>+500</button>
       </div>
       <button className="h-btn h-quick-more" onClick={onOpen}>
@@ -2110,7 +2110,7 @@ function DishesTab({ data, reload, setBusy, toast }) {
             <div className="h-dish-h">
               <span className="h-dish-n">{d.name}</span>
               <span className="h-dish-k">{Math.round(d.kcal)} ккал</span>
-              <button className="h-food-x" onClick={() => remove(d.name)} title="Прибрати">×</button>
+              <button className="h-food-x" onClick={() => remove(d.name)} title="Прибрати" aria-label="Прибрати">×</button>
             </div>
             <div className="h-dish-m">
               {d.grams > 0 && <>{n1(d.grams)} г · </>}
@@ -2241,7 +2241,7 @@ function DishModal({ dish, products, onClose, onDone }) {
               placeholder="г"
               onChange={(e) => setGrams(i, e.target.value)}
             />
-            <button className="h-food-x" onClick={() => setItems((p) => p.filter((_, j) => j !== i))}>×</button>
+            <button className="h-food-x" aria-label="Прибрати" onClick={() => setItems((p) => p.filter((_, j) => j !== i))}>×</button>
           </div>
           {it.name?.trim() && !it.per100 && (
             <ProductHints
@@ -2574,6 +2574,7 @@ function WeightTab({ data, reload }) {
                       className="h-hshot-add"
                       onClick={() => setOpen(d.date)}
                       title={photos.length ? 'Додати ще ракурс' : 'Додати фото до цього запису'}
+                      aria-label={photos.length ? 'Додати ще ракурс' : 'Додати фото до цього запису'}
                     >
                       +
                     </button>
@@ -2722,7 +2723,7 @@ function PhotoCompare({ data, onClose }) {
       <div className="h-cmp">
         <div className="h-cmp-head">
           <span>Порівняння</span>
-          <button className="h-cmp-x" onClick={onClose}>×</button>
+          <button className="h-cmp-x" onClick={onClose} aria-label="Закрити">×</button>
         </div>
 
         <div className="h-cmp-pick">
@@ -4518,7 +4519,7 @@ export default function Osobyste() {
           <a className="h-back" href="/" title="До обліку майна">←</a>
           {tab === 'day' ? (
             <div className="h-hdate">
-              <button className="h-hnav" onClick={() => shiftDate(-1)} title="Попередній день">‹</button>
+              <button className="h-hnav" onClick={() => shiftDate(-1)} title="Попередній день" aria-label="Попередній день">‹</button>
               <button
                 className="h-hday"
                 onClick={() => setDate(today())}
@@ -4531,6 +4532,7 @@ export default function Osobyste() {
                 onClick={() => shiftDate(1)}
                 disabled={stamp(date) >= stamp(today())}
                 title="Наступний день"
+                aria-label="Наступний день"
               >
                 ›
               </button>

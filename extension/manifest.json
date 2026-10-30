@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Облік майна",
+  "version": "1.1.0",
+  "description": "Пошук по обліку в боковій панелі і повідомлення каси для чату.",
+  "minimum_chrome_version": "116",
+  "permissions": ["sidePanel", "contextMenus", "storage", "alarms", "clipboardWrite"],
+  "host_permissions": ["https://oblik-brown.vercel.app/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "side_panel": { "default_path": "panel.html" },
+  "action": { "default_title": "Облік майна" },
+  "commands": {
+    "_execute_action": { "suggested_key": { "default": "Alt+Shift+O" } }
+  },
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" }
+}
