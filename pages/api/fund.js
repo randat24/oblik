@@ -1,6 +1,6 @@
 import { withAuth, currentActor, isGuest, session } from '../../lib/auth';
 import { readFund, addOp, cancelOp, saveMember, seedFund, setConfig } from '../../lib/fund-store';
-import { kop, compute, invariantOk, categoryOf } from '../../lib/fund';
+import { kop, compute, invariantOk, categoryOf, shortReport } from '../../lib/fund';
 import { logChange } from '../../lib/log';
 
 /**
@@ -39,6 +39,9 @@ export default withAuth(async (req, res) => {
       // перевірку показуємо поруч із даними: якщо вона не зійшлась,
       // людина має побачити це, а не довідатись від бухгалтера
       ok: invariantOk(state, data.config),
+      // готовий текст для розширення: у нього немає `lib/fund.js`, а друга
+      // копія підрахунку рано чи пізно розійшлась би з цією
+      report: shortReport(state, data.members),
     });
   }
 

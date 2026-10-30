@@ -221,9 +221,9 @@ export function AuditView({ setState }) {
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Знайти позицію: назва, номер, S/N..." />
         <div className="spacer" />
-        <div className={'chip' + (onlyLeft ? ' on' : '')} onClick={() => setOnlyLeft(!onlyLeft)}>
+        <button type="button" className={'chip' + (onlyLeft ? ' on' : '')} onClick={() => setOnlyLeft(!onlyLeft)}>
           {onlyLeft ? 'Ховати підтверджені' : 'Показувати всі'}
-        </div>
+        </button>
       </div>
 
       {list.length === 0 ? (

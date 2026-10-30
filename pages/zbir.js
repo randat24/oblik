@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { parsePart, joinParts, STAGES } from '../lib/delivery';
+import { ToastHost, useToasts } from '../components/base';
 
 /**
  * Пункт збору.
@@ -57,6 +58,7 @@ export default function Zbir() {
   const [key, setKey] = useState(null);      // null — ще не прочитали
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const { toasts, push, close } = useToasts();
   const [busy, setBusy] = useState(false);
   const [add, setAdd] = useState(false);
   const [edit, setEdit] = useState(null);   // посилка, яку правимо
@@ -99,7 +101,7 @@ export default function Zbir() {
       setData(await api('/api/pack', { method: 'POST', body: { ...body, token: key, me: WHO } }));
       return true;
     } catch (e) {
-      alert(e.message);
+      push(e.message, { type: 'err', ttl: 0 });
       return false;
     } finally {
       setBusy(false);
@@ -205,6 +207,7 @@ export default function Zbir() {
       )}
 
       {help && <HelpSheet onClose={() => setHelp(false)} />}
+      <ToastHost toasts={toasts} onClose={close} />
     </Shell>
   );
 }

@@ -13,7 +13,7 @@ import {
   splitParts, joinParts, partsOf, partsLeft, weightOf, weightLeft, parsePart,
   placesOf, lostOf, orderForRoad, hotOf, PRIO_FIRST,
 } from '../lib/delivery';
-import { api, Modal, SearchBox, Stat, bagWord, dayWord } from './base';
+import { api, Modal, SearchBox, Stat, bagWord, dayWord, useToast, saveFailed } from './base';
 
 /**
  * Шлях посилки: зібрали → передали на відправку → відправник довіз до точки вильоту →
@@ -36,6 +36,7 @@ const DLV_STAGE_KEYS = [
 ];
 
 export function DeliveryView({ setState, me = '', chief = false }) {
+  const toast = useToast();
   const [data, setData] = useState(null);
   const [q, setQ] = useState('');
   const [only, setOnly] = useState('');
@@ -64,7 +65,7 @@ export function DeliveryView({ setState, me = '', chief = false }) {
       return true;
     } catch (e) {
       setState('помилка: ' + e.message);
-      alert(e.message);
+      saveFailed(toast, e);
       return false;
     }
   };
@@ -230,16 +231,16 @@ export function DeliveryView({ setState, me = '', chief = false }) {
           <h3 className="sec">Пілоти й куди</h3>
           <div className="chips">
             {pilots.map((x) => (
-              <div className="chip" key={'d' + x.name} onClick={() => setQ(x.name)}>
+              <button type="button" className="chip" key={'d' + x.name} onClick={() => setQ(x.name)}>
                 {x.name} <b style={{ marginLeft: 4 }}>{x.n}</b>
                 {x.kg > 0 && <span className="count" style={{ marginLeft: 6 }}>{kg(x.kg)} кг</span>}
-              </div>
+              </button>
             ))}
             {points.filter((x) => x.name !== '—').map((x) => (
-              <div className="chip" key={'p' + x.name} style={{ color: 'var(--blue)' }}
+              <button type="button" className="chip" key={'p' + x.name} style={{ color: 'var(--blue)' }}
                 onClick={() => setQ(x.name)}>
                 → {x.name} <b style={{ marginLeft: 4 }}>{x.n}</b>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -247,22 +248,22 @@ export function DeliveryView({ setState, me = '', chief = false }) {
 
       <div className="chips">
         {stages.map((s, i) => (
-          <div
+          <button type="button"
             key={s.key}
             className={'chip' + (only === s.key ? ' on' : '')}
             onClick={() => setOnly(only === s.key ? '' : s.key)}
           >
             {s.label}<span className="count">{counts[i]}</span>
-          </div>
+          </button>
         ))}
         {lostCount > 0 && (
-          <div
+          <button type="button"
             className={'chip' + (only === 'lost' ? ' on' : '')}
             style={{ color: 'var(--red)' }}
             onClick={() => setOnly(only === 'lost' ? '' : 'lost')}
           >
             Втрачено<span className="count">{lostCount}</span>
-          </div>
+          </button>
         )}
       </div>
 
@@ -603,8 +604,8 @@ function DeliveryAdd({ item, tos, transport, takers, chief, onCancel, onSave }) 
         </label>
         <div className="chips">
           {(tos || []).map((v) => (
-            <div key={v} className={'chip' + (f.to === v ? ' on' : '')}
-              onClick={() => up('to', f.to === v ? '' : v)}>{v}</div>
+            <button type="button" key={v} className={'chip' + (f.to === v ? ' on' : '')}
+              onClick={() => up('to', f.to === v ? '' : v)}>{v}</button>
           ))}
         </div>
         {(tos || []).length === 0 && (
@@ -621,8 +622,8 @@ function DeliveryAdd({ item, tos, transport, takers, chief, onCancel, onSave }) 
         <label>Пілот</label>
         <div className="chips">
           {(takers || []).map((v) => (
-            <div key={v} className={'chip' + (f.pilot === v ? ' on' : '')}
-              onClick={() => up('pilot', f.pilot === v ? '' : v)}>{v}</div>
+            <button type="button" key={v} className={'chip' + (f.pilot === v ? ' on' : '')}
+              onClick={() => up('pilot', f.pilot === v ? '' : v)}>{v}</button>
           ))}
         </div>
         <input type="text" value={f.pilot} style={{ marginTop: 8 }}
@@ -646,13 +647,13 @@ function DeliveryAdd({ item, tos, transport, takers, chief, onCancel, onSave }) 
         <div style={{ marginTop: 10 }}>
           <label>Черговість</label>
           <div className="chips">
-            <div className={'chip' + (!f.prio ? ' on' : '')} onClick={() => up('prio', '')}>
+            <button type="button" className={'chip' + (!f.prio ? ' on' : '')} onClick={() => up('prio', '')}>
               Звичайна
-            </div>
-            <div className={'chip dlv-prio-chip' + (f.prio ? ' on' : '')}
+            </button>
+            <button type="button" className={'chip dlv-prio-chip' + (f.prio ? ' on' : '')}
               onClick={() => up('prio', PRIO_FIRST)}>
               В першу чергу
-            </div>
+            </button>
           </div>
         </div>
       )}
@@ -696,12 +697,12 @@ function DeliveryAdd({ item, tos, transport, takers, chief, onCancel, onSave }) 
             {partList.map((label, i) => {
               const { name } = parsePart(label);
               return (
-                <div key={label + i}
+                <button type="button" key={label + i}
                   className={'chip dlv-prio-chip' + (hotIn(label) ? ' on' : '')}
                   onClick={() => toggleHot(label)}
                 >
                   {name}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -880,8 +881,8 @@ function DeliveryMove({ item, stage, transport, takers, points, me = '', onCance
           <label>Хто прийняв на точці вильоту</label>
           <div className="chips">
             {(takers || []).map((v) => (
-              <div key={v} className={'chip' + (f.taker === v ? ' on' : '')}
-                onClick={() => up('taker', f.taker === v ? '' : v)}>{v}</div>
+              <button type="button" key={v} className={'chip' + (f.taker === v ? ' on' : '')}
+                onClick={() => up('taker', f.taker === v ? '' : v)}>{v}</button>
             ))}
           </div>
           <input type="text" value={f.taker} style={{ marginTop: 8 }}
@@ -902,8 +903,8 @@ function DeliveryMove({ item, stage, transport, takers, points, me = '', onCance
           <label>Чим веземо до пілота</label>
           <div className="chips">
             {(transport || []).map((v) => (
-              <div key={v} className={'chip' + (f.driver === v ? ' on' : '')}
-                onClick={() => up('driver', f.driver === v ? '' : v)}>{v}</div>
+              <button type="button" key={v} className={'chip' + (f.driver === v ? ' on' : '')}
+                onClick={() => up('driver', f.driver === v ? '' : v)}>{v}</button>
             ))}
           </div>
           <input type="text" value={f.driver} style={{ marginTop: 8 }}
@@ -920,14 +921,14 @@ function DeliveryMove({ item, stage, transport, takers, points, me = '', onCance
           <label>Куди доставили{picked.length > 1 ? ` — ${picked.length} точки` : ''}</label>
           <div className="chips">
             {points.map((v) => (
-              <div key={v}
+              <button type="button" key={v}
                 className={'chip' + (picked.includes(v) ? ' on' : '')}
                 onClick={() => up('point', joinPoints(
                   picked.includes(v) ? picked.filter((x) => x !== v) : [...picked, v]
                 ))}
               >
                 {v}
-              </div>
+              </button>
             ))}
           </div>
           <input type="text" value={f.point} style={{ marginTop: 8 }}
@@ -1020,12 +1021,12 @@ function DeliveryLose({ item, whys = [], onCancel, onSave }) {
           <label>Що не доїде</label>
           <div className="chips">
             {open.map((p) => (
-              <div key={p.n}
+              <button type="button" key={p.n}
                 className={'chip' + (pick.includes(p.n) ? ' on' : '')}
                 onClick={() => toggle(p.n)}
               >
                 {p.name}{p.kg !== null ? ` · ${p.kg} кг` : ''}
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -1036,7 +1037,7 @@ function DeliveryLose({ item, whys = [], onCancel, onSave }) {
           <label>Причина</label>
           <div className="chips">
             {whys.map((v) => (
-              <div key={v} className={'chip' + (why === v ? ' on' : '')} onClick={() => setWhy(v)}>{v}</div>
+              <button type="button" key={v} className={'chip' + (why === v ? ' on' : '')} onClick={() => setWhy(v)}>{v}</button>
             ))}
           </div>
           <input type="text" value={why} style={{ marginTop: 8 }}
