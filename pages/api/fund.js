@@ -201,7 +201,7 @@ export default withAuth(async (req, res) => {
     return res.status(400).json({ error: 'Сума має бути більшою за нуль' });
   }
 
-  const { members } = await readFund();
+  const { members, config } = await readFund();
   const has = (id) => members.some((m) => m.id === id);
 
   const op = {
@@ -213,7 +213,9 @@ export default withAuth(async (req, res) => {
   if (action === 'expense') {
     op.desc = clip(body.desc, 200);
     op.category = categoryOf(body.category).id;
-    op.payer = body.payer === 'cash' ? 'cash' : String(body.payer || '');
+    // каса — це картка власника: коли платить він, гроші йдуть із каси
+    op.payer = body.payer === 'cash' || (config.owner && body.payer === config.owner)
+      ? 'cash' : String(body.payer || '');
     if (op.payer !== 'cash' && !has(op.payer)) {
       return res.status(400).json({ error: 'Оберіть, хто платив' });
     }

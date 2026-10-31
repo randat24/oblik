@@ -447,19 +447,22 @@ function DateField({ value, onChange }) {
 }
 
 /** Вибір однієї людини (платник, отримувач): аватар + імʼя, а не випадний список */
-function PersonPick({ members, value, onChange, cash = false, label }) {
+function PersonPick({ members, value, onChange, cash = false, label, owner = '' }) {
+  // власника каси серед платників немає: його картка і є каса
+  const list = cash && owner ? byOrder(members).filter((m) => m.id !== owner) : byOrder(members);
+  const ownerName = members.find((m) => m.id === owner)?.name;
   return (
     <div className="fund-f">
       <span>{label}</span>
       <div className="fund-picks">
-        {byOrder(members).map((m, i) => (
+        {list.map((m, i) => (
           <button type="button" key={m.id} className={'fund-pchip' + (value === m.id ? ' on' : '')} onClick={() => onChange(m.id)}>
             <Avatar m={m} i={i} size={24} />{m.name}
           </button>
         ))}
         {cash && (
           <button type="button" className={'fund-pchip' + (value === 'cash' ? ' on' : '')} onClick={() => onChange('cash')}>
-            Каса
+            {ownerName ? `Каса (${ownerName})` : 'Каса'}
           </button>
         )}
       </div>
@@ -484,7 +487,7 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
   const [desc, setDesc] = useState('');
   const [category, setCategory] = useState('var');
   const [date, setDate] = useState(todayIso());
-  const [payer, setPayer] = useState(ms[0]?.id || '');
+  const [payer, setPayer] = useState(ms.find((m) => m.id !== config.owner)?.id || '');
   const [busy, setBusy] = useState(false);
   // кого не рахуємо — спільне налаштування з вкладки «Учасники»; тут лише разові зміни
   const excluded = useMemo(() => config.excluded || [], [config.excluded]);
@@ -566,7 +569,7 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
       </div>
 
       <DateField value={date} onChange={setDate} />
-      <PersonPick members={members} value={payer} onChange={setPayer} cash label="Хто платив" />
+      <PersonPick members={members} value={payer} onChange={setPayer} cash owner={config.owner} label="Хто платив" />
 
       <div className="fund-f">
         <span>На кого ділимо</span>

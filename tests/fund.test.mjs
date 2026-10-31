@@ -650,3 +650,42 @@ test('кілька людей з окремими днями, решта — з�
   assert.equal(Object.values(r.shares).reduce((s, v) => s + v, 0), kop('1000.01'));
   assert.ok(r.shares.c < r.shares.a && r.shares.d < r.shares.a);
 });
+
+/* ---------- Каса — картка власника ---------- */
+import { ownerAsCash } from '../lib/fund.js';
+
+const WITH_ALEX = [
+  ...MEMBERS,
+  { id: 'alex', name: 'Алекс', order: 7, opening: 0, periods: [{ start: '2000-01-01' }], vacations: [] },
+];
+const ALEX_PAID = {
+  id: 'o1', type: 'expense', date: '2026-10-28', amount: kop('1000'), category: 'other',
+  payer: 'alex', mode: 'manual', participants: ['vanya', 'fantomas', 'alex'], status: 'active',
+};
+
+test('власник платить — каса зменшується, а йому «плюс» не пишеться', () => {
+  const ops = ownerAsCash([ALEX_PAID], 'alex');
+  const st = compute(WITH_ALEX, ops, { openingCash: kop('13199'), openingDiff: 200 });
+  assert.equal(st.cash, kop('13199') - kop('1000'));
+  // його баланс — лише його частка, без «витратив свої»
+  assert.equal(st.bal.alex, -kop('333.33'));
+});
+
+test('без перетворення той самий платіж лишав би касу на місці', () => {
+  const st = compute(WITH_ALEX, [ALEX_PAID], { openingCash: kop('13199'), openingDiff: 200 });
+  assert.equal(st.cash, kop('13199'));
+});
+
+test('платить звичайна людина — запис не змінюється', () => {
+  const op = { ...ALEX_PAID, payer: 'vanya' };
+  assert.deepEqual(ownerAsCash([op], 'alex'), [op]);
+});
+
+test('власника не задано — нічого не міняється', () => {
+  assert.deepEqual(ownerAsCash([ALEX_PAID], ''), [ALEX_PAID]);
+});
+
+test('внесок власника не перетворюється: це не витрата', () => {
+  const dep = { id: 'd', type: 'deposit', member: 'alex', amount: 100, date: '2026-10-28', status: 'active' };
+  assert.deepEqual(ownerAsCash([dep], 'alex'), [dep]);
+});
