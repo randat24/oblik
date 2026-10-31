@@ -5902,21 +5902,43 @@ input.ghost, select.ghost, textarea.ghost { border-radius: var(--ob-radius-sm); 
 .muted { color: var(--muted); }
 .sec { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
 .zv-tool { flex: none; min-height: var(--ctl-h); }
-.zv-filters .chips { margin-bottom: 6px; }
-.zv-filters { margin-bottom: 8px; }
+/* Усі фільтри — один ряд на компʼютері й два на телефоні. Спільна маска чипів
+   «за краєм є ще» тут не потрібна: рядки переносяться, а не гортаються, і
+   маска гасила останній чип, хоч той і вміщався. */
+.zv-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; }
+.zv-filters .chips, .chips.zv-wrap { flex-wrap: wrap; margin-bottom: 0; -webkit-mask-image: none; mask-image: none; overflow: visible; }
+.zv-filters-2 { display: flex; align-items: center; gap: 8px 12px; min-width: 0; flex: 1 1 auto; }
+.zv-filters-2 .chips { flex: none; flex-wrap: nowrap; align-items: center; }
+.zv-f-l { font-size: .78rem; color: var(--muted); }
 .zv-more { display: block; width: 100%; margin-top: 12px; }
 .zv-name { font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
-.zv-card .title-line { align-items: flex-start; }
+/* Картка не тягнеться за розгорнутою сусідкою в ряду сітки */
+.zv-card { align-self: start; }
+.zv-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+/* Статус у своєму рядку з номером: поруч із назвою пігулка стискалась до «Н…» */
+.zv-card .pill { max-width: none; flex: none; min-height: 0; cursor: default; }
+.zv-where { font-size: .8rem; margin-top: 3px; overflow-wrap: anywhere; }
+.zv-card .zv-counts { margin-top: 10px; margin-bottom: 0; }
+.zv-card .zv-acts { margin-top: 10px; padding-top: 0; border-top: 0; }
+/* Чотири кнопки в ряд на 320 px: спільний мінімум 84 px переносив четверту */
+.zv-acts .act-btn { min-width: 0; padding-left: 6px; padding-right: 6px; }
+.zv-more-box { margin-top: 10px; }
+/* На 320 px «Надійшло» у чверті рядка вже не вміщується */
+@media (max-width: 360px) { .zv-card .zv-acts { display: grid; grid-template-columns: 1fr 1fr; } }
+@media (min-width: 721px) {
+  /* однакова висота згорнутих карток у ряду: назва завжди на два рядки */
+  .zv-card .zv-name { min-height: 2.7em; }
+}
 /* Чотири числа позиції — головне на картці: їх читають, а не шукають */
 .zv-counts {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 6px; margin-bottom: 10px;
 }
 .zv-counts > div {
-  background: var(--panel-2); border-radius: var(--r-sm); padding: 6px 8px; min-width: 0;
+  background: var(--panel-2); border-radius: var(--r-sm); padding: 6px; min-width: 0;
   display: flex; flex-direction: column; gap: 1px;
 }
 .zv-counts b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
-.zv-counts span { font-size: .68rem; color: var(--muted); line-height: 1.25; }
+.zv-counts span { font-size: .72rem; color: var(--muted); line-height: 1.25; }
 .zv-counts .is-short b { color: var(--red); }
 .zv-counts .is-ok b { color: var(--green); }
 .zv-sn { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -5928,7 +5950,8 @@ input.ghost, select.ghost, textarea.ghost { border-radius: var(--ob-radius-sm); 
 .zv-sn-chip { font-family: var(--mono); font-size: .78rem; }
 .zv-note { margin-top: 10px; white-space: pre-line; }
 .zv-link { background: none; border: 0; color: var(--amber); font: inherit; font-weight: 600; cursor: pointer; padding: 0 0 0 6px; text-decoration: underline; }
-.zv-place { max-width: 100%; min-height: var(--ctl-h); }
+.zv-place { flex: 0 1 240px; width: auto; min-width: 0; max-width: 100%; min-height: var(--ctl-h); }
+.zv-lead { flex: 1 1 260px; font-size: .85rem; line-height: 1.45; }
 .zv-move-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
 .zv-move-head span { font-size: .82rem; color: var(--muted); }
 .zv-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -5962,7 +5985,10 @@ input.ghost, select.ghost, textarea.ghost { border-radius: var(--ob-radius-sm); 
   position: fixed; inset: 0; z-index: 80; overflow: auto;
   background: var(--bg); padding: 12px 16px 40px;
 }
-.zv-print-bar { display: flex; gap: 8px; align-items: center; max-width: 1100px; margin: 0 auto 12px; }
+.zv-print-bar {
+  position: sticky; top: -12px; z-index: 1; display: flex; gap: 8px; align-items: center;
+  max-width: 1100px; margin: 0 auto 12px; padding: 8px 0; background: var(--bg);
+}
 .zv-print-bar .act-btn { flex: none; min-height: var(--ctl-h); }
 .zv-paper {
   max-width: 1100px; margin: 0 auto; background: #fff; color: #111; border-radius: 6px;
@@ -5971,6 +5997,7 @@ input.ghost, select.ghost, textarea.ghost { border-radius: var(--ob-radius-sm); 
 .zv-paper-head { white-space: pre-line; text-align: right; margin-bottom: 14px; }
 .zv-paper-title { font-size: 14px; font-weight: 700; text-align: center; margin: 0 0 12px; color: #111; }
 .zv-paper-scroll { overflow-x: auto; }
+.zv-paper-hint { display: none; font-size: 11px; color: #555; text-align: center; margin-bottom: 6px; }
 .zv-paper-table { width: 100%; border-collapse: collapse; }
 .zv-paper-table th, .zv-paper-table td { border: 1px solid #555; padding: 3px 5px; vertical-align: top; text-align: left; }
 .zv-paper-table th { background: #eee; font-weight: 700; }
@@ -5982,23 +6009,41 @@ input.ghost, select.ghost, textarea.ghost { border-radius: var(--ob-radius-sm); 
   body.zv-printing > * { visibility: hidden; }
   body.zv-printing .zv-print, body.zv-printing .zv-print * { visibility: visible; }
   body.zv-printing .zv-print { position: absolute; inset: 0 auto auto 0; width: 100%; padding: 0; background: #fff; overflow: visible; }
-  body.zv-printing .zv-print-bar { display: none; }
+  body.zv-printing .zv-print-bar, body.zv-printing .zv-paper-hint { display: none; }
   body.zv-printing .zv-paper { max-width: none; padding: 0; border-radius: 0; }
   body.zv-printing .zv-paper-scroll { overflow: visible; }
   @page { size: A4 landscape; margin: 10mm; }
 }
-/* Нижня панель тут не замінює вкладки розділу — на телефоні вони лишаються
-   рядком, що гортається вбік */
+/* Нижня панель тут не замінює вкладки розділу. Пʼять вкладок ділять рядок
+   порівну, щоб «Імпорт» не ховався за краєм. Лічильники на вузькому екрані
+   прибрані: позиції названо в першій плитці, акти видно переліком. На 320 px
+   рядок ще й гортається. */
 @media (max-width: 760px) {
   .tabs.zv-tabs {
-    display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
-    margin: 0 0 12px; padding: 0 0 4px;
+    display: flex; flex-wrap: nowrap; gap: 2px; overflow-x: auto; scrollbar-width: none;
+    margin: 0 0 12px;
   }
-  .zv-print { padding: 8px 8px 40px; }
+  .tabs.zv-tabs .tab { flex: 1 0 auto; padding: 8px 8px; text-align: center; }
+  .tabs.zv-tabs .count { display: none; }
+  .zv-print { padding: 0 8px 40px; }
+  .zv-print-bar { top: 0; padding-top: max(8px, env(safe-area-inset-top)); }
   .zv-paper { padding: 12px; }
+  .zv-paper-hint { display: block; }
+  /* Підрозділи — на весь залишок рядка поруч із категоріями */
+  .zv-filters { gap: 8px; }
+  .zv-filters-2 { flex: 1 1 100%; }
+  .zv-place { flex: 1 1 0; }
+  .zv-filters .chip { padding-left: 9px; padding-right: 9px; }
+  /* Плитки не мають забирати перший екран: на телефоні перша картка
+     починалась аж під нижньою панеллю */
+  .zv-stats { grid-template-columns: 1fr 1fr; margin-bottom: 12px; }
+  .zv-stats .stat { padding: 10px 12px; }
+  .zv-stats .stat-l { margin-top: 0; }
+  .zv-stats .stat-v { margin-top: 4px; font-size: 1.3rem; }
+  .zv-stats .stat-s { margin-top: 2px; }
+  .zv-stats .stat:nth-child(2) .stat-s { display: none; }
 }
 /* «13 455 870,17» моноширинним 1.9rem у половині екрана телефона не
    вміщується й розпирає сторінку вбік */
 .zv-stats .stat { min-width: 0; }
 .zv-stats .stat-v { overflow-wrap: anywhere; }
-@media (max-width: 760px) { .zv-stats .stat-v { font-size: 1.35rem; } }
