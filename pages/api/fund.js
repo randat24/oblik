@@ -5,7 +5,7 @@ import {
 } from '../../lib/fund-store';
 import {
   kop, compute, invariantOk, categoryOf, ownerRecalcPlan, withOwner, byOrder, daysOf, newMember,
-  shortReport,
+  shortReport, cardDigits,
 } from '../../lib/fund';
 import { OPENING_DATE } from '../../lib/fund-seed';
 import { logChange } from '../../lib/log';
@@ -126,6 +126,19 @@ export default withAuth(async (req, res) => {
       sheet: 'Фонд', action: 'Змінено учасника', field: next.name,
       after: `періодів ${next.periods.length}, відпусток ${next.vacations.length}`,
     });
+    return res.json({ ok: true });
+  }
+
+  /* ---------- Картка для переказів ---------- */
+  if (action === 'card') {
+    const raw = String(req.body.card ?? '').trim();
+    // порожнє — прибрати картку з екрана; інакше лише правильний номер
+    const card = raw ? cardDigits(raw) : '';
+    if (card === null) {
+      return res.status(400).json({ error: 'Номер картки неправильний: потрібно 16 цифр без помилки' });
+    }
+    await setConfig('card', card);
+    await logChange({ sheet: 'Фонд', action: 'Картка для переказів', after: card ? `…${card.slice(-4)}` : 'прибрано' });
     return res.json({ ok: true });
   }
 

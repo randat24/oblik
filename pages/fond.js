@@ -18,7 +18,7 @@ import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
   byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk, shortReport,
   openPeriod, leaveGroup, rejoinGroup, addVacation, newExpenseParts, cashAdjustment,
-  ownerRecalcPlan, monthBounds, daysOf,
+  ownerRecalcPlan, monthBounds, daysOf, cardDigits, cardText,
 } from '../lib/fund';
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
 import { DatePicker } from '../components/date-picker';
@@ -259,6 +259,8 @@ function Summary({ state, members, config, ops, nameOf }) {
           <span><i>У плюсі (свої)</i><b className="is-pos">{money(save.reduce((a, m) => a + state.bal[m.id], 0))}</b></span>
         </div>
       </section>
+
+      {config.card && <CardBox card={config.card} owner={members.find((m) => m.id === config.owner)?.name} />}
 
       {group('Борг у касу', owe, 'is-neg')}
       {group('У плюсі — витратили свої', save, 'is-pos')}
@@ -1061,6 +1063,63 @@ function OwnerCard({ members, ops, config, canEdit, onDone, toast }) {
 }
 
 /** Кого не рахуємо у нових витратах — одне налаштування для всіх пристроїв */
+/** Номер картки каси: великими цифрами і копіюється без пробілів, як його вставляє банк */
+function CardBox({ card, owner }) {
+  const toast = useToast();
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(card);
+      toast('Номер картки скопійовано');
+    } catch {
+      toast('Не вдалося скопіювати — виділіть номер вручну', { type: 'err' });
+    }
+  };
+  return (
+    <section className="fund-cardbox">
+      <span className="fund-hero-k">Картка для переказів у касу{owner ? ` · ${owner}` : ''}</span>
+      <div className="fund-cardbox-row">
+        <b className="fund-cardbox-n">{cardText(card)}</b>
+        <button type="button" className="act-btn" onClick={copy}>Копіювати</button>
+      </div>
+    </section>
+  );
+}
+
+function CardSetting({ config, canEdit, onDone, toast }) {
+  const [value, setValue] = useState(config.card ? cardText(config.card) : '');
+  const [busy, setBusy] = useState(false);
+  const digits = cardDigits(value);
+  const empty = !value.trim();
+  const changed = (digits || '') !== (config.card || '') || (empty && config.card);
+  const save = async (e) => {
+    e.preventDefault();
+    if (busy || (!digits && !empty)) return;
+    setBusy(true);
+    try {
+      await api('/api/fund', { method: 'POST', label: 'картка', body: { action: 'card', card: empty ? '' : digits } });
+      toast(empty ? 'Картку прибрано з екрана' : 'Картку збережено');
+      onDone();
+    } catch (err) { saveFailed(toast, err); } finally { setBusy(false); }
+  };
+  return (
+    <form className="fund-card" onSubmit={save}>
+      <h2 className="fund-h2">Картка для переказів</h2>
+      <input className="fund-search" inputMode="numeric" autoComplete="off" value={value}
+        disabled={!canEdit} placeholder="0000 0000 0000 0000" aria-label="Номер картки"
+        aria-invalid={!empty && !digits}
+        onChange={(e) => setValue(e.target.value.replace(/[^\d\s]/g, '').slice(0, 19))} />
+      {!empty && !digits && <span className="fund-hint is-neg">Номер неправильний: перевірте цифри.</span>}
+      {canEdit && changed && (digits || empty) && (
+        <button className="btn" disabled={busy}>{busy ? 'Зберігаємо…' : empty ? 'Прибрати картку' : 'Зберегти'}</button>
+      )}
+      <span className="fund-hint">
+        Показується на головній фонду з кнопкою «Копіювати». Сторінку бачить кожен, у кого є посилання.
+        {!canEdit && ' Змінювати може той, хто увійшов.'}
+      </span>
+    </form>
+  );
+}
+
 function ExcludeCard({ members, config, canEdit, onDone, toast }) {
   const [busy, setBusy] = useState(false);
   const off = config.excluded || [];
@@ -1152,6 +1211,7 @@ function People({ members, state, ops, config, canEdit, onDone, toast }) {
         <>
           <AddMemberCard canEdit={canEdit} onDone={onDone} toast={toast} />
           <OwnerCard members={members} ops={ops} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
+          <CardSetting config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
           <ExcludeCard members={members} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
         </>
       )}
