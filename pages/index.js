@@ -15,7 +15,7 @@ import {
   DataTable, Totals, countBy, Combo, SearchBox, useNewRecordHotkey, useGrow,
   bagWord, dayWord, plural,
 } from '../components/base';
-import { SheetIcon, IconBoxes, IconShelf } from '../components/icons';
+import { SheetIcon, IconBoxes, IconShelf, IconRadio } from '../components/icons';
 import { OfflineBar } from '../components/offline-bar';
 import { toCsv, csvName, BOM } from '../lib/csv';
 import { headTags, accountingCol } from '../lib/cards';
@@ -23,6 +23,7 @@ import { findDupes, dupeCount, dupeLabel, sameSn, sameId } from '../lib/dupes';
 import { AuditView } from '../components/reviziya';
 import { DupesView } from '../components/dupes-view';
 import { DeliveryView } from '../components/dostavka';
+import { ZvView } from '../components/zv-view';
 
 const VERSION = 'v2.0';
 // Vercel сам підставляє це під час збірки — видно, який код зараз живий
@@ -212,7 +213,7 @@ function BottomNav({ view, sheets, onOpen, onScan, extra = [] }) {
     { key: 'search', label: 'Пошук', icon: <IconSearch size={20} />, on: is('search'), run: () => onOpen({ kind: 'search', name: null }) },
     { key: 'scan', label: 'Скан', icon: <IconQr size={20} />, on: false, run: onScan, accent: true },
     { key: 'audit', label: 'Звірка', icon: <IconCheck />, on: is('audit'), run: () => onOpen({ kind: 'audit', name: null }) },
-    { key: 'more', label: 'Ще', icon: <IconList />, on: ['items', 'ledger', 'stock', 'warehouse', 'log', 'people', 'delivery', 'dupes'].includes(view.kind), run: () => setMore(true) },
+    { key: 'more', label: 'Ще', icon: <IconList />, on: ['items', 'ledger', 'stock', 'warehouse', 'log', 'people', 'delivery', 'dupes', 'zv'].includes(view.kind), run: () => setMore(true) },
   ];
 
   return (
@@ -1208,6 +1209,7 @@ function BoxLineModal({ box, title, units = [], names = [], accountingOptions = 
 export const STOCK_SHEET_NAME = 'Майно Рибаківки';
 // стабільне посилання — інакше useEffect із цим значенням крутився б без кінця
 export const DELIVERY_VIEW = { kind: 'delivery', name: null };
+export const ZV_VIEW = { kind: 'zv', name: null };
 
 export const STOCK_VIEW = { kind: 'stock', name: STOCK_SHEET_NAME };
 
@@ -1226,6 +1228,7 @@ function urlFor(view) {
     return '/rybakivka' + (view.id ? '?id=' + encodeURIComponent(view.id) : '');
   }
   if (view.kind === 'delivery') return '/delivery';
+  if (view.kind === 'zv') return '/zv';
   return '/';
 }
 
@@ -1348,6 +1351,7 @@ export default function Home({ startView }) {
     })),
     { label: 'Звірка', hint: 'екран', run: () => setView({ kind: 'audit', name: null }) },
     { label: 'Доставки', hint: 'екран', run: () => setView({ kind: 'delivery', name: null }) },
+    { label: 'Майно звʼязку', hint: 'екран', run: () => setView(ZV_VIEW) },
     { label: 'Журнал змін', hint: 'екран', run: () => setView({ kind: 'log', name: null }) },
     { label: 'Повтори між листами', hint: 'екран', run: () => setView({ kind: 'dupes', name: null }) },
     // цей рядок не показується сам по собі — він стає «Шукати: …», коли є текст
@@ -1379,6 +1383,7 @@ export default function Home({ startView }) {
       on: view.name === s.name,
     })),
     { kind: 'delivery', label: 'Доставки', icon: <IconTruck />, on: view.kind === 'delivery', dot: true },
+    { kind: 'zv', label: 'Звʼязок', icon: <IconRadio />, on: view.kind === 'zv' },
     { kind: 'log', label: 'Журнал', icon: <IconClock />, on: view.kind === 'log' },
     { kind: 'audit', label: 'Звірка', icon: <IconCheck size={18} />, on: view.kind === 'audit' },
     { kind: 'dupes', label: 'Повтори', icon: <IconList size={18} />, on: view.kind === 'dupes' },
@@ -1504,6 +1509,7 @@ export default function Home({ startView }) {
           <ItemsView key={view.name + ':' + (view.row || '')} name={view.name} setState={setState} focusRow={view.row} onOpen={setView} />
         )}
         {view.kind === 'delivery' && <DeliveryView setState={setState} me={me.callsign} chief={!!me.chief} />}
+        {view.kind === 'zv' && <ZvView setState={setState} />}
         {view.kind === 'ledger' && <LedgerView key={view.name} name={view.name} setState={setState} />}
         {view.kind === 'stock' && (
           <StockView
@@ -1531,6 +1537,7 @@ export default function Home({ startView }) {
         onScan={() => setScan(true)}
         extra={[
           { label: 'Доставки', kind: 'delivery', run: () => setView({ kind: 'delivery', name: null }) },
+          { label: 'Майно звʼязку', kind: 'zv', run: () => setView(ZV_VIEW) },
           { label: 'Журнал змін', kind: 'log', run: () => setView({ kind: 'log', name: null }) },
           ...(me.role === 'admin'
             ? [{ label: 'Налаштування', kind: 'people', run: () => setView({ kind: 'people', name: null }) }]
