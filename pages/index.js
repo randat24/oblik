@@ -1542,6 +1542,9 @@ export default function Home({ startView }) {
           ...(me.role === 'admin'
             ? [{ label: 'Налаштування', kind: 'people', run: () => setView({ kind: 'people', name: null }) }]
             : []),
+          /* бічна панель на телефоні схована, тож без цього рядка фонду
+             звідси було не дістатись. Перехід повний: фонд — окрема адреса */
+          { label: 'Спільний фонд', kind: 'fund', run: () => { window.location.href = FUND_HREF; } },
         ]}
       />
 
