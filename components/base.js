@@ -119,7 +119,9 @@ export const useToast = () => useContext(ToastCtx);
 
 export function ToastHost({ toasts, onClose }) {
   return (
-    <div className="toast-host">
+    // Окремий іменований орієнтир: сповіщення зʼявляються поза `main`, і
+    // без нього axe позначає їх як текст «ні в якому розділі сторінки»
+    <div className="toast-host" role="region" aria-label="Сповіщення" aria-live="polite">
       {toasts.map((t) => (
         <div key={t.id} className={'toast toast-' + (t.type || 'ok')}>
           <span className="toast-msg">{t.msg}</span>
