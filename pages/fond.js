@@ -23,6 +23,7 @@ import {
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
 import { DatePicker } from '../components/date-picker';
 import { FundArchive } from '../components/fund-archive-view';
+import { OfflineBar } from '../components/offline-bar';
 import { BottomNav, Sheet, KindPicker, OP_KINDS, Avatar, hueOf, IcoTune } from '../components/fund-ui';
 
 const dmy = (d) => (d ? d.split('-').reverse().join('.') : '');
@@ -66,8 +67,17 @@ function Fund() {
     [data],
   );
 
-  if (err) return <div className="wrap"><div className="fund-wrap"><div className="empty">{err}</div></div></div>;
-  if (!data || !state) return <div className="wrap"><div className="fund-wrap"><div className="loading">Завантаження…</div></div></div>;
+  /*
+   * Відкладені записи йдуть лише там, де стоїть ця смуга. На цій сторінці її
+   * не було, тож запис, зроблений без звʼязку, лишався в телефоні й не
+   * доходив, доки хтось не відкриє головну: людина бачила «записано», а в
+   * таблиці нічого не зʼявлялось. Тримаємо її в усіх станах сторінки, і
+   * коли записи пішли, підтягуємо свіжі дані.
+   */
+  const offline = <OfflineBar onSynced={(n) => { toast(`Надіслано відкладені записи: ${n}`); load(); }} />;
+
+  if (err) return <div className="wrap">{offline}<div className="fund-wrap"><div className="empty">{err}</div></div></div>;
+  if (!data || !state) return <div className="wrap">{offline}<div className="fund-wrap"><div className="loading">Завантаження…</div></div></div>;
 
   const { members, ops, config, canEdit } = data;
   const nameOf = (id) => (id === 'cash' ? 'Каса' : members.find((m) => m.id === id)?.name || '—');
@@ -75,6 +85,7 @@ function Fund() {
 
   return (
     <div className="wrap">
+      {offline}
       <div className="fund-wrap">
         <header className="fund-head">
           <div>
