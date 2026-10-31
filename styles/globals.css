@@ -5881,3 +5881,17 @@ input.ghost, select.ghost, textarea.ghost { border-radius: var(--ob-radius-sm); 
 
 .fund-arch-d { display: block; margin-top: 3px; line-height: 1.45; }
 .fund-arch-row .fund-who { min-width: 0; }
+
+/* Картка для переказів у касу */
+.fund-cardbox {
+  margin: 0 0 16px; padding: 14px 16px; border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-lg); background: var(--ob-surface);
+}
+.fund-cardbox-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; }
+.fund-cardbox-n {
+  font-family: var(--ob-mono); font-size: 1.15rem; font-weight: 600; letter-spacing: .04em;
+  color: var(--ob-text); font-variant-numeric: tabular-nums; user-select: all;
+}
+.fund-cardbox .act-btn { flex: none; min-height: var(--ctl-h); }
+.fund-hint.is-neg { color: var(--ob-danger); }
+@media (max-width: 380px) { .fund-cardbox-n { font-size: 1rem; } }
