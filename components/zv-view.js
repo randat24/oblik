@@ -18,8 +18,8 @@ import { DatePicker } from './date-picker';
 import { kyivToday } from '../lib/calendar';
 import { money } from '../lib/fund';
 import {
-  matches, stateOf, STATE_LABELS, placesOf, inPlace, totals, serialsOf, countCat, makeAct, retitle,
-  normStatus, suggestKeys, isoOf, sheetCsv, registerTable, actTable, MOVE_KINDS,
+  matches, stateOf, STATE_LABELS, placesOf, inPlace, totals, serialsOf, makeAct, retitle,
+  normStatus, suggestKeys, isoOf, sheetCsv, registerTable, actTable, MOVE_KINDS, fold,
 } from '../lib/zv';
 
 const TABS = [
@@ -42,8 +42,6 @@ function download(name, text) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-
-const units = (n) => plural(n, ['одиниця', 'одиниці', 'одиниць']);
 
 export function ZvView({ setState }) {
   const toast = useToast();
@@ -147,17 +145,17 @@ function Register({ data, send, toast }) {
     <>
       <div className="stats zv-stats">
         <Stat label="На обліку" value={t.counted} sub={`${t.positions} ${plural(t.positions, ['позиція', 'позиції', 'позицій'])} у реєстрі`} />
-        <Stat label="В наявності" value={t.onHand} tone="ok" sub={`${units(t.onHand)} фізично є`} />
+        <Stat label="В наявності" value={t.onHand} tone="ok" sub="фізично є" />
         <Stat label="Нестача (ПБД)" value={t.shortage} tone={t.shortage ? 'warn' : undefined}
           sub={shortCount ? `у ${shortCount} ${plural(shortCount, ['позиції', 'позиціях', 'позиціях'])}` : 'немає'} />
-        {/* повна сума в плитку не влазить — там мільйони, а копійки є нижче */}
+        {/* повна сума в плитку не влазить — там мільйони, тож копійки в підписі */}
         <Stat label="Вартість на обліку" value={`${(t.value / 1e8).toFixed(2).replace('.', ',')} млн`}
-          sub={`${money(t.value)} грн за цінами накладних`} />
+          sub={`${money(t.value)} грн`} />
       </div>
 
       <div className="toolbar">
         <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-          <SearchBox value={q} onChange={setQ} placeholder="Назва, серійний номер, накладна, підрозділ…" />
+          <SearchBox value={q} onChange={setQ} placeholder="Назва, серійний номер, накладна…" />
         </div>
         <button type="button" className="btn" onClick={() => setEdit({})}>Нова позиція</button>
         <button type="button" className="act-btn zv-tool"
@@ -173,30 +171,38 @@ function Register({ data, send, toast }) {
               aria-pressed={state === k} onClick={() => setStateF(state === k && k ? '' : k)}>{l}</button>
           ))}
         </div>
-        <div className="chips" role="group" aria-label="Категорія">
-          {CATS.map((c) => (
-            <button key={c} type="button" className={'chip' + (cat === c ? ' on' : '')}
-              aria-pressed={cat === c} onClick={() => setCat(cat === c ? '' : c)}>Кат. {c}</button>
-          ))}
+        <div className="zv-filters-2">
+          {/* «Кат.» один раз перед чипами: повторене в кожному, воно не лишало
+              на телефоні місця для підрозділів у тому самому рядку */}
+          <div className="chips" role="group" aria-label="Категорія">
+            <span className="zv-f-l" aria-hidden="true">Кат.</span>
+            {CATS.map((c) => (
+              <button key={c} type="button" className={'chip' + (cat === c ? ' on' : '')} aria-label={`Категорія ${c}`}
+                aria-pressed={cat === c} onClick={() => setCat(cat === c ? '' : c)}>{c}</button>
+            ))}
+          </div>
+          {/* підрозділів десятки, і назви довгі — чипами вони займали б пів
+              екрана, тож тут звичайний список */}
+          {places.length > 0 && (
+            <select className="zv-place" aria-label="Підрозділ" value={place} onChange={(e) => setPlace(e.target.value)}>
+              <option value="">Усі підрозділи</option>
+              {places.map((x) => <option key={x} value={x}>{x}</option>)}
+            </select>
+          )}
         </div>
-        {/* підрозділів десятки, і назви довгі — чипами вони займали б пів
-            екрана, тож тут звичайний список */}
-        {places.length > 0 && (
-          <select className="zv-place" aria-label="Підрозділ" value={place} onChange={(e) => setPlace(e.target.value)}>
-            <option value="">Усі підрозділи</option>
-            {places.map((x) => <option key={x} value={x}>{x}</option>)}
-          </select>
-        )}
       </div>
 
-      <Totals
-        parts={[['Позицій', list.length], ['На обліку', shown.counted], ['В наявності', shown.onHand],
-          ['Нестача', shown.shortage || null], ['Вартість', money(shown.value)]]}
-        of={filtered ? all.length : undefined}
-      />
+      {/* без фільтрів цей рядок повторював плитки вгорі слово в слово */}
       {filtered && (
-        <button type="button" className="chip is-clear" style={{ marginBottom: 10 }}
-          onClick={() => { setQ(''); setStateF(''); setPlace(''); setCat(''); }}>Скинути фільтри</button>
+        <>
+          <Totals
+            parts={[['Позицій', list.length], ['На обліку', shown.counted], ['В наявності', shown.onHand],
+              ['Нестача', shown.shortage || null], ['Вартість', money(shown.value)]]}
+            of={all.length}
+          />
+          <button type="button" className="chip is-clear" style={{ marginBottom: 10 }}
+            onClick={() => { setQ(''); setStateF(''); setPlace(''); setCat(''); }}>Скинути фільтри</button>
+        </>
       )}
 
       {list.length === 0 && <div className="empty">Нічого не знайдено. Спробуйте інше слово або скиньте фільтри.</div>}
@@ -235,77 +241,98 @@ function Register({ data, send, toast }) {
   );
 }
 
+/** Слова пошуку, що годяться для серійника. `fold`, як і в самому пошуку: латиниця й кирилиця однаково */
+const snWords = (q) => fold(q).split(' ').filter((w) => w.length > 2);
+const snHit = (s, words) => words.some((w) => fold(s).includes(w));
+
 /** Підсвітити серійник, за яким знайшли позицію, — інакше в переліку з двадцяти його не видно */
 function Serials({ text, q }) {
   const list = serialsOf(text);
   if (!list.length) return <span className="muted">—</span>;
-  const words = q.trim().toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+  const words = snWords(q);
   return (
     <span className="zv-sn">
       {list.map((s) => (
-        <span key={s} className={words.some((w) => s.toLowerCase().includes(w)) ? 'hit' : ''}>{s}</span>
+        <span key={s} className={snHit(s, words) ? 'hit' : ''}>{s}</span>
       ))}
     </span>
   );
 }
 
+/**
+ * На картці лишається те, за чим її відкривають: що це, де, скільки, і три
+ * щоденні дії. Накладна, ціна, серійники й рідкісні дії — під «Ще»: розгорнута
+ * картка займала на телефоні півтора екрана, і перелік не можна було читати.
+ * «Ще» стоїть над деталями, щоб кнопка не тікала з-під пальця.
+ */
 function PosCard({ p, q, onMove, onEdit, onHistory }) {
+  const [more, setMore] = useState(null);
   const st = stateOf(p);
+  const hasSerials = serialsOf(p.serials).length > 0;
+  // знайшли за тим, що сховано під «Ще», — картка відкрита сама, інакше
+  // збігу не побачити; пошук за назвою чи підрозділом її не розгортає
+  const hidden = fold([p.serials, p.serialsOnHand, p.invoice, p.note, p.post].join(' '));
+  const open = more ?? snWords(q).some((w) => hidden.includes(w));
   const rows = [
-    ['Рахується / кат.', countCat(p)],
     ['Посада', p.post],
-    ['Підрозділ', p.place],
+    ['Списано', p.writtenOff || ''],
     ['Накладна', [p.invoice, p.invoiceDate].filter(Boolean).join(' від ')],
     ['Ціна', p.price ? `${money(p.price)} × ${p.counted} = ${money(p.value)} грн` : ''],
   ].filter(([, v]) => v);
-  const hasSerials = serialsOf(p.serials).length > 0;
+  const where = [p.place, p.cat && `кат. ${p.cat}`].filter(Boolean).join(' · ');
 
   return (
     <article className="card zv-card" aria-label={p.name}>
-      <div className="card-head">
-        <div className="card-title">
-          <div className="title-line">
-            <span className="id-badge" title="Номер у реєстрі">{p.no || '—'}</span>
-            <span className="zv-name">{p.name}</span>
-          </div>
-        </div>
-        <span className="pill" style={{ color: STATE_TONE[st], cursor: 'default' }}>{STATE_LABELS[st]}</span>
+      <div className="zv-card-top">
+        <span className="id-badge" title="Номер у реєстрі">{p.no || '—'}</span>
+        <span className="pill" style={{ color: STATE_TONE[st] }}>{STATE_LABELS[st]}</span>
       </div>
+      <div className="zv-name">{p.name}</div>
+      {where && <div className="muted zv-where">{where}</div>}
 
       <div className="zv-counts" aria-label="Кількість">
         <div><b>{p.onHand}</b><span>в наявності</span></div>
         <div><b>{p.counted}</b><span>на обліку</span></div>
         <div className={p.shortage ? 'is-short' : ''}><b>{p.shortage}</b><span>нестача</span></div>
-        <div><b>{p.received}</b><span>отримано{p.writtenOff ? `, списано ${p.writtenOff}` : ''}</span></div>
+        <div><b>{p.received}</b><span>отримано</span></div>
       </div>
 
-      <div className="card-body">
-        {rows.map(([k, v]) => (
-          <div className="drow" key={k}><span className="drow-k">{k}</span><span className="drow-v">{v}</span></div>
-        ))}
-        {hasSerials && (
-          <div className="drow">
-            <span className="drow-k">Серійні в наявності</span>
-            <span className="drow-v"><Serials text={p.serialsOnHand} q={q} /></span>
-          </div>
-        )}
-        {hasSerials && p.serials !== p.serialsOnHand && (
-          <div className="drow">
-            <span className="drow-k">Усі серійні</span>
-            <span className="drow-v"><Serials text={p.serials} q={q} /></span>
-          </div>
-        )}
-      </div>
-      {p.note && <Note text={p.note} />}
-
-      <div className="actions">
+      <div className="actions zv-acts">
         <button type="button" className="act-btn act-lost" disabled={p.onHand <= 0} onClick={() => onMove('writeoff')}>Списати</button>
         <button type="button" className="act-btn" disabled={p.onHand <= 0} onClick={() => onMove('pbd')}>ПБД</button>
         <button type="button" className="act-btn act-issue" onClick={() => onMove('receive')}>Надійшло</button>
-        <button type="button" className="act-btn" onClick={() => onMove('relocate')}>Перемістити</button>
-        <button type="button" className="act-btn" onClick={onEdit}>Правка</button>
-        <button type="button" className="act-btn" onClick={onHistory}>Історія</button>
+        <button type="button" className="act-btn" aria-expanded={open} onClick={() => setMore(!open)}>
+          {open ? 'Менше' : 'Ще'}
+        </button>
       </div>
+
+      {open && (
+        <div className="zv-more-box">
+          <div className="card-body">
+            {rows.map(([k, v]) => (
+              <div className="drow" key={k}><span className="drow-k">{k}</span><span className="drow-v">{v}</span></div>
+            ))}
+            {hasSerials && (
+              <div className="drow">
+                <span className="drow-k">Серійні в наявності</span>
+                <span className="drow-v"><Serials text={p.serialsOnHand} q={q} /></span>
+              </div>
+            )}
+            {hasSerials && p.serials !== p.serialsOnHand && (
+              <div className="drow">
+                <span className="drow-k">Усі серійні</span>
+                <span className="drow-v"><Serials text={p.serials} q={q} /></span>
+              </div>
+            )}
+          </div>
+          {p.note && <Note text={p.note} />}
+          <div className="actions zv-acts">
+            <button type="button" className="act-btn" onClick={() => onMove('relocate')}>Перемістити</button>
+            <button type="button" className="act-btn" onClick={onEdit}>Правка</button>
+            <button type="button" className="act-btn" onClick={onHistory}>Історія</button>
+          </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -409,7 +436,7 @@ function MoveForm({ p, kind, places, onCancel, onSave }) {
       {out && have.length > 0 && (
         <div style={{ marginTop: 10 }}>
           <label>Які саме — серійні номери{picked.length ? ` · вибрано ${picked.length}` : ''}</label>
-          <div className="chips">
+          <div className="chips zv-wrap">
             {have.map((s) => (
               <button key={s} type="button" className={'chip zv-sn-chip' + (picked.includes(s) ? ' on' : '')}
                 aria-pressed={picked.includes(s)} onClick={() => toggle(s)}>{s}</button>
@@ -575,7 +602,7 @@ function Moves({ data }) {
           <SearchBox value={q} onChange={setQ} placeholder="Назва, документ, серійний номер, хто…" />
         </div>
       </div>
-      <div className="chips" role="group" aria-label="Дія">
+      <div className="chips zv-wrap" role="group" aria-label="Дія">
         {kinds.map((k) => (
           <button key={k} type="button" className={'chip' + (kind === k ? ' on' : '')}
             aria-pressed={kind === k} onClick={() => setKind(kind === k ? '' : k)}>{k}</button>
@@ -601,7 +628,7 @@ function Acts({ data, send, toast }) {
   return (
     <>
       <div className="toolbar">
-        <div className="muted" style={{ flex: '1 1 260px' }}>
+        <div className="muted zv-lead">
           Акт наявності складається з реєстру: кожна позиція, що рахується, з наявністю й нестачею.
         </div>
         <button type="button" className="btn" disabled={!data.positions.length} onClick={() => setMake(true)}>Новий акт</button>
@@ -664,7 +691,7 @@ function ActForm({ data, onCancel, onSave }) {
       <DatePicker label="Станом на" value={date} onChange={(d) => { setDate(d); setTitleEdited(null); }} />
       <div style={{ marginTop: 10 }}>
         <label>Рядки</label>
-        <div className="chips">
+        <div className="chips zv-wrap">
           <button type="button" className={'chip' + (!merge ? ' on' : '')} aria-pressed={!merge} onClick={() => setMerge(false)}>
             Кожна накладна окремо
           </button>
@@ -710,6 +737,8 @@ function ActSheet({ act, onClose }) {
       <div className="zv-paper">
         {act.head && <div className="zv-paper-head">{act.head}</div>}
         <h2 className="zv-paper-title">{act.title}</h2>
+        {/* наявність і нестача — найправіші стовпці, на телефоні вони за краєм */}
+        <div className="zv-paper-hint">← гортайте таблицю вбік →</div>
         <div className="zv-paper-scroll">
           <table className="zv-paper-table">
             <thead>
@@ -744,7 +773,7 @@ function Norms({ data, send, toast }) {
   return (
     <>
       <div className="toolbar">
-        <div className="muted" style={{ flex: '1 1 260px' }}>
+        <div className="muted zv-lead">
           Скільки належить за штатом і скільки є. Позиції реєстру знаходяться за ключами — кодами моделей.
         </div>
         <button type="button" className="btn" onClick={() => setEdit({})}>Додати рядок</button>
@@ -765,7 +794,7 @@ function Norms({ data, send, toast }) {
                 <div><b>{n.qty}</b><span>за штатом</span></div>
                 <div><b>{s.onHand}</b><span>в наявності</span></div>
                 <div><b>{s.counted}</b><span>на обліку</span></div>
-                <div className={ok ? 'is-ok' : 'is-short'}><b>{ok ? '✓' : s.lack}</b><span>{ok ? 'укомплектовано' : 'бракує'}</span></div>
+                <div className={ok ? 'is-ok' : 'is-short'}><b>{ok ? '✓' : s.lack}</b><span>{ok ? 'комплект' : 'бракує'}</span></div>
               </div>
               <div className="card-body">
                 <div className="drow"><span className="drow-k">Ключі</span><span className="drow-v">{n.keys || <span className="muted">не задано</span>}</span></div>
