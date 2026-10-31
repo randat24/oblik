@@ -650,3 +650,55 @@ test('кілька людей з окремими днями, решта — з�
   assert.equal(Object.values(r.shares).reduce((s, v) => s + v, 0), kop('1000.01'));
   assert.ok(r.shares.c < r.shares.a && r.shares.d < r.shares.a);
 });
+
+/* ---------- Каса — картка власника ---------- */
+import { ownerAsCash } from '../lib/fund.js';
+
+const WITH_ALEX = [
+  ...MEMBERS,
+  { id: 'alex', name: 'Алекс', order: 7, opening: 0, periods: [{ start: '2000-01-01' }], vacations: [] },
+];
+const ALEX_PAID = {
+  id: 'o1', type: 'expense', date: '2026-10-28', amount: kop('1000'), category: 'other',
+  payer: 'alex', mode: 'manual', participants: ['vanya', 'fantomas', 'alex'], status: 'active',
+};
+
+test('власник платить — каса зменшується, а йому «плюс» не пишеться', () => {
+  const ops = ownerAsCash([ALEX_PAID], 'alex');
+  const st = compute(WITH_ALEX, ops, { openingCash: kop('13199'), openingDiff: 200 });
+  assert.equal(st.cash, kop('13199') - kop('1000'));
+  // його баланс — лише його частка, без «витратив свої»
+  assert.equal(st.bal.alex, -kop('333.33'));
+});
+
+test('без перетворення той самий платіж лишав би касу на місці', () => {
+  const st = compute(WITH_ALEX, [ALEX_PAID], { openingCash: kop('13199'), openingDiff: 200 });
+  assert.equal(st.cash, kop('13199'));
+});
+
+test('платить звичайна людина — запис не змінюється', () => {
+  const op = { ...ALEX_PAID, payer: 'vanya' };
+  assert.deepEqual(ownerAsCash([op], 'alex'), [op]);
+});
+
+test('власника не задано — нічого не міняється', () => {
+  assert.deepEqual(ownerAsCash([ALEX_PAID], ''), [ALEX_PAID]);
+});
+
+test('внесок власника не перетворюється: це не витрата', () => {
+  const dep = { id: 'd', type: 'deposit', member: 'alex', amount: 100, date: '2026-10-28', status: 'active' };
+  assert.deepEqual(ownerAsCash([dep], 'alex'), [dep]);
+});
+
+test('власник вносить свій борг — каса зростає на цю суму, а його баланс іде до нуля', () => {
+  const spent = { ...ALEX_PAID, id: 'o2', payer: 'cash', participants: ['vanya', 'alex'], amount: kop('1000') };
+  const deposit = { id: 'd1', type: 'deposit', member: 'alex', amount: kop('500'), date: '2026-10-31', status: 'active', createdAt: 'z' };
+  const cfg = { openingCash: kop('10000'), openingDiff: 0 };
+  const before = compute(WITH_ALEX, [spent], cfg);
+  const after = compute(WITH_ALEX, [spent, deposit], cfg);
+  assert.equal(before.bal.alex, -kop('500'));
+  assert.equal(after.bal.alex, 0);
+  assert.equal(after.cash - before.cash, kop('500'));
+  // звірка при цьому не зрушує: внесок — звичайна операція, а не коригування
+  assert.equal(after.diff, before.diff);
+});
