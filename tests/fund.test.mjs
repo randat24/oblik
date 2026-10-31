@@ -689,3 +689,16 @@ test('внесок власника не перетворюється: це не
   const dep = { id: 'd', type: 'deposit', member: 'alex', amount: 100, date: '2026-10-28', status: 'active' };
   assert.deepEqual(ownerAsCash([dep], 'alex'), [dep]);
 });
+
+test('власник вносить свій борг — каса зростає на цю суму, а його баланс іде до нуля', () => {
+  const spent = { ...ALEX_PAID, id: 'o2', payer: 'cash', participants: ['vanya', 'alex'], amount: kop('1000') };
+  const deposit = { id: 'd1', type: 'deposit', member: 'alex', amount: kop('500'), date: '2026-10-31', status: 'active', createdAt: 'z' };
+  const cfg = { openingCash: kop('10000'), openingDiff: 0 };
+  const before = compute(WITH_ALEX, [spent], cfg);
+  const after = compute(WITH_ALEX, [spent, deposit], cfg);
+  assert.equal(before.bal.alex, -kop('500'));
+  assert.equal(after.bal.alex, 0);
+  assert.equal(after.cash - before.cash, kop('500'));
+  // звірка при цьому не зрушує: внесок — звичайна операція, а не коригування
+  assert.equal(after.diff, before.diff);
+});
