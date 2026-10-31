@@ -1,3 +1,4 @@
+import { ARCHIVE } from '../../lib/fund-archive-data';
 import { withAuth, currentActor, isGuest, session } from '../../lib/auth';
 import {
   readFund, addOp, addOps, cancelOp, cancelOps, saveMember, seedFund, setConfig, addMember,
@@ -34,6 +35,9 @@ const newId = () =>
 
 export default withAuth(async (req, res) => {
   if (req.method === 'GET') {
+    // архів старої таблиці: файл у репозиторії, а не лист, тож на таблицю не впливає
+    if (req.query.archive) return res.json({ archive: ARCHIVE });
+
     const data = await readFund();
     const state = compute(data.members, data.ops, data.config);
     return res.json({
