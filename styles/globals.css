@@ -5870,3 +5870,14 @@ input.ghost, select.ghost, textarea.ghost { border-radius: var(--ob-radius-sm); 
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Архів фонду */
+.fund-switch { margin-bottom: 12px; }
+.fund-search {
+  width: 100%; margin: 4px 0 10px; padding: 0 14px; min-height: var(--ctl-h);
+  background: var(--ob-elevated); border: 1px solid var(--ob-control-line);
+  border-radius: var(--ctl-r); color: var(--ob-text); font: inherit; font-size: .9rem;
+}
+
+.fund-arch-d { display: block; margin-top: 3px; line-height: 1.45; }
+.fund-arch-row .fund-who { min-width: 0; }
