@@ -5895,3 +5895,110 @@ input.ghost, select.ghost, textarea.ghost { border-radius: var(--ob-radius-sm); 
 .fund-cardbox .act-btn { flex: none; min-height: var(--ctl-h); }
 .fund-hint.is-neg { color: var(--ob-danger); }
 @media (max-width: 380px) { .fund-cardbox-n { font-size: 1rem; } }
+
+/* ---------- Майно служби звʼязку (/zv) ---------- */
+.zv-h1 { font-size: 1.15rem; font-weight: 650; letter-spacing: -.01em; margin: 0 0 10px; }
+.tab .count { margin-left: 6px; }
+.muted { color: var(--muted); }
+.sec { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+.zv-tool { flex: none; min-height: var(--ctl-h); }
+.zv-filters .chips { margin-bottom: 6px; }
+.zv-filters { margin-bottom: 8px; }
+.zv-more { display: block; width: 100%; margin-top: 12px; }
+.zv-name { font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.zv-card .title-line { align-items: flex-start; }
+/* Чотири числа позиції — головне на картці: їх читають, а не шукають */
+.zv-counts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 6px; margin-bottom: 10px;
+}
+.zv-counts > div {
+  background: var(--panel-2); border-radius: var(--r-sm); padding: 6px 8px; min-width: 0;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.zv-counts b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.zv-counts span { font-size: .68rem; color: var(--muted); line-height: 1.25; }
+.zv-counts .is-short b { color: var(--red); }
+.zv-counts .is-ok b { color: var(--green); }
+.zv-sn { display: flex; flex-wrap: wrap; gap: 4px; }
+.zv-sn > span {
+  font-family: var(--mono); font-size: .76rem; padding: 1px 6px; border-radius: 4px;
+  background: var(--panel-2); overflow-wrap: anywhere;
+}
+.zv-sn > span.hit { background: var(--amber-dim); color: var(--amber); font-weight: 700; }
+.zv-sn-chip { font-family: var(--mono); font-size: .78rem; }
+.zv-note { margin-top: 10px; white-space: pre-line; }
+.zv-link { background: none; border: 0; color: var(--amber); font: inherit; font-weight: 600; cursor: pointer; padding: 0 0 0 6px; text-decoration: underline; }
+.zv-place { max-width: 100%; min-height: var(--ctl-h); }
+.zv-move-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.zv-move-head span { font-size: .82rem; color: var(--muted); }
+.zv-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.zv-row2 input, .zv-form input, .zv-form select, .zv-form textarea { width: 100%; }
+.zv-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.zv-form .wide { grid-column: 1 / -1; }
+@media (max-width: 480px) { .zv-row2, .zv-form { grid-template-columns: 1fr; } }
+.zv-moves { list-style: none; margin: 0; padding: 0; }
+.zv-moves.card { padding: 4px 14px; }
+.zv-move { padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: .86rem; }
+.zv-move:last-child { border-bottom: 0; }
+.zv-move-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.zv-move-top .muted { font-size: .76rem; }
+.zv-kind {
+  font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--amber); border: 1px solid currentColor; border-radius: 999px; padding: 1px 8px;
+}
+.zv-doc { font-family: var(--mono); font-size: .8rem; }
+.zv-move-name { margin-top: 3px; overflow-wrap: anywhere; }
+.zv-move-more { margin-top: 2px; font-size: .78rem; overflow-wrap: anywhere; }
+.zv-act-sub { font-size: .78rem; margin-top: 2px; }
+.zv-hits { list-style: none; margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line-soft); font-size: .82rem; display: flex; flex-direction: column; gap: 4px; }
+.zv-import { max-width: 760px; }
+.zv-import p { line-height: 1.5; margin: 0 0 10px; }
+.zv-import input[type=file] { display: block; margin: 4px 0 6px; max-width: 100%; }
+.zv-sum { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 14px; }
+.zv-sum ul { margin: 6px 0; padding-left: 18px; font-size: .82rem; }
+
+/* Акт — паперовий документ поверх застосунку; його ж і друкують */
+.zv-print {
+  position: fixed; inset: 0; z-index: 80; overflow: auto;
+  background: var(--bg); padding: 12px 16px 40px;
+}
+.zv-print-bar { display: flex; gap: 8px; align-items: center; max-width: 1100px; margin: 0 auto 12px; }
+.zv-print-bar .act-btn { flex: none; min-height: var(--ctl-h); }
+.zv-paper {
+  max-width: 1100px; margin: 0 auto; background: #fff; color: #111; border-radius: 6px;
+  padding: 24px; font-size: 12px; line-height: 1.35;
+}
+.zv-paper-head { white-space: pre-line; text-align: right; margin-bottom: 14px; }
+.zv-paper-title { font-size: 14px; font-weight: 700; text-align: center; margin: 0 0 12px; color: #111; }
+.zv-paper-scroll { overflow-x: auto; }
+.zv-paper-table { width: 100%; border-collapse: collapse; }
+.zv-paper-table th, .zv-paper-table td { border: 1px solid #555; padding: 3px 5px; vertical-align: top; text-align: left; }
+.zv-paper-table th { background: #eee; font-weight: 700; }
+.zv-paper-table td:nth-child(1), .zv-paper-table td:nth-child(n+7):nth-child(-n+9) { text-align: center; }
+.zv-paper-sn { font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; min-width: 90px; }
+.zv-paper-note { white-space: pre-line; min-width: 120px; }
+.zv-paper-foot { white-space: pre-line; margin-top: 18px; }
+@media print {
+  body.zv-printing > * { visibility: hidden; }
+  body.zv-printing .zv-print, body.zv-printing .zv-print * { visibility: visible; }
+  body.zv-printing .zv-print { position: absolute; inset: 0 auto auto 0; width: 100%; padding: 0; background: #fff; overflow: visible; }
+  body.zv-printing .zv-print-bar { display: none; }
+  body.zv-printing .zv-paper { max-width: none; padding: 0; border-radius: 0; }
+  body.zv-printing .zv-paper-scroll { overflow: visible; }
+  @page { size: A4 landscape; margin: 10mm; }
+}
+/* Нижня панель тут не замінює вкладки розділу — на телефоні вони лишаються
+   рядком, що гортається вбік */
+@media (max-width: 760px) {
+  .tabs.zv-tabs {
+    display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin: 0 0 12px; padding: 0 0 4px;
+  }
+  .zv-print { padding: 8px 8px 40px; }
+  .zv-paper { padding: 12px; }
+}
+/* «13 455 870,17» моноширинним 1.9rem у половині екрана телефона не
+   вміщується й розпирає сторінку вбік */
+.zv-stats .stat { min-width: 0; }
+.zv-stats .stat-v { overflow-wrap: anywhere; }
+@media (max-width: 760px) { .zv-stats .stat-v { font-size: 1.35rem; } }
