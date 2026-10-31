@@ -6014,16 +6014,17 @@ input.ghost, select.ghost, textarea.ghost { border-radius: var(--ob-radius-sm); 
   body.zv-printing .zv-paper-scroll { overflow: visible; }
   @page { size: A4 landscape; margin: 10mm; }
 }
-/* Нижня панель тут не замінює вкладки розділу. Пʼять вкладок ділять рядок
-   порівну, щоб «Імпорт» не ховався за краєм. Лічильники на вузькому екрані
-   прибрані: позиції названо в першій плитці, акти видно переліком. На 320 px
-   рядок ще й гортається. */
+/* Нижня панель тут не замінює вкладки розділу. Вкладки переносяться, а не
+   гортаються: на iPhone шрифт ширший, ніж у Chrome, і «Імпорт» ховався за
+   краєм так, ніби його немає. Спільні поля `.tabs` забирали ще 24 px, тож
+   тут вони скинуті. Лічильники на вузькому екрані прибрані: позиції названо
+   в першій плитці, акти видно переліком. */
 @media (max-width: 760px) {
   .tabs.zv-tabs {
-    display: flex; flex-wrap: nowrap; gap: 2px; overflow-x: auto; scrollbar-width: none;
-    margin: 0 0 12px;
+    display: flex; flex-wrap: wrap; gap: 2px; overflow: visible;
+    margin: 0 0 12px; padding: 0;
   }
-  .tabs.zv-tabs .tab { flex: 1 0 auto; padding: 8px 8px; text-align: center; }
+  .tabs.zv-tabs .tab { flex: 1 1 auto; min-height: var(--ctl-h); padding: 8px 4px; font-size: .8rem; text-align: center; }
   .tabs.zv-tabs .count { display: none; }
   .zv-print { padding: 0 8px 40px; }
   .zv-print-bar { top: 0; padding-top: max(8px, env(safe-area-inset-top)); }
