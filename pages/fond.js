@@ -22,6 +22,7 @@ import {
 } from '../lib/fund';
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
 import { DatePicker } from '../components/date-picker';
+import { FundArchive } from '../components/fund-archive-view';
 import { BottomNav, Sheet, KindPicker, OP_KINDS, Avatar, hueOf, IcoTune } from '../components/fund-ui';
 
 const dmy = (d) => (d ? d.split('-').reverse().join('.') : '');
@@ -292,6 +293,8 @@ const MONTHS = ['січень', 'лютий', 'березень', 'квітен�
 const monthName = (ym) => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(0, 4)}`;
 
 function Reports({ members, ops, config, nameOf }) {
+  // «Звіти» — книга застосунку, «Архів» — стара таблиця до 15.10
+  const [part, setPart] = useState('rep');
   const months = useMemo(() => monthsOf(ops, todayIso()), [ops]);
   const [ym, setYm] = useState(months[0]);
   const [who, setWho] = useState('');
@@ -300,8 +303,18 @@ function Reports({ members, ops, config, nameOf }) {
   const st = useMemo(() => (who ? memberStatement(members, ops, who) : null), [members, ops, who]);
   const cats = CATEGORIES.filter((c) => r.cats[c.id].count);
 
+  if (part === 'arch') {
+    return (
+      <>
+        <ReportsSwitch part={part} onPart={setPart} />
+        <FundArchive members={members} config={config} />
+      </>
+    );
+  }
+
   return (
     <>
+      <ReportsSwitch part={part} onPart={setPart} />
       <div className="fund-card">
         <h2 className="fund-h2">Звіт за місяць</h2>
         <div className="fund-seg">
@@ -385,6 +398,17 @@ function Reports({ members, ops, config, nameOf }) {
         </div>
       )}
     </>
+  );
+}
+
+function ReportsSwitch({ part, onPart }) {
+  return (
+    <div className="fund-seg fund-switch" role="group" aria-label="Розділ звітів">
+      <button type="button" className={'chip' + (part === 'rep' ? ' on' : '')} aria-pressed={part === 'rep'}
+        onClick={() => onPart('rep')}>Звіти</button>
+      <button type="button" className={'chip' + (part === 'arch' ? ' on' : '')} aria-pressed={part === 'arch'}
+        onClick={() => onPart('arch')}>Архів до 15.10.2026</button>
+    </div>
   );
 }
 
