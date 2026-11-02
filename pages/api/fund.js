@@ -8,6 +8,7 @@ import {
   shortReport, cardDigits,
 } from '../../lib/fund';
 import { OPENING_DATE } from '../../lib/fund-seed';
+import { kyivToday } from '../../lib/calendar';
 import { logChange } from '../../lib/log';
 
 /**
@@ -26,7 +27,7 @@ import { logChange } from '../../lib/log';
 const ALLOWED = ['expense', 'deposit', 'reimburse', 'transfer', 'adjust'];
 /** Вільний текст — з обмеженням довжини: у клітинці таблиці він не має розростатись безмежно */
 const clip = (v, n) => String(v ?? '').trim().slice(0, n);
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => kyivToday();
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 
 /** Ід операції — випадковий, бо рядок у таблиці ще не відомий */
@@ -47,6 +48,7 @@ export default withAuth(async (req, res) => {
       // початковий стан вписує лише адміністратор: це єдине місце, де
       // числа беруться не з операцій, і повторний запуск подвоїв би їх
       canSeed: !isGuest() && session(req)?.role === 'admin',
+      canCard: !isGuest() && session(req)?.role === 'admin',
       actor: isGuest() ? '' : currentActor(),
       // перевірку показуємо поруч із даними: якщо вона не зійшлась,
       // людина має побачити це, а не довідатись від бухгалтера
@@ -131,6 +133,11 @@ export default withAuth(async (req, res) => {
 
   /* ---------- Картка для переказів ---------- */
   if (action === 'card') {
+    // на цей номер люди переказують справжні гроші, і переказ не скасуєш, як
+    // операцію в книзі. Рішення власника: міняє лише адміністратор
+    if (session(req)?.role !== 'admin') {
+      return res.status(403).json({ error: 'Картку змінює адміністратор' });
+    }
     const raw = String(req.body.card ?? '').trim();
     // порожнє — прибрати картку з екрана; інакше лише правильний номер
     const card = raw ? cardDigits(raw) : '';

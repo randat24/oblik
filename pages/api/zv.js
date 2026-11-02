@@ -2,7 +2,7 @@ import { withAuth, currentActor } from '../../lib/auth';
 import { logChange } from '../../lib/log';
 import { kop } from '../../lib/fund';
 import {
-  applyMove, withCounts, makeAct, retitle, normCat, int, MOVE_KINDS,
+  applyMove, withCounts, makeAct, retitle, normCat, int, editedText, MOVE_KINDS,
 } from '../../lib/zv';
 import {
   readZv, addPositions, savePosition, addMoves, addAct, addNorms, saveNorm, newId, stamp,
@@ -21,7 +21,8 @@ const dmy = (iso) => iso.split('-').reverse().join('.');
 /** Поля, які людина може правити руками, і їхні межі */
 const EDITABLE = {
   invoice: 120, invoiceDate: 60, name: 300, post: 80, unit: 20, cat: 20,
-  serials: 2000, serialsOnHand: 2000, place: 120, note: 2000,
+  // серійники й примітка ростуть разом з історією позиції; межа — клітинка таблиці (50 000)
+  serials: 40000, serialsOnHand: 40000, place: 120, note: 40000,
 };
 const COUNTS = ['received', 'writtenOff', 'submitted', 'wrongCat'];
 const LABEL = {
@@ -32,8 +33,9 @@ const LABEL = {
 
 /** Поля позиції з тіла запиту: лише дозволені, обрізані й перевірені */
 function fieldsFrom(body, base = {}) {
-  const p = { ...base };
-  Object.entries(EDITABLE).forEach(([k, n]) => { if (k in body) p[k] = clip(body[k], n); });
+  const text = editedText(body, base, EDITABLE, LABEL);
+  if (text.error) return text;
+  const p = { ...base, ...text.fields };
   if ('cat' in body) p.cat = normCat(p.cat);
   if ('price' in body) {
     const k = kop(String(body.price ?? '').replace(/\s/g, ''));
@@ -113,12 +115,14 @@ export default withAuth(async (req, res) => {
     if (r.error) return res.status(400).json({ error: r.error });
     const p = { ...r.pos, updated: at };
     if (body.note) p.note = [p.note, clip(body.note, 300)].filter(Boolean).join('\n');
-    await savePosition(p);
+    // спершу запис у «Рух», потім лічильники: збій між ними лишає зайвий рядок
+    // руху, а навпаки людина побачила б помилку, натиснула ще раз і списала двічі
     await addMoves([{
       id: newId('mv'), date, time, pos: p.id, name: p.name, kind,
       qty: kind === 'relocate' ? 0 : int(body.qty), doc, serials: serials.join(' / '),
       place: kind === 'relocate' ? `${old.place || '—'} → ${p.place || '—'}` : p.place, note: clip(body.note, 300), who,
     }]);
+    await savePosition(p);
     await logChange({
       sheet: "Зв'язок", row: old.no, action: MOVE_KINDS[kind], field: p.name.slice(0, 80),
       before: kind === 'relocate' ? old.place : `наявність ${old.onHand}`,

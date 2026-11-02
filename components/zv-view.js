@@ -18,7 +18,7 @@ import { DatePicker } from './date-picker';
 import { kyivToday } from '../lib/calendar';
 import { money } from '../lib/fund';
 import {
-  matches, stateOf, STATE_LABELS, placesOf, inPlace, totals, serialsOf, makeAct, retitle,
+  matches, stateOf, STATE_LABELS, placesOf, inPlace, totals, serialsOf, typedSerials, makeAct, retitle,
   normStatus, suggestKeys, isoOf, sheetCsv, registerTable, actTable, MOVE_KINDS, fold,
 } from '../lib/zv';
 
@@ -403,7 +403,7 @@ function MoveForm({ p, kind, places, onCancel, onSave }) {
         try {
           await onSave({
             qty: n || 0, doc: doc.trim(), docDate: doc.trim() ? docDate : '', note: note.trim(), place: place.trim(),
-            serials: out ? picked : serialsOf(fresh),
+            serials: out ? picked : typedSerials(fresh),
           });
         } catch (e) { setErr(e.message); setBusy(false); }
       }}>

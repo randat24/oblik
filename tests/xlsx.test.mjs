@@ -123,3 +123,14 @@ test('дата Excel: число в «YYYY-MM-DD», нуль і текст — �
 test('сутності: числові й шістнадцяткові коди', () => {
   assert.equal(xmlText('&#1041;&#x0434; &lt;b&gt;'), 'Бд <b>');
 });
+
+test('zip-бомба з нульовим розміром у каталозі не проходить межу', () => {
+  const big = 'x'.repeat(40 * 1024 * 1024);
+  const buf = zip({ 'a.xml': big, 'b.xml': big });
+  // каталог бреше: розмір розпакованого кожного запису — нуль
+  let at = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  buf.writeUInt32LE(0, at + 24);
+  at = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]), at - 1);
+  buf.writeUInt32LE(0, at + 24);
+  assert.throws(() => unzip(buf), /завеликий/);
+});

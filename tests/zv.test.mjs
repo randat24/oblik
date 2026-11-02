@@ -316,3 +316,69 @@ test('акт у таблицю: шапка, заголовок, рядки й п
 test('CSV: відʼємне число лишається числом, без апострофа', () => {
   assert.equal(sheetCsv([[-5, '5']]), '\uFEFF-5;5');
 });
+
+/* ---------- Захист реєстру від тихого псування ---------- */
+import { healIds, editedText, parseNorms, parseMoves, typedSerials, parsePositions } from '../lib/zv.js';
+
+test('рядки без ID і скопійовані рядки отримують кожен свій ID, а перший двійник лишає старий', () => {
+  const list = [{ row: 2, id: '' }, { row: 3, id: 'a' }, { row: 4, id: 'a' }, { row: 5, id: '' }];
+  let n = 0;
+  const fixed = healIds(list, () => `new${n += 1}`);
+  assert.deepEqual(list.map((p) => p.id), ['new1', 'a', 'new2', 'new3']);
+  assert.deepEqual(fixed.map((f) => f.row), [2, 4, 5]);
+});
+
+test('реєстр із цілими ID нічого не переписує', () => {
+  assert.deepEqual(healIds([{ row: 2, id: 'a' }, { row: 3, id: 'b' }], () => 'x'), []);
+});
+
+test('порожній рядок у штаті не зсуває номери наступних рядків', () => {
+  const norms = parseNorms([['Найменування'], ['A', '1'], [], ['B', '2'], ['C', '3']]);
+  assert.deepEqual(norms.map((n) => [n.name, n.row]), [['A', 2], ['B', 4], ['C', 5]]);
+});
+
+test('порожній рядок у русі не зсуває номери наступних рядків', () => {
+  const moves = parseMoves([['ID'], [], ['m2', '', '', 'zv1']]);
+  assert.equal(moves[0].row, 3);
+});
+
+test('незмінене довге поле не обрізається, хоч і довше за межу', () => {
+  const long = 'S'.repeat(50);
+  const r = editedText({ serials: long, note: 'нове' }, { serials: long, note: '' }, { serials: 10, note: 10 }, {});
+  assert.deepEqual(r.fields, { note: 'нове' });
+});
+
+test('нове задовге значення — відмова, а не тиха обрізка', () => {
+  const r = editedText({ note: 'x'.repeat(11) }, { note: '' }, { note: 10 }, { note: 'Примітка' });
+  assert.match(r.error, /Примітка/);
+});
+
+test('списання зі списку лишає короткі номери, номери без цифр і примітки', () => {
+  assert.equal(withoutSerials('AB1234 / 77 / + sim-карта / ABCDEF / CD5678', ['AB1234']),
+    '77 / + sim-карта / ABCDEF / CD5678');
+});
+
+test('номер із середини списку йде разом із розділювачем', () => {
+  assert.equal(withoutSerials('AA1001; AA1002; AA1003', ['AA1002']), 'AA1001; AA1003');
+});
+
+test('введені у форму короткі номери й номери без цифр не зникають', () => {
+  assert.deepEqual(typedSerials('77, ABCDEF\nAB1234'), ['77', 'ABCDEF', 'AB1234']);
+});
+
+test('новий акт не називає списаний серійник', () => {
+  const { pos: p } = applyMove(pos(), { kind: 'writeoff', qty: 1, doc: 'наказ №10', serials: ['AA1002'] });
+  assert.equal(makeAct([p])[0].serials.includes('AA1002'), false);
+});
+
+test('подане за ПБД ще рахується, тож серійник лишається в акті', () => {
+  const { pos: p } = applyMove(pos(), { kind: 'pbd', qty: 1, doc: 'ПБД №5', serials: ['AA1002'] });
+  assert.equal(p.serialsOnHand.includes('AA1002'), false);
+  assert.equal(makeAct([p])[0].serials.includes('AA1002'), true);
+});
+
+test('рядок реєстру без ID читається, щоб його можна було вилікувати', () => {
+  const row = new Array(ZV_HEADERS.length).fill('');
+  row[5] = 'Радіостанція Тест';
+  assert.equal(parsePositions([ZV_HEADERS, row])[0].id, '');
+});

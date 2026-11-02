@@ -728,3 +728,34 @@ test('налаштування: картку з таблиці читаємо л
   const cfg = cfgParse([['Ключ', 'Значення'], ['card', '4111 1111 1111 1111']]);
   assert.equal(cfg.card, '4111111111111111');
 });
+
+/* ---------- Витрата «По днях» із форми ---------- */
+import { dayPlan } from '../lib/fund.js';
+
+const OCT = { from: '2026-10-01', to: '2026-10-31' };
+
+test('«По днях»: хто вибув, не платить за місяць, якщо дні йому не задавали', () => {
+  const ms = [mk('a', 1, FULL), { ...mk('out', 2, FULL), periods: [{ start: '2026-01-01', end: '2026-09-01' }] }];
+  const plan = dayPlan(['a', 'out'], {}, OCT);
+  assert.deepEqual(plan.ranges, {});
+  const r = spreadByDays(rent('100', ['a', 'out'], { ranges: plan.ranges }), ms);
+  assert.deepEqual(r.parts, ['a']);
+});
+
+test('«По днях»: задані вручну дні зберігаються, решта йде за складом групи', () => {
+  const own = { x: { from: '2026-10-01', to: '2026-10-20' } };
+  const plan = dayPlan(['a', 'x'], own, OCT);
+  assert.deepEqual(plan.ranges, own);
+  assert.deepEqual([plan.periodFrom, plan.periodTo], ['2026-10-01', '2026-10-31']);
+});
+
+test('«По днях»: чиїсь дні за межами місяця не нараховують місяць тому, хто вибув', () => {
+  const own = { x: { from: '2026-10-25', to: '2026-11-05' } };
+  const plan = dayPlan(['a', 'x', 'out'], own, OCT);
+  assert.equal(plan.periodTo, '2026-11-05');
+  assert.deepEqual(plan.ranges, own);
+});
+
+test('«По днях»: «з» пізніше за «по» не проходить', () => {
+  assert.equal(dayPlan(['x'], { x: { from: '2026-10-20', to: '2026-10-01' } }, OCT).ok, false);
+});
