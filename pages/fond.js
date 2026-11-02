@@ -18,8 +18,9 @@ import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
   byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk, shortReport,
   openPeriod, leaveGroup, rejoinGroup, addVacation, newExpenseParts, cashAdjustment,
-  ownerRecalcPlan, monthBounds, daysOf, cardDigits, cardText,
+  ownerRecalcPlan, monthBounds, dayPlan, cardDigits, cardText,
 } from '../lib/fund';
+import { kyivToday } from '../lib/calendar';
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
 import { DatePicker } from '../components/date-picker';
 import { FundArchive } from '../components/fund-archive-view';
@@ -115,7 +116,7 @@ function Fund() {
               onDone={load} toast={toast} />
           )}
           {tab === 'rep' && !!members.length && <Reports members={members} ops={ops} config={config} nameOf={nameOf} />}
-          {tab === 'people' && <People members={members} state={state} ops={ops} config={config} canEdit={canEdit} onDone={load} toast={toast} />}
+          {tab === 'people' && <People members={members} state={state} ops={ops} config={config} canEdit={canEdit} canCard={!!data.canCard} onDone={load} toast={toast} />}
         </main>
       </div>
 
@@ -297,7 +298,7 @@ function Summary({ state, members, config, ops, nameOf }) {
   );
 }
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = () => kyivToday();
 
 /* ---------- Звіти ---------- */
 
@@ -510,7 +511,7 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
     () => newExpenseParts(members, category, date, excluded, flips),
     [members, category, date, excluded, flips],
   );
-  // по днях: обираємо людей і для кожної — її дні; дні, яких не змінювали, — увесь місяць дати витрати
+  // по днях: обираємо людей і для кожної — її дні; кому не змінювали, рахуються дні в групі за весь період витрати
   const [byDays, setByDays] = useState(false);
   const [days, setDays] = useState({});
   const month = useMemo(() => monthBounds(date), [date]);
@@ -523,13 +524,9 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
   const manual = byDays || parts.length !== auto.length || parts.some((id) => !auto.includes(id));
   const toggle = (id) => setFlips((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]));
   const setDay = (id, key, value) => setDays((d) => ({ ...d, [id]: { ...rangeOf(id), [key]: value } }));
-  // дні кожної вибраної людини; період витрати — від найранішого дня до найпізнішого
-  const ranges = byDays ? Object.fromEntries(use.map((id) => [id, rangeOf(id)])) : {};
-  const rangeList = Object.values(ranges);
-  const daysOk = !byDays || (rangeList.length > 0
-    && rangeList.every((r) => daysOf(r.from, r.to).length > 0));
-  const periodFrom = rangeList.map((r) => r.from).sort()[0];
-  const periodTo = rangeList.map((r) => r.to).sort().slice(-1)[0];
+  const plan = dayPlan(byDays ? use : [], days, month);
+  const { periodFrom, periodTo, ranges } = plan;
+  const daysOk = !byDays || plan.ok;
 
   const sum = kop(amount);
   const draft = {
@@ -632,7 +629,7 @@ function ExpenseForm({ members, ops, config, onDone, toast }) {
         )}
         <span className="fund-hint">
           {byDays
-            ? 'Кожна доба ділиться порівну між тими, чиї дні її охоплюють. Кому дні не змінювали, рахується весь місяць дати витрати.'
+            ? 'Кожна доба ділиться порівну між тими, чиї дні її охоплюють. Кому дні не змінювали, рахуються лише дні в групі за весь період витрати: це місяць її дати, якщо нічиї дні за нього не виходять. Відпустки — за правилом категорії.'
             : excluded.length > 0
               ? 'Хто в «Не рахуємо» — знятий за замовчуванням (Люди → Склад). Відмітка тут діє лише на цю витрату.'
               : 'Відмічені ділять витрату порівну.'}
@@ -1085,7 +1082,7 @@ function CardBox({ card, owner }) {
   );
 }
 
-function CardSetting({ config, canEdit, onDone, toast }) {
+function CardSetting({ config, canCard, onDone, toast }) {
   const [value, setValue] = useState(config.card ? cardText(config.card) : '');
   const [busy, setBusy] = useState(false);
   const digits = cardDigits(value);
@@ -1105,16 +1102,16 @@ function CardSetting({ config, canEdit, onDone, toast }) {
     <form className="fund-card" onSubmit={save}>
       <h2 className="fund-h2">Картка для переказів</h2>
       <input className="fund-search" inputMode="numeric" autoComplete="off" value={value}
-        disabled={!canEdit} placeholder="0000 0000 0000 0000" aria-label="Номер картки"
+        disabled={!canCard} placeholder="0000 0000 0000 0000" aria-label="Номер картки"
         aria-invalid={!empty && !digits}
         onChange={(e) => setValue(e.target.value.replace(/[^\d\s]/g, '').slice(0, 19))} />
       {!empty && !digits && <span className="fund-hint is-neg">Номер неправильний: перевірте цифри.</span>}
-      {canEdit && changed && (digits || empty) && (
+      {canCard && changed && (digits || empty) && (
         <button className="btn" disabled={busy}>{busy ? 'Зберігаємо…' : empty ? 'Прибрати картку' : 'Зберегти'}</button>
       )}
       <span className="fund-hint">
         Показується на головній фонду з кнопкою «Копіювати». Сторінку бачить кожен, у кого є посилання.
-        {!canEdit && ' Змінювати може той, хто увійшов.'}
+        {!canCard && ' Змінювати може адміністратор.'}
       </span>
     </form>
   );
@@ -1153,7 +1150,7 @@ function ExcludeCard({ members, config, canEdit, onDone, toast }) {
   );
 }
 
-function People({ members, state, ops, config, canEdit, onDone, toast }) {
+function People({ members, state, ops, config, canEdit, canCard, onDone, toast }) {
   const [setup, setSetup] = useState(false);
   const ms = byOrder(members);
   const today = todayIso();
@@ -1211,7 +1208,7 @@ function People({ members, state, ops, config, canEdit, onDone, toast }) {
         <>
           <AddMemberCard canEdit={canEdit} onDone={onDone} toast={toast} />
           <OwnerCard members={members} ops={ops} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
-          <CardSetting config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
+          <CardSetting config={config} canCard={canCard} onDone={onDone} toast={toast} />
           <ExcludeCard members={members} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
         </>
       )}

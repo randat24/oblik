@@ -59,16 +59,20 @@ export default withAuth(async (req, res) => {
   const positions = parsed.positions.map((p, i) => ({
     ...p, id: newId(), no: p.no || String(i + 1), added: at, updated: at,
   }));
-  await addPositions(positions);
 
-  // старі акти — архівом, у тому ж вигляді, що й нові
-  for (const a of parsed.acts) {
+  // реєстр пишемо останнім: саме він закриває повторний імпорт, і збій на актах
+  // інакше лишав би 409 на кожну спробу без актів і штату. Уже записані акти
+  // при повторі пропускаємо.
+  const known = new Set(data.acts.map((a) => `${a.date}|${a.title}`));
+  for (const a of parsed.acts.filter((x) => !known.has(`${x.date}|${x.title}`))) {
+    // старі акти — архівом, у тому ж вигляді, що й нові
     await addAct({
       key: newId('act'), date: a.date, created: at, who: `${who || 'спільний вхід'} (імпорт «${a.sheet}»)`,
       head: a.head, title: a.title, footer: a.footer,
     }, a.items);
   }
   if (!data.norms.length) await addNorms(parsed.norms);
+  await addPositions(positions);
 
   await addMoves([{
     id: newId('mv'), date, time, pos: '—', name: `Імпорт з Excel, аркуш «${parsed.sheet}»`, kind: 'import',
