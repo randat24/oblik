@@ -24,6 +24,7 @@ import { kyivToday } from '../lib/calendar';
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
 import { DatePicker } from '../components/date-picker';
 import { FundArchive } from '../components/fund-archive-view';
+import { FundStats } from '../components/fund-stats-view';
 import { OfflineBar } from '../components/offline-bar';
 import { BottomNav, Sheet, KindPicker, OP_KINDS, Avatar, hueOf, IcoTune } from '../components/fund-ui';
 
@@ -309,7 +310,8 @@ const MONTHS = ['січень', 'лютий', 'березень', 'квітен�
 const monthName = (ym) => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(0, 4)}`;
 
 function Reports({ members, ops, config, nameOf }) {
-  // «Звіти» — книга застосунку, «Архів» — стара таблиця до 15.10
+  // «Звіти» — книга застосунку, «Статистика» — книга разом з архівом,
+  // «Архів» — стара таблиця до 15.10
   const [part, setPart] = useState('rep');
   const months = useMemo(() => monthsOf(ops, todayIso()), [ops]);
   const [ym, setYm] = useState(months[0]);
@@ -318,6 +320,15 @@ function Reports({ members, ops, config, nameOf }) {
   const r = useMemo(() => monthReport(members, ops, config, ym), [members, ops, config, ym]);
   const st = useMemo(() => (who ? memberStatement(members, ops, who) : null), [members, ops, who]);
   const cats = CATEGORIES.filter((c) => r.cats[c.id].count);
+
+  if (part === 'stat') {
+    return (
+      <>
+        <ReportsSwitch part={part} onPart={setPart} />
+        <FundStats members={members} ops={ops} config={config} nameOf={nameOf} />
+      </>
+    );
+  }
 
   if (part === 'arch') {
     return (
@@ -422,6 +433,8 @@ function ReportsSwitch({ part, onPart }) {
     <div className="fund-seg fund-switch" role="group" aria-label="Розділ звітів">
       <button type="button" className={'chip' + (part === 'rep' ? ' on' : '')} aria-pressed={part === 'rep'}
         onClick={() => onPart('rep')}>Звіти</button>
+      <button type="button" className={'chip' + (part === 'stat' ? ' on' : '')} aria-pressed={part === 'stat'}
+        onClick={() => onPart('stat')}>Статистика</button>
       <button type="button" className={'chip' + (part === 'arch' ? ' on' : '')} aria-pressed={part === 'arch'}
         onClick={() => onPart('arch')}>Архів до 15.10.2026</button>
     </div>
