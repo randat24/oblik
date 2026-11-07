@@ -16,7 +16,7 @@ import {
   api, ToastCtx, ToastHost, useToasts, useToast, saveFailed, } from '../components/base';
 import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
-  byOrder, statusOn, opTitle, balanceWord, livedOps, invariantOk, shortReport,
+  byOrder, statusOn, archived, opTitle, balanceWord, livedOps, invariantOk, shortReport,
   openPeriod, leaveGroup, rejoinGroup, addVacation, newExpenseParts, cashAdjustment,
   ownerRecalcPlan, monthBounds, dayPlan, cardDigits, cardText,
 } from '../lib/fund';
@@ -220,9 +220,11 @@ function Person({ m, i, bal, max, today }) {
 
 function Summary({ state, members, config, ops, nameOf }) {
   const toast = useToast();
-  // власник каси бере участь у витратах, але в списках боргів його немає
-  const ms = byOrder(members).filter((m) => m.id !== config.owner);
   const today = todayIso();
+  // власник каси бере участь у витратах, але в списках боргів його немає;
+  // хто вийшов і розрахувався, той в архіві — повернути можна в «Людях»
+  const ms = byOrder(members)
+    .filter((m) => m.id !== config.owner && !archived(m, state.bal[m.id] || 0, today));
   const text = shortReport(state, members, config.owner);
   const max = Math.max(1, ...ms.map((m) => Math.abs(state.bal[m.id] || 0)));
   const owe = ms.filter((m) => (state.bal[m.id] || 0) < 0);
