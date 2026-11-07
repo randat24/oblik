@@ -4,7 +4,7 @@ import { OPENING_MEMBERS as SEED_MEMBERS, OPENING_CASH as SEED_CASH } from '../l
 import assert from 'node:assert/strict';
 import {
   kop, money, signed, split, effect, compute, invariantOk, eligible,
-  statusOn, byOrder, opTitle, balanceWord, categoryOf, livedOps,
+  statusOn, archived, byOrder, opTitle, balanceWord, categoryOf, livedOps,
 } from '../lib/fund.js';
 
 /* Шестеро зі справжніми початковими балансами */
@@ -347,6 +347,12 @@ test('порожній розділ у звіті не з’являється',
   const ms = SEED_MEMBERS.map((m) => ({ ...m, opening: 0 }));
   const state = compute(ms, [], { openingCash: 500 });
   assert.equal(shortReport(state, ms), 'На сьогодні\nв касі 5');
+});
+
+test('каса в мінусі показується в чаті зі знаком мінус', () => {
+  const ms = SEED_MEMBERS.map((m) => ({ ...m, opening: 0 }));
+  const state = compute(ms, [], { openingCash: -50000 });
+  assert.equal(shortReport(state, ms), 'На сьогодні\nв касі -500');
 });
 
 test('копійки у звіті лише там, де вони є', () => {
@@ -758,4 +764,20 @@ test('«По днях»: чиїсь дні за межами місяця не �
 
 test('«По днях»: «з» пізніше за «по» не проходить', () => {
   assert.equal(dayPlan(['x'], { x: { from: '2026-10-20', to: '2026-10-01' } }, OCT).ok, false);
+});
+
+/* Архів на огляді фонду */
+const LEFT = { id: 'petya', name: 'Петя', periods: [{ start: '2026-01-01', end: '2026-10-01' }], vacations: [] };
+
+test('вийшов із групи й розрахувався — на огляді його не показуємо', () => {
+  assert.equal(archived(LEFT, 0, '2026-11-07'), true);
+});
+
+test('вийшов із групи, але має борг чи плюс — лишається на огляді', () => {
+  assert.equal(archived(LEFT, kop('-100'), '2026-11-07'), false);
+  assert.equal(archived(LEFT, kop('100'), '2026-11-07'), false);
+});
+
+test('у групі з нульовим балансом — лишається на огляді', () => {
+  assert.equal(archived(LEFT, 0, '2026-09-01'), false);
 });
