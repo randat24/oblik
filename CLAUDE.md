@@ -40,7 +40,7 @@ CI (`.github/workflows/test.yml`, Node 22) runs lint → test → build on every
 - Without `APP_PASSWORD`, the app is open locally but nobody can get in on Vercel (`authRequired()`).
 - Every API route is wrapped in `withAuth(handler, { adminOnly, openGet })`. It also runs the handler inside an `AsyncLocalStorage`, so `currentActor()` / `logChange()` know who made the change without passing it through every call.
 - Write routes must check the sheet name from the request body against `SHEET_CONFIGS` via `sheetConfig(name, kind)`. «Люди» (roles), «Журнал» (audit log) and the personal sheets live in the same spreadsheet; without this check any logged-in user could promote themselves to admin.
-- Two routes also accept a key from the link instead of a session: `/api/pack` (the `/zbir` packing page, key in `PACK_TOKEN`; a normal session works there too) and `/api/health-in` (iPhone Shortcuts, key in `HEALTH_INGEST_TOKEN`). Keys are compared in constant time. A route returns 404 when its env key is missing **or shorter than 16 characters**.
+- Three routes also accept a key from the link instead of a session: `/api/pack` (the `/zbir` packing page, key in `PACK_TOKEN`; a normal session works there too), `/api/health-in` (iPhone Shortcuts, key in `HEALTH_INGEST_TOKEN`) and `/api/signal-in` (Shortcut «У Вхідні», key in `SIGNAL_INGEST_TOKEN`; deliberately no bot in the Signal group, and the message text never goes into «Журнал»). Keys are compared in constant time. A route returns 404 when its env key is missing **or shorter than 16 characters**.
 - `openGet` only lets anonymous `GET` requests through to the handler; it does not make the route read-only. The handler must keep its GET branch free of writes for guests and decide what they see via `isGuest()`. Only `/api/fund` uses it, for the shared fund page `/fond`.
 - The "chief" (`isChief`) is a level above admin, used for irreversible delivery edits. Its callsign is the raw env `OWNER`, or else the raw env `HEALTH_OWNER`. `healthOwner()`'s code default (`'Fantomas'`) does not apply here, so with both vars unset there is no chief at all. It comes from env rather than the «Люди» sheet on purpose: anyone with spreadsheet access could otherwise grant it to themselves.
 
@@ -78,6 +78,16 @@ CI (`.github/workflows/test.yml`, Node 22) runs lint → test → build on every
 - Акт складається з поточного стану реєстру (`makeAct`); «однакове майно разом» (`mergeSame`) — опція, бо в паперових актах рядки зводили не завжди. Старі акти з файлу імпортуються як архів у той самий лист.
 - CSV — через `lib/csv`, плюс апостроф перед текстом із «=», «+», «-», «@» (`sheetCsv`), щоб Excel не виконав назву як формулу.
 
+## Вхідні з Signal (`/vhidni`)
+
+Людина в Signal утримує повідомлення → Поділитися → команда iPhone «У Вхідні» (`docs/shortcuts.md`) → `/api/signal-in` → лист `Вхідні — Signal`. Хто прочитав і вніс куди треба, тисне «Опрацьовано». `lib/inbox.js` — правила, `lib/inbox-store.js` — єдиний код, що говорить із листом, `pages/api/inbox.js` — читання й позначка, `components/inbox-view.js` — екран. Що легко зламати:
+- Бота в групі немає **навмисно**: він тримав би ключі й розшифровані повідомлення військової групи на сервері. Застосунок бачить лише те, чим людина поділилась сама.
+- Текст повідомлення **не потрапляє в «Журнал»** — лише довжина й підпис команди. Туди дивляться інші люди й з інших причин.
+- Лист не входить у `SHEET_CONFIGS`, тож звичайні маршрути таблиць його не бачать. Читає й позначає кожен, хто увійшов, але без `openGet`.
+- Текст пишеться з `raw: true`: чуже повідомлення з «=» не має стати формулою. Задовге (`MAX_TEXT`) — відмова, а не обрізка, бо обрізане ніхто не помітить.
+- Ключ команди спільний, тож «Від» — лише підпис, який указала сама команда, а не доказ, хто надіслав.
+- Межа списку (`visibleInbox`) лише на опрацьовані: нове не має загубитись за старим.
+
 ## Quality checks worth re-running
 
 - Accessibility: load a page in Playwright and run `axe-core` (`window.axe.run(document)`); the fund screens and the home page are clean. Keep `lang="uk"` in `pages/_document.js`, a `main` landmark and one `h1` per page.
@@ -94,3 +104,13 @@ CI (`.github/workflows/test.yml`, Node 22) runs lint → test → build on every
 - Describe rows by field name via `tests/helpers.mjs`, not array positions.
 - Pin time to fixed values (e.g. `NOW` from `tests/helpers.mjs`), or tests start failing on some unexpected day.
 - Check that a new test can fail: break the line it guards and confirm `npm test` goes red.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
