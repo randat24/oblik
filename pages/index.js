@@ -20,6 +20,7 @@ import { OfflineBar } from '../components/offline-bar';
 import { toCsv, csvName, BOM } from '../lib/csv';
 import { headTags, accountingCol } from '../lib/cards';
 import { findDupes, dupeCount, dupeLabel, sameSn, sameId } from '../lib/dupes';
+import { parseSerials, nextId, bulkRows, BULK_MAX } from '../lib/bulk';
 import { AuditView } from '../components/reviziya';
 import { DupesView } from '../components/dupes-view';
 import { DeliveryView } from '../components/dostavka';
@@ -2098,6 +2099,7 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
   const [tagF, setTagF] = useState({});
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
+  const [bulk, setBulk] = useState(false);
   const [issuing, setIssuing] = useState(null);
   const [highlightRow, setHighlightRow] = useState(focusRow || null);
   const [mode, setMode] = useViewMode();
@@ -2221,6 +2223,7 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
                 type="text"
                 defaultValue={it.values[idIdx]}
                 title={headers[idIdx] || 'Номер'}
+                aria-label={headers[idIdx] || 'Номер'}
                 size={Math.max(2, String(it.values[idIdx] || '').length)}
                 onBlur={(e) => {
                   if (e.target.value === it.values[idIdx]) return;
@@ -2588,6 +2591,10 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
         >
           Експорт
         </button>
+        {/* партія однакових речей — лише там, де є куди писати серійник */}
+        {snIdx >= 0 && (
+          <button className="act-btn bulk-open" onClick={() => setBulk(true)}>Додати кілька</button>
+        )}
         <button className="btn" onClick={() => setAdding(true)}>+ Додати запис</button>
       </div>
 
@@ -2701,6 +2708,27 @@ function ItemsView({ name, setState, focusRow, onOpen }) {
             await api('/api/item', { method: 'POST', body: { sheet: name, values } });
             setAdding(false);
             toast('Запис додано');
+            load();
+          }}
+        />
+      )}
+
+      {bulk && (
+        <BulkAddModal
+          headers={headers}
+          cols={cols}
+          idIdx={idIdx}
+          snIdx={snIdx}
+          items={items}
+          suggestions={data.suggestions}
+          statusOptions={statusOptions}
+          typeOptions={typeOptions}
+          hideStatus={hideStatus}
+          onCancel={() => setBulk(false)}
+          onSave={async (body) => {
+            const d = await api('/api/item', { method: 'POST', body: { sheet: name, action: 'bulk', ...body } });
+            setBulk(false);
+            toast(`Додано записів: ${d.added}`);
             load();
           }}
         />
@@ -2831,6 +2859,123 @@ function AddItemModal({
                   placeholder={hintFor(i)}
                   onChange={(e) => set(i, e.target.value)}
                 />
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+    </Modal>
+  );
+}
+
+/**
+ * «Додати кілька»: партія однакових речей.
+ *
+ * Спільне (назва, стан, де, дата) вводиться раз, серійники — стовпчиком,
+ * номери ставляться підряд від стартового. До запису видно, скільки рядків
+ * вийде, які номери, і чи нема вже таких серійників або номерів у листі —
+ * сервер перевіряє це ще раз і не пише нічого, якщо щось збіглося.
+ */
+function BulkAddModal({
+  headers, cols, statusOptions, typeOptions, hideStatus,
+  idIdx, snIdx, items = [], suggestions = {}, onCancel, onSave,
+}) {
+  const [vals, setVals] = useState(() => headers.map((_, i) => (i === cols.date ? todayStr() : '')));
+  const [text, setText] = useState('');
+  const [start, setStart] = useState(() => String(nextId(items.map((it) => it.values), idIdx) ?? ''));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const set = (i, v) => setVals((p) => p.map((x, j) => (j === i ? v : x)));
+  const nameIdx = nameOf(cols);
+  // номер і серійник тут не вводяться по одному — їх розкладає сама партія
+  const groups = formGroups({ headers, cols, idIdx, snIdx, hideStatus })
+    .map((g) => ({ ...g, cols: g.cols.filter((i) => i !== idIdx && i !== snIdx) }))
+    .filter((g) => g.cols.length);
+
+  const { list, repeated } = parseSerials(text);
+  const startN = Number(start);
+  const startOk = idIdx < 0 || (Number.isInteger(startN) && startN > 0);
+  const rows = startOk ? bulkRows({ base: vals, idIdx, snIdx, serials: list, startId: startN }) : [];
+  const snTaken = rows.flatMap((r) => sameSn(items, cols, r[snIdx]).map((it) => `${r[snIdx]} (рядок ${it.row})`));
+  const idTaken = idIdx >= 0
+    ? rows.flatMap((r) => sameId(items, cols, r[idIdx]).map((it) => `${r[idIdx]} (рядок ${it.row})`))
+    : [];
+  const blocked = snTaken.length > 0 || idTaken.length > 0;
+
+  return (
+    <Modal
+      title="Додати кілька"
+      saveLabel={list.length ? `Додати ${list.length}` : 'Додати'}
+      onCancel={onCancel}
+      busy={busy}
+      error={err}
+      onSave={async () => {
+        setErr('');
+        if (!vals[nameIdx]?.trim()) return setErr(`Вкажіть «${headers[nameIdx] || 'назву'}»`);
+        if (!list.length) return setErr('Вставте серійні номери — кожен з нового рядка');
+        if (list.length > BULK_MAX) return setErr(`За раз — не більше ${BULK_MAX}`);
+        if (!startOk) return setErr('Стартовий номер — ціле число');
+        if (blocked) return setErr('Деякі серійники чи номери вже є в листі — приберіть їх зі списку або змініть стартовий номер');
+        setBusy(true);
+        try {
+          await onSave({ base: vals, serials: list.join('\n'), startId: idIdx >= 0 ? startN : null });
+        } catch (e) {
+          setErr(e.message || 'Помилка збереження');
+          setBusy(false);
+        }
+      }}
+    >
+      <div className="fgroup">
+        <div className="fgroup-t">Партія</div>
+        <div style={{ marginTop: 10 }}>
+          <label htmlFor="bulk-sn">
+            {headers[snIdx] || 'Серійні номери'} — кожен з нового рядка
+            {list.length > 0 && <span className="count" style={{ marginLeft: 6 }}>{list.length}</span>}
+          </label>
+          <textarea id="bulk-sn" rows={6} value={text} autoFocus spellCheck={false}
+            className="bulk-sn" onChange={(e) => setText(e.target.value)}
+            placeholder={'Вставте стовпчик із таблиці чи накладної'} />
+        </div>
+        {idIdx >= 0 && (
+          <div style={{ marginTop: 10 }}>
+            <label htmlFor="bulk-start">{headers[idIdx] || 'Номер'} — з якого почати</label>
+            <input id="bulk-start" type="number" inputMode="numeric" min="1" value={start}
+              onChange={(e) => setStart(e.target.value)} />
+          </div>
+        )}
+        {list.length > 0 && (
+          <div className={'bulk-sum' + (blocked ? ' is-bad' : '')} role="status">
+            Буде {list.length} {plural(list.length, ['запис', 'записи', 'записів'])}
+            {idIdx >= 0 && startOk && <> · номери <b>{startN}–{startN + list.length - 1}</b></>}
+            {repeated.length > 0 && <div>Повтори у вставці пропущено: {repeated.join(', ')}</div>}
+            {snTaken.length > 0 && <div>Уже є в листі: {snTaken.join(', ')}</div>}
+            {idTaken.length > 0 && <div>Номер зайнятий: {idTaken.join(', ')}</div>}
+          </div>
+        )}
+      </div>
+
+      {groups.map((g) => (
+        <div key={g.title} className="fgroup">
+          <div className="fgroup-t">{g.title === 'Річ' ? 'Спільне для всіх' : g.title}</div>
+          {g.cols.map((i) => (
+            <div key={i} style={{ marginTop: 10 }}>
+              <label>
+                {headers[i] || 'Поле ' + (i + 1)}
+                {i === nameIdx && <span className="req"> *</span>}
+              </label>
+              {i === cols.status || i === cols.type ? (
+                <select value={vals[i]} onChange={(e) => set(i, e.target.value)}>
+                  <option value="">—</option>
+                  {(i === cols.status ? statusOptions : typeOptions).map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              ) : suggestions[i]?.length ? (
+                <Combo value={vals[i]} options={suggestions[i]} onChange={(v) => set(i, v)} />
+              ) : (
+                <input type="text" value={vals[i]} onChange={(e) => set(i, e.target.value)}
+                  placeholder={i === cols.date ? 'дд.мм.рррр' : ''} />
               )}
             </div>
           ))}

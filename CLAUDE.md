@@ -89,6 +89,10 @@ CI (`.github/workflows/test.yml`, Node 22) runs lint → test → build on every
 - Ключ команди спільний, тож «Від» — лише підпис, який указала сама команда, а не доказ, хто надіслав.
 - Межа списку (`visibleInbox`) лише на опрацьовані: нове не має загубитись за старим.
 
+## «Додати кілька» (листи `items`)
+
+Партія однакових речей (рації з однієї поставки): спільні поля вводяться раз, серійники — стовпчиком, номери йдуть підряд від стартового. Правила — `lib/bulk.js` (`parseSerials`, `nextId`, `bulkRows`, `bulkConflicts`), запис — `action: 'bulk'` у `/api/item`, форма — `BulkAddModal` у `pages/index.js`. Сервер сам ще раз шукає серійники (через `normalizeSn`) і номери, що вже є в листі, і при збігу не пише нічого: половина партії гірша за жодну. Рядки пишуться RAW, щоб серійник «00123» не втратив нулі. Кнопка є лише в листах із колонкою серійного номера.
+
 ## Quality checks worth re-running
 
 - Accessibility: load a page in Playwright and run `axe-core` (`window.axe.run(document)`); the fund screens and the home page are clean. Keep `lang="uk"` in `pages/_document.js`, a `main` landmark and one `h1` per page.
