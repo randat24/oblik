@@ -4,6 +4,7 @@ import {
   writeCell,
   writeCells,
   appendRow,
+  appendRows,
   deleteRow,
   insertRowAt,
   findColumns,
@@ -11,6 +12,8 @@ import {
   sheetConfig,
 } from '../../lib/sheets';
 import { logChange } from '../../lib/log';
+import { snOf } from '../../lib/dupes';
+import { parseSerials, bulkRows, bulkConflicts, BULK_MAX } from '../../lib/bulk';
 
 export default withAuth(async (req, res) => {
   if (!sheetConfig(req.body?.sheet, 'items')) {
@@ -77,6 +80,57 @@ export default withAuth(async (req, res) => {
         after: action === 'issue' ? [who, where].filter(Boolean).join(', ') : 'КСП',
       });
       return res.json({ ok: true });
+    }
+
+    /*
+     * Партія однакових речей: спільні поля + стовпчик серійників.
+     *
+     * Повтори перевіряємо тут, а не лише у формі: між відкриттям форми й
+     * натисканням «Додати» хтось міг внести ту саму рацію руками в таблицю.
+     * Тоді не пишемо нічого — половина партії гірша за жодну, бо її довелось
+     * би шукати й дописувати.
+     */
+    if (action === 'bulk') {
+      const data = await readSheet(sheet);
+      const headers = data[0] || [];
+      const cols = findColumns(headers);
+      const nameIdx = cols.name >= 0 ? cols.name : 0;
+      const idIdx = cols.id >= 0 && cols.id !== nameIdx ? cols.id : -1;
+      const snIdx = snOf(cols);
+      if (snIdx < 0) return res.status(400).json({ error: 'У цьому листі немає колонки серійного номера' });
+
+      const { list } = parseSerials(req.body.serials);
+      if (!list.length) return res.status(400).json({ error: 'Вставте хоча б один серійний номер' });
+      if (list.length > BULK_MAX) return res.status(400).json({ error: `За раз — не більше ${BULK_MAX}` });
+
+      const base = headers.map((_, i) => String((req.body.base || [])[i] ?? '').slice(0, 500));
+      if (!base[nameIdx].trim()) return res.status(400).json({ error: `Вкажіть «${headers[nameIdx] || 'назву'}»` });
+      const startId = idIdx >= 0 ? Number(req.body.startId) : null;
+      if (idIdx >= 0 && !(Number.isInteger(startId) && startId > 0)) {
+        return res.status(400).json({ error: 'Стартовий номер — ціле число' });
+      }
+
+      const rows = bulkRows({ base, idIdx, snIdx, serials: list, startId });
+      const { snTaken, idTaken } = bulkConflicts({ existing: data.slice(1), rows, idIdx, snIdx });
+      if (snTaken.length || idTaken.length) {
+        return res.status(409).json({
+          error: [
+            snTaken.length ? `Уже є в листі: ${snTaken.map((x) => `${x.value} (рядок ${x.row})`).join(', ')}` : '',
+            idTaken.length ? `Номер зайнятий: ${idTaken.map((x) => `${x.value} (рядок ${x.row})`).join(', ')}` : '',
+          ].filter(Boolean).join('. '),
+          snTaken, idTaken,
+        });
+      }
+
+      // RAW: «00123» не має втратити нулі, а «1E5» — стати числом 100000
+      await appendRows(sheet, rows, { raw: true });
+      // номери спершу: журнал обрізає довгий текст, і діапазон має вціліти
+      const ids = idIdx >= 0 ? `номери ${rows[0][idIdx]}–${rows[rows.length - 1][idIdx]}: ` : '';
+      await logChange({
+        sheet, action: `Додано записів: ${rows.length}`, field: base[nameIdx],
+        after: ids + list.join(', '),
+      });
+      return res.json({ ok: true, added: rows.length });
     }
 
     await appendRow(sheet, values);
