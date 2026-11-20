@@ -21,7 +21,7 @@ import {
   monthBounds, dayPlan, cardDigits, cardText,
 } from '../lib/fund';
 import { kyivToday } from '../lib/calendar';
-import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
+import { monthsOf, monthReport, memberStatement, putIn, activeInMonth, monthText } from '../lib/fund-report';
 import { DatePicker } from '../components/date-picker';
 import { FundArchive } from '../components/fund-archive-view';
 import { FundStats } from '../components/fund-stats-view';
@@ -320,6 +320,16 @@ function Reports({ members, ops, config, nameOf }) {
   const r = useMemo(() => monthReport(members, ops, config, ym), [members, ops, config, ym]);
   const st = useMemo(() => (who ? memberStatement(members, ops, who) : null), [members, ops, who]);
   const cats = CATEGORIES.filter((c) => r.cats[c.id].count);
+  const toast = useToast();
+  const text = useMemo(() => monthText(r, members, monthName(ym)), [r, members, ym]);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Скопійовано — можна вставляти в месенджер');
+    } catch {
+      toast('Не вдалося скопіювати — виділіть текст вручну', { type: 'err' });
+    }
+  };
 
   if (part === 'stat') {
     return (
@@ -381,26 +391,50 @@ function Reports({ members, ops, config, nameOf }) {
       )}
 
       <div className="fund-card">
-        <h2 className="fund-h2">По учасниках</h2>
-        <div className="fund-rows">
-          {ms.map((m) => {
+        <div className="fund-msg-head">
+          <h2 className="fund-h2">По учасниках</h2>
+          <button type="button" className="act-btn" onClick={copy}>Копіювати в чат</button>
+        </div>
+        <span className="fund-hint">
+          «Витратив на взвод» — його частка в спільних витратах місяця. «Вклав» — заплатив своїми
+          плюс вніс у касу, мінус отримане з каси. Різниця між ними — на стільки змінився баланс.
+        </span>
+        <div className="fund-people">
+          {ms.filter((m) => activeInMonth(r.each[m.id])).map((m) => {
             const e = r.each[m.id];
+            const put = putIn(e);
             return (
-              <button type="button" className={'fund-row fund-pick' + (who === m.id ? ' is-on' : '')}
-                key={m.id} onClick={() => setWho(who === m.id ? '' : m.id)}>
-                <span className="fund-who">
-                  {m.name}
-                  <i>частка {money(e.share)} · заплатив {money(e.paid)}{e.deposited ? ` · вніс ${money(e.deposited)}` : ''}</i>
-                </span>
-                <b className="fund-v">
-                  <small>{signed(e.start)} →</small> {signed(e.end)}
-                </b>
-              </button>
+              <div className="fund-pcard" key={m.id}>
+                <div className="fund-pcard-h">
+                  <Avatar m={m} i={ms.indexOf(m)} size={44} />
+                  <span className="fund-who">{m.name}<i>баланс {signed(e.start)} → {signed(e.end)}</i></span>
+                </div>
+                <div className="fund-rows">
+                  <div className="fund-row"><span className="fund-who">Витратив на взвод</span><b className="fund-big">{money(e.share)}</b></div>
+                  <div className="fund-row">
+                    <span className="fund-who">Вклав
+                      <i>{[e.paid && `своїми ${money(e.paid)}`, e.deposited && `у касу ${money(e.deposited)}`,
+                        e.received && `з каси отримав ${money(e.received)}`].filter(Boolean).join(' · ') || 'нічого'}</i>
+                    </span>
+                    <b className={'fund-big ' + (put < 0 ? 'is-neg' : put > 0 ? 'is-pos' : '')}>{signed(put)}</b>
+                  </div>
+                </div>
+                <button type="button" className={'act-btn' + (who === m.id ? ' on' : '')}
+                  onClick={() => setWho(who === m.id ? '' : m.id)}>
+                  {who === m.id ? 'Сховати виписку' : 'Уся виписка'}
+                </button>
+              </div>
             );
           })}
         </div>
-        <span className="fund-hint">Натисніть на людину, щоб побачити всю виписку.</span>
+        {!ms.some((m) => activeInMonth(r.each[m.id])) && <div className="empty">У цьому місяці руху ні в кого не було.</div>}
       </div>
+
+      {r.total.count > 0 && (
+        <section className="fund-msg">
+          <pre className="fund-bubble">{text}</pre>
+        </section>
+      )}
 
       {st && (
         <div className="fund-card">
