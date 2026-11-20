@@ -79,3 +79,50 @@ test('виписка: лише операції, що зачепили люди�
   assert.ok(st.rows.every((r) => r.op.date < '2026-10-20' || r.op.type !== 'expense' || r.op.mode === 'manual'));
   assert.equal(st.opening, kop('-2920'));
 });
+
+/* ---------- Місяць по кожному: картки й текст для чату ---------- */
+import { putIn, activeInMonth, monthText } from '../lib/fund-report.js';
+
+test('вкладене за місяць: своїми плюс у касу мінус отримане з каси', () => {
+  assert.equal(putIn({ paid: kop('100'), deposited: kop('50'), received: kop('30') }), kop('120'));
+});
+
+test('вкладене мінус частка — рівно на стільки змінився баланс за місяць', () => {
+  const r = monthReport(OPENING_MEMBERS, OPS, cfg, '2026-10');
+  for (const m of OPENING_MEMBERS) {
+    const e = r.each[m.id];
+    assert.equal(putIn(e) - e.share, e.end - e.start, m.name);
+  }
+});
+
+test('людина без жодного руху за місяць не активна', () => {
+  assert.equal(activeInMonth({ share: 0, paid: 0, deposited: 0, received: 0 }), false);
+  assert.equal(activeInMonth({ share: 0, paid: 0, deposited: 0, received: 1 }), true);
+});
+
+test('текст для чату: кожен із часткою й вкладеним, без тих, у кого нічого не було', () => {
+  const members = [
+    { id: 'a', name: 'Аня', order: 1, opening: 0, periods: [{ start: '2000-01-01' }], vacations: [] },
+    { id: 'b', name: 'Богдан', order: 2, opening: -kop('100'), periods: [{ start: '2000-01-01' }], vacations: [] },
+    { id: 'z', name: 'Зеник', order: 3, opening: 0, periods: [{ start: '2000-01-01', end: '2026-01-01' }], vacations: [] },
+  ];
+  const ops = [
+    op({ id: 'x', type: 'expense', date: '2026-11-03', amount: kop('300'), payer: 'a' }),
+    op({ id: 'y', type: 'deposit', date: '2026-11-04', amount: kop('250'), member: 'b' }),
+  ];
+  const r = monthReport(members, ops, { openingCash: 0 }, '2026-11');
+  assert.equal(monthText(r, members, 'листопад 2026'), [
+    'Звіт за листопад 2026',
+    'Витрати взводу: 300 (1 шт.)',
+    '',
+    'Аня',
+    'Витратив на взвод: 150',
+    'Вклав: +300 (своїми 300)',
+    'Баланс: 0 → +150',
+    '',
+    'Богдан',
+    'Витратив на взвод: 150',
+    'Вклав: +250 (у касу 250)',
+    'Баланс: -100 → 0',
+  ].join('\n'));
+});
