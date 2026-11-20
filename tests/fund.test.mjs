@@ -461,7 +461,7 @@ test('налаштування «не рахуємо» читається зі �
 });
 
 /* ---------- Власник каси ---------- */
-import { ownerRecalcPlan, withOwner } from '../lib/fund.js';
+import { ownerPaidPlan, paidByOwner } from '../lib/fund.js';
 
 const OWNER = { id: 'alex', name: 'Алекс', order: 7, opening: 0, periods: [{ start: '2000-01-01' }], vacations: [] };
 const mkExp = (id, sum, participants, extra = {}) => ({
@@ -469,41 +469,45 @@ const mkExp = (id, sum, participants, extra = {}) => ({
   mode: 'manual', participants, status: 'active', createdAt: id, ...extra,
 });
 
-test('у перерахунок потрапляють лише чинні ручні витрати без власника', () => {
+test('на власника переписуються лише позначені чинні витрати з каси', () => {
   const ops = [
-    mkExp('a', '100', ['vanya', 'fess']),
-    mkExp('b', '100', ['vanya', 'alex']),
-    mkExp('c', '100', ['vanya'], { status: 'cancelled' }),
-    mkExp('d', '100', [], { mode: 'auto' }),
-    { id: 'e', type: 'deposit', date: '2026-10-21', amount: 1, member: 'vanya', status: 'active', createdAt: 'e' },
+    mkExp('a', '100', ['vanya', 'alex'], { payer: 'cash' }),
+    mkExp('b', '100', ['vanya', 'alex'], { payer: 'cash' }),
+    mkExp('c', '100', ['vanya', 'alex'], { payer: 'cash', status: 'cancelled' }),
+    mkExp('d', '100', ['vanya', 'alex']),
+    { id: 'e', type: 'reimburse', date: '2026-10-21', amount: 1, member: 'vanya', status: 'active', createdAt: 'e' },
   ];
-  assert.deepEqual(ownerRecalcPlan(ops, 'alex').map((o) => o.id), ['a']);
+  // «b» не позначили: вона могла зʼявитись уже після перегляду
+  assert.deepEqual(ownerPaidPlan(ops, ['a', 'c', 'd', 'e']).map((o) => o.id), ['a']);
 });
 
-test('новий запис зберігає склад і додає власника, примітка не губиться', () => {
-  const old = mkExp('a', '100', ['vanya', 'fess'], { note: 'магазин' });
-  const n = withOwner(old, 'alex', { id: 'n1', at: 'T', who: 'F' });
-  assert.deepEqual(n.participants, ['vanya', 'fess', 'alex']);
-  assert.equal(n.note, 'магазин · Перерахунок: додано власника каси');
+test('новий запис — той самий склад і сума, платник власник, примітка не губиться', () => {
+  const old = mkExp('a', '100', ['vanya', 'alex'], { payer: 'cash', note: 'хата' });
+  const n = paidByOwner(old, 'alex', { id: 'n1', at: 'T', who: 'F' });
+  assert.equal(n.payer, 'alex');
+  assert.deepEqual(n.participants, ['vanya', 'alex']);
+  assert.equal(n.amount, old.amount);
+  assert.equal(n.note, 'хата · Перерахунок: платив своїми, а не каса');
   assert.equal(n.status, 'active');
-  assert.equal(n.id, 'n1');
-  assert.deepEqual(old.participants, ['vanya', 'fess'], 'старий запис не змінюється');
+  assert.equal(old.payer, 'cash', 'старий запис не змінюється');
 });
 
-test('після перерахунку з власником усе сходиться, інваріант тримається', () => {
-  const cfg = CFG;
-  const before = [mkExp('a', '600', ['vanya', 'fess'])];
+test('після перепису сума йде власнику в плюс і в касу, борги інших не рухаються', () => {
   const members = [...MEMBERS, OWNER];
-  const old = ownerRecalcPlan(before, 'alex');
+  const before = [mkExp('a', '600', ['vanya', 'fess', 'alex'], { payer: 'cash' })];
+  const s0 = compute(members, before, CFG);
+  const old = ownerPaidPlan(before, ['a']);
   const after = [
     { ...before[0], status: 'cancelled' },
-    ...old.map((o, i) => withOwner(o, 'alex', { id: `n${i}`, at: 'T', who: 'F' })),
+    ...old.map((o, i) => paidByOwner(o, 'alex', { id: `n${i}`, at: 'T', who: 'F' })),
   ];
-  const s = compute(members, after, cfg);
-  assert.equal(s.bal.vanya, MEMBERS.find((m) => m.id === 'vanya').opening - kop('200'));
-  assert.equal(s.bal.alex, -kop('200'));
-  assert.equal(s.bal.fess, MEMBERS.find((m) => m.id === 'fess').opening + kop('600') - kop('200'));
-  assert.ok(invariantOk(s, cfg));
+  const s = compute(members, after, CFG);
+  assert.equal(s.bal.alex, s0.bal.alex + kop('600'));
+  assert.equal(s.cash, s0.cash + kop('600'));
+  assert.equal(s.bal.vanya, s0.bal.vanya);
+  assert.equal(s.bal.fess, s0.bal.fess);
+  assert.equal(s.diff, s0.diff);
+  assert.ok(invariantOk(s, CFG));
 });
 
 test('короткий звіт не показує власника каси, а решта лишається', () => {

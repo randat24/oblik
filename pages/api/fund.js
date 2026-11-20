@@ -4,10 +4,9 @@ import {
   readFund, addOp, addOps, cancelOp, cancelOps, saveMember, seedFund, setConfig, addMember,
 } from '../../lib/fund-store';
 import {
-  kop, compute, invariantOk, categoryOf, ownerRecalcPlan, withOwner, byOrder, daysOf, newMember,
+  kop, compute, invariantOk, categoryOf, ownerPaidPlan, paidByOwner, daysOf, newMember,
   shortReport, cardDigits,
 } from '../../lib/fund';
-import { OPENING_DATE } from '../../lib/fund-seed';
 import { kyivToday } from '../../lib/calendar';
 import { logChange } from '../../lib/log';
 
@@ -149,34 +148,37 @@ export default withAuth(async (req, res) => {
     return res.json({ ok: true });
   }
 
-  /* ---------- Власник каси ---------- */
-  if (action === 'owner') {
-    const name = String(req.body.name || 'Алекс').trim().slice(0, 40) || 'Алекс';
+  /* ---------- Каса без власника ---------- */
+  // Колись каса була карткою Алекса, і все, що платив він, записувалось касі.
+  // Дія одноразова: переписує позначені витрати на нього й прибирає власника.
+  // Дії «зробити власником» більше немає навмисно: один клік повернув би
+  // ownerAsCash, і всі його покупки знову тихо стали б касою.
+  if (action === 'release') {
+    if (session(req)?.role !== 'admin') {
+      return res.status(403).json({ error: 'Перерахунок робить адміністратор' });
+    }
     const data = await readFund();
-    if (data.config.owner) {
-      return res.status(400).json({ error: 'Власника каси вже вказано' });
+    const owner = data.config.owner;
+    if (!owner) return res.status(400).json({ error: 'Каса вже ні до кого не привʼязана' });
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.map(String) : [];
+    const old = ownerPaidPlan(data.ops, ids);
+    if (old.length !== ids.length) {
+      return res.status(409).json({ error: 'Список витрат змінився — оновіть сторінку й перегляньте ще раз' });
     }
-    const id = 'alex';
-    let members = data.members;
-    if (!members.some((m) => m.id === id)) {
-      const last = Math.max(0, ...members.map((m) => m.order || 0));
-      const owner = { id, name, order: last + 1, opening: 0, periods: [{ start: OPENING_DATE }], vacations: [] };
-      await addMember(owner);
-      members = [...members, owner];
-    }
-    // спершу нові записи, потім скасування старих: якщо щось урветься посередині,
-    // краще побачити зайвий дубль, ніж загубити витрату
+    // спершу нові записи, далі скасування, і лише в кінці — власник. Поки
+    // власник ще вказаний, нові рядки читаються як каса, тож обрив посередині
+    // дасть видимий дубль, а не загублену чи подвоєну суму в Алекса
     const at = new Date().toISOString();
-    const old = ownerRecalcPlan(data.ops, id);
-    const fresh = old.map((o, i) => withOwner(o, id, { id: `${newId()}${i}`, at, who }));
+    const fresh = old.map((o, i) => paidByOwner(o, owner, { id: `${newId()}${i}`, at, who }));
     await addOps(fresh);
-    await cancelOps(old.map((o) => o.row), { reason: 'Перерахунок з власником каси', at, who });
-    await setConfig('owner', id);
+    await cancelOps(old.map((o) => o.row), { reason: 'Перерахунок: платив своїми, а не каса', at, who });
+    await setConfig('owner', '');
+    const sum = old.reduce((a, o) => a + o.amount, 0);
     await logChange({
-      sheet: 'Фонд', action: 'Власник каси', field: name,
-      after: `перераховано витрат: ${old.length}`,
+      sheet: 'Фонд', action: 'Каса відвʼязана від власника', field: owner,
+      after: `переписано витрат: ${old.length} на ${(sum / 100).toFixed(2)}`,
     });
-    return res.json({ ok: true, recalculated: old.length, members: byOrder(members).length });
+    return res.json({ ok: true, recalculated: old.length });
   }
 
   /* ---------- Новий учасник ---------- */
