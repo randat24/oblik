@@ -18,7 +18,7 @@ import {
   CATEGORIES, categoryOf, kop, money, signed, compute, effect, eligible,
   byOrder, statusOn, archived, opTitle, balanceWord, livedOps, invariantOk, shortReport,
   openPeriod, leaveGroup, rejoinGroup, addVacation, newExpenseParts, cashAdjustment,
-  ownerRecalcPlan, monthBounds, dayPlan, cardDigits, cardText,
+  monthBounds, dayPlan, cardDigits, cardText,
 } from '../lib/fund';
 import { kyivToday } from '../lib/calendar';
 import { monthsOf, monthReport, memberStatement } from '../lib/fund-report';
@@ -1010,60 +1010,72 @@ function AddMemberCard({ canEdit, onDone, toast }) {
   );
 }
 
-/** Власник каси: додається одним кліком, з перерахунком уже записаних витрат */
-function OwnerCard({ members, ops, config, canEdit, onDone, toast }) {
-  const [name, setName] = useState('Алекс');
+/**
+ * Каса без власника: одноразовий перерахунок.
+ *
+ * Поки каса була карткою власника, його покупки записувались касі, а частки
+ * з нього знімались — і він ішов у мінус. Тут адміністратор бачить ці
+ * витрати, знімає позначку з тих, що справді були з каси, і перед записом
+ * бачить, що вийде.
+ */
+function OwnerCard({ members, ops, config, canAdmin, onDone, toast }) {
+  const owner = config.owner;
+  const list = useMemo(() => livedOps(ops).filter((o) => o.type === 'expense' && o.payer === 'cash'), [ops]);
+  const [picked, setPicked] = useState(() => list.map((o) => o.id));
   const [busy, setBusy] = useState(false);
   const [ask, setAsk] = useState(false);
-  if (config.owner) {
-    const o = members.find((m) => m.id === config.owner);
-    return (
-      <div className="fund-card">
-        <h2 className="fund-h2">Власник каси: {o?.name || config.owner}</h2>
-        <span className="fund-hint">
-          Бере участь у всіх витратах нарівні з іншими, але в списках боргу й плюсів не показується:
-          його частку покриває каса.
-        </span>
-      </div>
-    );
-  }
-  if (!canEdit) return null;
-  const count = ownerRecalcPlan(ops, 'alex').length;
+  if (!owner) return null;
+  const name = members.find((m) => m.id === owner)?.name || owner;
+  const before = compute(members, ops, config);
+  const after = compute(members, ops.map((o) => (picked.includes(o.id) ? { ...o, payer: owner } : o)), config);
+  const sum = list.filter((o) => picked.includes(o.id)).reduce((a, o) => a + o.amount, 0);
+  const flip = (id) => { setAsk(false); setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]); };
   // підтвердження на самій сторінці: системне вікно confirm() у вбудованих
   // браузерах мовчки блокується, і кнопка здавалась би мертвою
-  const add = async () => {
+  const run = async () => {
     if (busy) return;
     setBusy(true);
     try {
-      const d = await api('/api/fund', { method: 'POST', label: 'власник каси', body: { action: 'owner', name } });
-      toast(`Готово: перераховано витрат ${d.recalculated}`);
+      const d = await api('/api/fund', { method: 'POST', label: 'перерахунок каси', body: { action: 'release', ids: picked } });
+      toast(`Готово: переписано витрат ${d.recalculated}`);
       setAsk(false);
       onDone();
     } catch (e) { saveFailed(toast, e); } finally { setBusy(false); }
   };
   return (
     <div className="fund-card">
-      <h2 className="fund-h2">Власник каси</h2>
+      <h2 className="fund-h2">Каса окремо від власника</h2>
       <span className="fund-hint">
-        Додається учасником і береться в усі витрати, але в списках боргу й плюсів його не буде.
-        Наразі витрат для перерахунку: {count}.
+        Зараз каса — це картка власника ({name}): усе, що платив він, записано касі, а частки з нього знімаються.
+        Позначені витрати стануть його покупками своїми грошима, як у всіх, і каса більше ні до кого
+        не буде привʼязана. Зніміть позначку з тих, що справді оплачені з каси.
       </span>
-      <div className="fund-edit-row">
-        <input value={name} onChange={(e) => { setName(e.target.value); setAsk(false); }} aria-label="Імʼя" />
-        {!ask && (
-          <button type="button" className="act-btn" disabled={!name.trim()} onClick={() => setAsk(true)}>
-            Додати й перерахувати
+      <div className="fund-parts">
+        {list.map((o) => (
+          <button key={o.id} type="button" disabled={!canAdmin || busy}
+            className={'chip' + (picked.includes(o.id) ? ' on' : '')} onClick={() => flip(o.id)}>
+            {picked.includes(o.id) ? '✓ ' : ''}{dmy(o.date)} · {String(o.desc || categoryOf(o.category).name).slice(0, 24)} · {money(o.amount)}
           </button>
-        )}
+        ))}
       </div>
-      {ask && (
+      <span className="fund-small">
+        {name}: {signed(before.bal[owner] || 0)} → {signed(after.bal[owner] || 0)} ·
+        {' '}в касі: {money(before.cash)} → {money(after.cash)}. Борги інших не зміняться.
+      </span>
+      {!canAdmin && <span className="fund-hint">Перерахунок робить адміністратор.</span>}
+      {canAdmin && !ask && (
+        <div className="fund-edit-row">
+          <button type="button" className="act-btn" onClick={() => setAsk(true)}>Перерахувати</button>
+        </div>
+      )}
+      {canAdmin && ask && (
         <div className="fund-edit">
           <span className="fund-small">
-            Додати «{name}» власником каси й перерахувати витрат: {count}? Старі записи буде скасовано
-            з причиною, замість них зʼявляться нові вже з ним.
+            Платником у {picked.length} витратах на {money(sum)} стане {name}, а каса відвʼяжеться. Старі записи
+            буде скасовано з причиною, замість них зʼявляться нові.
           </span>
           <div className="fund-edit-row">
-            <button type="button" className="act-btn" disabled={busy} onClick={add}>
+            <button type="button" className="act-btn" disabled={busy} onClick={run}>
               {busy ? 'Перераховуємо…' : 'Так, перерахувати'}
             </button>
             <button type="button" className="act-btn" disabled={busy} onClick={() => setAsk(false)}>Ні</button>
@@ -1222,7 +1234,7 @@ function People({ members, state, ops, config, canEdit, canCard, onDone, toast }
       {setup && (
         <>
           <AddMemberCard canEdit={canEdit} onDone={onDone} toast={toast} />
-          <OwnerCard members={members} ops={ops} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
+          <OwnerCard members={members} ops={ops} config={config} canAdmin={canCard} onDone={onDone} toast={toast} />
           <CardSetting config={config} canCard={canCard} onDone={onDone} toast={toast} />
           <ExcludeCard members={members} config={config} canEdit={canEdit} onDone={onDone} toast={toast} />
         </>
